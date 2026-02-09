@@ -12,6 +12,11 @@ from data_fabric.event_handlers import (
     handle_outcome_event,
     handle_metrics_event,
 )
+from data_fabric.dataset_loaders import (
+    TeleLogsLoader,
+    AlarmRCALoader,
+    SampleDataGenerator,
+)
 
 __all__ = [
     "KafkaEventConsumer",
@@ -22,4 +27,7 @@ __all__ = [
     "handle_alarm_event",
     "handle_outcome_event",
     "handle_metrics_event",
+    "TeleLogsLoader",
+    "AlarmRCALoader",
+    "SampleDataGenerator",
 ]

@@ -20,7 +20,7 @@ class EmbeddingService:
     def __init__(self):
         if settings.gemini_api_key:
             genai.configure(api_key=settings.gemini_api_key)
-            self._model = "models/embedding-001"
+            self._model = "models/gemini-embedding-001"
         else:
             self._model = None
     

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     
     # Gemini LLM
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.0-flash"
     
     # Kafka
     kafka_bootstrap_servers: str = "localhost:9092"
@@ -40,7 +40,19 @@ class Settings(BaseSettings):
     default_tenant_id: str = "default"
     
     # Vector search
-    embedding_dimension: int = 768
+    embedding_dimension: int = 3072
+    
+    # Hugging Face
+    hf_token: Optional[str] = None
+    
+    # Kaggle
+    kaggle_username: Optional[str] = None
+    kaggle_key: Optional[str] = None
+    
+    # Decision Memory Search Tuning
+    memory_search_min_similarity: float = 0.0  # Expansive by default for MVP
+    memory_search_limit: int = 5
+    memory_search_global_default: bool = True
 
 
 @lru_cache

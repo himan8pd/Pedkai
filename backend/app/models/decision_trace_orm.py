@@ -10,7 +10,7 @@ from typing import Optional
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Float, Index, String, text
+from sqlalchemy import Column, DateTime, Float, Index, String, text, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from backend.app.core.database import Base
@@ -61,7 +61,7 @@ class DecisionTraceORM(Base):
     # Trigger information
     trigger_type = Column(String(50), nullable=False, index=True)
     trigger_id = Column(String(255), nullable=True)
-    trigger_description = Column(String(1000), nullable=False)
+    trigger_description = Column(Text, nullable=False)
     
     # JSONB fields for flexible nested data
     context = Column(JSONB, nullable=False, default=dict)
@@ -69,9 +69,9 @@ class DecisionTraceORM(Base):
     options_considered = Column(JSONB, nullable=False, default=list)
     
     # Decision details
-    decision_summary = Column(String(2000), nullable=False)
-    tradeoff_rationale = Column(String(2000), nullable=False)
-    action_taken = Column(String(2000), nullable=False)
+    decision_summary = Column(Text, nullable=False)
+    tradeoff_rationale = Column(Text, nullable=False)
+    action_taken = Column(Text, nullable=False)
     
     # Decision maker
     decision_maker = Column(String(255), nullable=False)
@@ -94,13 +94,6 @@ class DecisionTraceORM(Base):
     __table_args__ = (
         Index("ix_decision_traces_tenant_domain", "tenant_id", "domain"),
         Index("ix_decision_traces_tenant_created", "tenant_id", "created_at"),
-        Index(
-            "ix_decision_traces_embedding",
-            "embedding",
-            postgresql_using="ivfflat",
-            postgresql_with={"lists": 100},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
     )
     
     def __repr__(self) -> str:

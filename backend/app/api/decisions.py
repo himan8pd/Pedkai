@@ -87,22 +87,77 @@ async def create_decision_trace(
         return trace
 
 
-@router.get("/{decision_id}", response_model=DecisionTrace)
-async def get_decision_trace(
-    decision_id: UUID,
+@router.get("/", response_model=list[DecisionTrace])
+async def list_decision_traces(
+    tenant_id: str,
+    domain: Optional[str] = None,
+    trigger_type: Optional[str] = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db=Depends(get_db) if USE_DATABASE else None,
-) -> DecisionTrace:
-    """Get a decision trace by ID."""
+) -> list[DecisionTrace]:
+    """
+    List decision traces with filtering.
+    
+    Returns decisions for a specific tenant, optionally filtered by domain
+    and trigger type.
+    """
     if USE_DATABASE and db:
         repo = DecisionTraceRepository(db)
-        trace = await repo.get_by_id(decision_id)
-        if trace is None:
-            raise HTTPException(status_code=404, detail="Decision trace not found")
-        return trace
+        return await repo.list_decisions(
+            tenant_id=tenant_id,
+            domain=domain,
+            trigger_type=trigger_type,
+            limit=limit,
+            offset=offset,
+        )
     else:
-        if decision_id not in _decision_store:
-            raise HTTPException(status_code=404, detail="Decision trace not found")
-        return _decision_store[decision_id]
+        results = [
+            trace for trace in _decision_store.values()
+            if trace.tenant_id == tenant_id
+            and (domain is None or trace.domain == domain)
+            and (trigger_type is None or trace.trigger_type == trigger_type)
+        ]
+        results.sort(key=lambda x: x.created_at, reverse=True)
+        return results[offset:offset + limit]
+
+
+@router.get("/search", response_model=list[DecisionTrace])
+async def search_decisions(
+    q: str = Query(..., min_length=3),
+    tenant_id: str = "global" if settings.memory_search_global_default else settings.default_tenant_id,
+    limit: int = Query(default=settings.memory_search_limit, ge=1, le=20),
+    min_similarity: float = Query(default=settings.memory_search_min_similarity, ge=0.0, le=1.0),
+    db=Depends(get_db) if USE_DATABASE else None,
+) -> list[DecisionTrace]:
+    """
+    Search for similar decisions using semi-natural language.
+    
+    Convenience endpoint for simple semantic search.
+    Default search is 'global' across all tenants for the operator view.
+    Threshold is 0.0 by default to always return the most relevant matches.
+    """
+    if USE_DATABASE and db:
+        repo = DecisionTraceRepository(db)
+        embedding_service = get_embedding_service()
+        
+        # In search mode, we just embed the query string directly 
+        # as if it were a trigger description
+        query_embedding = await embedding_service.generate_embedding(q)
+        
+        if query_embedding:
+            # Create a mock query object for the repository
+            from backend.app.models.decision_trace import DecisionContext
+            mock_query = SimilarDecisionQuery(
+                tenant_id=tenant_id,
+                current_context=DecisionContext(trigger_description=q), # Fallback usage
+                limit=limit,
+                min_similarity=min_similarity
+            )
+            results = await repo.find_similar(mock_query, query_embedding)
+            return [trace for trace, _ in results]
+    
+    return []
 
 
 @router.patch("/{decision_id}", response_model=DecisionTrace)
@@ -137,39 +192,22 @@ async def update_decision_trace(
         return trace
 
 
-@router.get("/", response_model=list[DecisionTrace])
-async def list_decision_traces(
-    tenant_id: str,
-    domain: Optional[str] = None,
-    trigger_type: Optional[str] = None,
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+@router.get("/{decision_id}", response_model=DecisionTrace)
+async def get_decision_trace(
+    decision_id: UUID,
     db=Depends(get_db) if USE_DATABASE else None,
-) -> list[DecisionTrace]:
-    """
-    List decision traces with filtering.
-    
-    Returns decisions for a specific tenant, optionally filtered by domain
-    and trigger type.
-    """
+) -> DecisionTrace:
+    """Get a decision trace by ID."""
     if USE_DATABASE and db:
         repo = DecisionTraceRepository(db)
-        return await repo.list_decisions(
-            tenant_id=tenant_id,
-            domain=domain,
-            trigger_type=trigger_type,
-            limit=limit,
-            offset=offset,
-        )
+        trace = await repo.get_by_id(decision_id)
+        if trace is None:
+            raise HTTPException(status_code=404, detail="Decision trace not found")
+        return trace
     else:
-        results = [
-            trace for trace in _decision_store.values()
-            if trace.tenant_id == tenant_id
-            and (domain is None or trace.domain == domain)
-            and (trigger_type is None or trace.trigger_type == trigger_type)
-        ]
-        results.sort(key=lambda x: x.created_at, reverse=True)
-        return results[offset:offset + limit]
+        if decision_id not in _decision_store:
+            raise HTTPException(status_code=404, detail="Decision trace not found")
+        return _decision_store[decision_id]
 
 
 @router.post("/similar", response_model=list[DecisionTrace])

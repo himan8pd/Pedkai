@@ -126,7 +126,9 @@ class DecisionTraceRepository:
         
         Returns list of (decision, similarity_score) tuples.
         """
-        conditions = [DecisionTraceORM.tenant_id == query.tenant_id]
+        conditions = []
+        if query.tenant_id and query.tenant_id != "global":
+            conditions.append(DecisionTraceORM.tenant_id == query.tenant_id)
         
         if query.domain:
             conditions.append(DecisionTraceORM.domain == query.domain)
@@ -205,7 +207,7 @@ class DecisionTraceRepository:
                 DecisionOutcomeRecord(**orm_obj.outcome)
                 if orm_obj.outcome else None
             ),
-            embedding=list(orm_obj.embedding) if orm_obj.embedding else None,
+            embedding=list(orm_obj.embedding) if orm_obj.embedding is not None else None,
             tags=orm_obj.tags,
             domain=orm_obj.domain,
         )

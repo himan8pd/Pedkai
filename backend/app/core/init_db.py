@@ -6,6 +6,7 @@ Run this to initialize a fresh database.
 """
 
 import asyncio
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -13,6 +14,15 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from backend.app.core.config import get_settings
 from backend.app.core.database import Base
 from backend.app.models.decision_trace_orm import DecisionTraceORM  # noqa: F401
+from backend.app.models.kpi_orm import KPIMetricORM  # noqa: F401
+
+# Import graph models to register them with Base
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+try:
+    from decision_memory.graph_orm import NetworkEntityORM, EntityRelationshipORM  # noqa: F401
+except ImportError:
+    pass  # Graph models not yet available
 
 settings = get_settings()
 
