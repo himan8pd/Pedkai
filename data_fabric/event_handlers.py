@@ -130,6 +130,9 @@ async def handle_metrics_event(event_data: dict[str, Any]):
     # 2. Autonomous Reasoning Loop (Warm Path - Context Graph)
     # Only open Graph DB connection if anomalies were actually found
     if anomalies_found:
+        # Import CausalAnalyzer here to run Granger Causality tests
+        from anops.causal_analysis import CausalAnalyzer
+        
         async for graph_session in get_db():
             try:
                 # Service instantiation (efficiently reused logic)
@@ -140,6 +143,29 @@ async def handle_metrics_event(event_data: dict[str, Any]):
                 
                 print(f"🤖 Brain Activated: Investigating root cause for {entity_id}...")
                 rca_results = await rca_service.analyze_incident(entity_id, tenant_id)
+                
+                # ===== CAUSAL AI: Granger Causality (Phase 2 Hardened) =====
+                # We need a metrics session for causal analysis
+                causal_evidence = []
+                async for metrics_session_causal in get_metrics_db():
+                    causal_analyzer = CausalAnalyzer(metrics_session_causal)
+                    
+                    for anomalous_metric in anomalies_found:
+                        print(f"🔬 Running Hardened Granger Causality for {anomalous_metric}...")
+                        # Finding #3: discovery is now dynamic inside find_causes_for_anomaly
+                        causes = await causal_analyzer.find_causes_for_anomaly(
+                            entity_id=entity_id,
+                            anomalous_metric=anomalous_metric
+                        )
+                        causal_evidence.extend(causes)
+                    
+                    if causal_evidence:
+                        for c in causal_evidence:
+                            stationarity = " (Diffed)" if c.get("stationarity_fixed") else ""
+                            print(f"   ✅ {c['cause_metric']} -> {c['effect_metric']}{stationarity} (p={c['p_value']})")
+                    else:
+                        print(f"   ⚠️ No valid causal relationships found (insufficient data or non-causal).")
+                # ==========================================================
                 
                 # Check for similar decisions (Memory)
                 search_text = f"Anomaly in {anomalies_found} for {entity_id}. RCA: {rca_results.get('upstream_dependencies')}"
@@ -159,9 +185,13 @@ async def handle_metrics_event(event_data: dict[str, Any]):
                     similar_results = await repo.find_similar(mock_query, query_embedding)
                     similar_decisions = [d for d, _ in similar_results]
                 
-                # Generate SITREP (Intelligence)
+                # Generate SITREP (Intelligence) - Now with Causal Evidence!
                 print(f"🧠 Synthesizing SITREP for {entity_id}...")
-                sitrep = await llm_service.generate_explanation(rca_results, similar_decisions)
+                sitrep = await llm_service.generate_explanation(
+                    rca_results, 
+                    similar_decisions,
+                    causal_evidence=causal_evidence  # Pass causal evidence to LLM
+                )
                 
                 print("\n==================== OPERATIONAL SITREP ====================")
                 print(sitrep)

@@ -56,16 +56,30 @@ class LLMService:
     async def generate_explanation(
         self, 
         incident_context: Dict[str, Any], 
-        similar_decisions: List[Any]
+        similar_decisions: List[Any],
+        causal_evidence: Optional[List[Dict[str, Any]]] = None
     ) -> str:
         """
         Synthesizes RCA results and Decision Memory into an actionable SITREP.
+        Now includes Causal AI evidence (Granger Causality) when available.
         """
         if not self._model:
             return "LLM Service not configured. Please set GEMINI_API_KEY."
 
         context_str = self._format_incident_context(incident_context)
         memory_str = self._format_similar_decisions(similar_decisions)
+        
+        # Format causal evidence (if available)
+        causal_str = "No causal analysis available."
+        if causal_evidence:
+            causal_lines = []
+            for c in causal_evidence:
+                cause = c.get("cause_metric", "Unknown")
+                effect = c.get("effect_metric", "Unknown")
+                p_val = c.get("p_value", 1.0)
+                lag = c.get("best_lag", 0)
+                causal_lines.append(f"- **{cause}** Granger-causes **{effect}** (p-value: {p_val}, lag: {lag} periods)")
+            causal_str = "\n".join(causal_lines)
         
         prompt = f"""
 You are Pedkai AI, the "Intelligence Wedge" of an AI-Native Telecom Operating System.
@@ -74,13 +88,16 @@ Your goal is to help a NOC (Network Operations Center) engineer reduce MTTR by p
 ### CURRENT INCIDENT CONTEXT
 {context_str}
 
+### CAUSAL ANALYSIS (Granger Causality)
+{causal_str}
+
 ### DECISION MEMORY (Similar Past Incidents)
 {memory_str}
 
 ### INSTRUCTIONS
 Create a structured SITREP (Situation Report) that includes:
 1. **EXECUTIVE SUMMARY**: A 1-sentence description of the status.
-2. **ROOT CAUSE HYPOTHESIS**: Based on the upstream dependencies.
+2. **ROOT CAUSE HYPOTHESIS**: If causal analysis is available, explicitly state which metric *caused* the anomaly. Use language like "X **caused** Y" (not just "correlated with").
 3. **IMPACT ASSESSMENT**: Who is affected and which SLAs are at risk.
 4. **RECOMMENDED ACTION**: Based on the most successful past decisions in the memory.
 5. **RATIONALE**: Why this action is recommended over others.

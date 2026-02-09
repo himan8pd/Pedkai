@@ -124,7 +124,8 @@ class DecisionTraceRepository:
         """
         Find similar decisions using pgvector cosine similarity.
         
-        Returns list of (decision, similarity_score) tuples.
+        Finding #5: Thresholding is now applied *before* the feedback boost
+        to ensure irrelevant decisions are not promoted.
         """
         conditions = []
         if query.tenant_id and query.tenant_id != "global":
@@ -133,31 +134,83 @@ class DecisionTraceRepository:
         if query.domain:
             conditions.append(DecisionTraceORM.domain == query.domain)
         
-        # pgvector cosine distance (lower = more similar)
-        # We convert to similarity: 1 - distance
+        # Raw similarity calculation (1 - distance)
+        raw_similarity = (1 - DecisionTraceORM.embedding.cosine_distance(query_embedding))
+        
+        # Finding #5: We must query for both ORM and raw_similarity
         result = await self.session.execute(
             select(
                 DecisionTraceORM,
-                (1 - DecisionTraceORM.embedding.cosine_distance(query_embedding)).label("similarity")
+                raw_similarity.label("raw_similarity")
             )
             .where(
                 and_(
                     *conditions,
                     DecisionTraceORM.embedding.isnot(None),
+                    raw_similarity >= query.min_similarity # Filter by threshold FIRST
                 )
             )
-            .order_by(DecisionTraceORM.embedding.cosine_distance(query_embedding))
-            .limit(query.limit)
+            .limit(query.limit * 2) # Fetch slightly more to account for re-ranking
         )
         
         rows = result.all()
         
-        # Filter by minimum similarity threshold
-        return [
-            (self._orm_to_pydantic(row[0]), row[1])
-            for row in rows
-            if row[1] >= query.min_similarity
-        ]
+        # Apply feedback boost and re-rank in memory for precision
+        scored_results = []
+        for orm_obj, sim in rows:
+            # Finding #5: Adjusted similarity = raw + (0.1 * feedback_score)
+            feedback_boost = 0.1 * orm_obj.feedback_score
+            adjusted_sim = sim + feedback_boost
+            scored_results.append((self._orm_to_pydantic(orm_obj), adjusted_sim))
+            
+        # Sort by adjusted similarity
+        scored_results.sort(key=lambda x: x[1], reverse=True)
+        
+        return scored_results[:query.limit]
+    
+    async def record_feedback(
+        self,
+        decision_id: UUID,
+        operator_id: str,
+        score: int,
+    ) -> bool:
+        """
+        Finding #4: Records feedback in the junction table and updates the cached aggregate.
+        """
+        from backend.app.models.decision_trace_orm import DecisionFeedbackORM
+        from sqlalchemy.dialects.postgresql import insert
+        from sqlalchemy import func
+        
+        # 1. Upsert feedback
+        stmt = insert(DecisionFeedbackORM).values(
+            decision_id=decision_id,
+            operator_id=operator_id,
+            score=score,
+            created_at=datetime.utcnow()
+        ).on_conflict_do_update(
+            index_elements=["decision_id", "operator_id"],
+            set_=dict(score=score)
+        )
+        await self.session.execute(stmt)
+        
+        # 2. Recalculate aggregate feedback_score
+        sum_stmt = select(func.sum(DecisionFeedbackORM.score)).where(
+            DecisionFeedbackORM.decision_id == decision_id
+        )
+        agg_result = await self.session.execute(sum_stmt)
+        total_score = agg_result.scalar() or 0
+        
+        # 3. Update DecisionTraceORM cache
+        update_stmt = select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
+        trace_result = await self.session.execute(update_stmt)
+        trace_obj = trace_result.scalar_one_or_none()
+        
+        if trace_obj:
+            trace_obj.feedback_score = total_score
+            await self.session.flush()
+            return True
+        
+        return False
     
     async def set_embedding(
         self,

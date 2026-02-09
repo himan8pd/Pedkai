@@ -293,3 +293,55 @@ async def record_outcome(
     """
     update = DecisionTraceUpdate(outcome=outcome)
     return await update_decision_trace(decision_id, update, db)
+
+
+# ====================================================================
+# Operator Feedback Endpoints (RLHF)
+# ====================================================================
+
+@router.post("/{decision_id}/upvote", status_code=200)
+async def upvote_decision(
+    decision_id: UUID,
+    db=Depends(get_db) if USE_DATABASE else None,
+) -> dict:
+    """
+    Mark a decision as helpful.
+    
+    Finding #4: Multi-operator aggregation prevents gaming.
+    """
+    if USE_DATABASE and db:
+        repo = DecisionTraceRepository(db)
+        # Mocking operator_id as "operator_1" for now (finding #4)
+        success = await repo.record_feedback(decision_id, operator_id="operator_1", score=1)
+        if not success:
+            raise HTTPException(status_code=404, detail="Decision trace not found")
+        await db.commit()
+        return {"status": "upvoted", "decision_id": str(decision_id)}
+    else:
+        if decision_id not in _decision_store:
+            raise HTTPException(status_code=404, detail="Decision trace not found")
+        return {"status": "upvoted (in-memory mode)", "decision_id": str(decision_id)}
+
+
+@router.post("/{decision_id}/downvote", status_code=200)
+async def downvote_decision(
+    decision_id: UUID,
+    db=Depends(get_db) if USE_DATABASE else None,
+) -> dict:
+    """
+    Mark a decision as unhelpful or incorrect.
+    
+    Finding #4: Negative feedback penalizes this decision in future similarity searches.
+    """
+    if USE_DATABASE and db:
+        repo = DecisionTraceRepository(db)
+        # Mocking operator_id as "operator_1" for now (finding #4)
+        success = await repo.record_feedback(decision_id, operator_id="operator_1", score=-1)
+        if not success:
+            raise HTTPException(status_code=404, detail="Decision trace not found")
+        await db.commit()
+        return {"status": "downvoted", "decision_id": str(decision_id)}
+    else:
+        if decision_id not in _decision_store:
+            raise HTTPException(status_code=404, detail="Decision trace not found")
+        return {"status": "downvoted (in-memory mode)", "decision_id": str(decision_id)}

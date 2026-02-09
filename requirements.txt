@@ -33,3 +33,7 @@ httpx>=0.26.0
 # Datasets
 datasets>=2.16.0
 huggingface_hub>=0.20.0
+
+# Scientific / Causal AI
+numpy>=1.26.0
+statsmodels>=0.14.0

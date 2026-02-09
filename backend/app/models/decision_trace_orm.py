@@ -10,7 +10,7 @@ from typing import Optional
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Float, Index, String, text, Text
+from sqlalchemy import Column, DateTime, Float, Index, Integer, String, text, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from backend.app.core.database import Base
@@ -22,79 +22,53 @@ settings = get_settings()
 class DecisionTraceORM(Base):
     """
     SQLAlchemy ORM model for Decision Traces.
-    
-    Uses JSONB for flexible storage of:
-    - context (alarms, KPIs, affected entities)
-    - constraints (SLAs, regulations)
-    - options_considered
-    - outcome
-    
-    Uses pgvector for semantic similarity search on decision embeddings.
     """
     
     __tablename__ = "decision_traces"
     
-    # Primary key
-    id = Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-        server_default=text("gen_random_uuid()"),
-    )
-    
-    # Multi-tenant isolation
+    # ... (rest of the fields) ...
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()"))
     tenant_id = Column(String(255), nullable=False, index=True)
-    
-    # Timestamps
-    created_at = Column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        server_default=text("now()"),
-        nullable=False,
-    )
-    decision_made_at = Column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        nullable=False,
-    )
-    
-    # Trigger information
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, server_default=text("now()"), nullable=False)
+    decision_made_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     trigger_type = Column(String(50), nullable=False, index=True)
     trigger_id = Column(String(255), nullable=True)
     trigger_description = Column(Text, nullable=False)
-    
-    # JSONB fields for flexible nested data
     context = Column(JSONB, nullable=False, default=dict)
     constraints = Column(JSONB, nullable=False, default=list)
     options_considered = Column(JSONB, nullable=False, default=list)
-    
-    # Decision details
     decision_summary = Column(Text, nullable=False)
     tradeoff_rationale = Column(Text, nullable=False)
     action_taken = Column(Text, nullable=False)
-    
-    # Decision maker
     decision_maker = Column(String(255), nullable=False)
     confidence_score = Column(Float, default=0.0)
-    
-    # Outcome (JSONB for flexibility)
     outcome = Column(JSONB, nullable=True)
-    
-    # Vector embedding for semantic similarity search
-    embedding = Column(
-        Vector(settings.embedding_dimension),
-        nullable=True,
-    )
-    
-    # Metadata
+    embedding = Column(Vector(settings.embedding_dimension), nullable=True)
     tags = Column(JSONB, nullable=False, default=list)
     domain = Column(String(50), nullable=False, default="anops", index=True)
     
-    # Indexes for common queries
+    # Finding #4: This is now a cached aggregate of DecisionFeedbackORM
+    feedback_score = Column(Integer, default=0, nullable=False)
+    
     __table_args__ = (
         Index("ix_decision_traces_tenant_domain", "tenant_id", "domain"),
         Index("ix_decision_traces_tenant_created", "tenant_id", "created_at"),
     )
+
+class DecisionFeedbackORM(Base):
+    """
+    Finding #4: Multi-operator feedback junction table.
+    Enables audit trail and prevents a single operator from overwriting community feedback.
+    """
+    __tablename__ = "decision_feedback"
     
-    def __repr__(self) -> str:
-        return f"<DecisionTrace(id={self.id}, trigger={self.trigger_type})>"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()"))
+    decision_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    operator_id = Column(String(255), nullable=False, index=True)
+    score = Column(Integer, nullable=False) # 1 for upvote, -1 for downvote
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, server_default=text("now()"), nullable=False)
+    
+    __table_args__ = (
+        # Finding #4: One vote per operator per decision
+        Index("ix_feedback_decision_operator", "decision_id", "operator_id", unique=True),
+    )
