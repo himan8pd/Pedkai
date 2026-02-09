@@ -2,11 +2,12 @@
 Anomaly Detection Service for ANOps.
 
 Provides statistical and rule-based anomaly detection on KPI metric streams.
+Optimized with a 'Hot Path' cache for baselines to ensure scalability.
 """
 
 import numpy as np
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,51 +16,73 @@ from backend.app.models.kpi_orm import KPIMetricORM
 class AnomalyDetector:
     """
     detects anomalies in KPI streams using statistical methods.
+    
+    Includes a class-level cache to avoid redundant historical DB queries.
     """
+    
+    # Simple Hot-Path Cache: {(entity_id, metric_name): (mean, std, expiry_time)}
+    _baseline_cache: Dict[Tuple[str, str], Tuple[float, float, datetime]] = {}
     
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_historical_window(
+    async def get_baseline(
         self, 
         entity_id: str, 
         metric_name: str, 
-        window_hours: int = 24
-    ) -> List[float]:
+        ttl_minutes: int = 60
+    ) -> Tuple[float, float]:
         """
-        Retrieves historical values for a metric to establish a baseline.
+        Retrieves baseline (mean, std) from cache or DB.
         """
-        since = datetime.utcnow() - timedelta(hours=window_hours)
+        cache_key = (entity_id, metric_name)
+        now = datetime.utcnow()
+        
+        # Check cache
+        if cache_key in self._baseline_cache:
+            m, s, expiry = self._baseline_cache[cache_key]
+            if now < expiry:
+                return m, s
+
+        # Cache miss or expired: Fetch from DB
+        print(f"🔍 Cache Miss: Recalculating baseline for {entity_id}:{metric_name}...")
+        since = now - timedelta(hours=24)
         
         query = (
             select(KPIMetricORM.value)
             .where(KPIMetricORM.entity_id == entity_id)
             .where(KPIMetricORM.metric_name == metric_name)
             .where(KPIMetricORM.timestamp >= since)
-            .order_by(KPIMetricORM.timestamp.asc())
         )
         
         result = await self.session.execute(query)
         values = [row[0] for row in result.all()]
-        return values
+        
+        if len(values) < 5:
+            # Fallback for new entities
+            return 0.0, 0.0
+            
+        mean = float(np.mean(values))
+        std = float(np.std(values))
+        
+        # Update cache
+        self._baseline_cache[cache_key] = (mean, std, now + timedelta(minutes=ttl_minutes))
+        return mean, std
 
     def is_anomaly_zscore(
         self, 
         current_value: float, 
-        historical_values: List[float], 
+        mean: float,
+        std: float,
         threshold: float = 3.0
     ) -> Dict[str, Any]:
         """
         Detects anomaly using Z-score (standard deviations from mean).
         """
-        if len(historical_values) < 5:
-            return {"is_anomaly": False, "reason": "Insufficient historical data"}
-            
-        mean = np.mean(historical_values)
-        std = np.std(historical_values)
-        
         if std == 0:
-            return {"is_anomaly": current_value != mean, "score": 0.0, "mean": mean}
+            # If std is 0, any change from mean is an anomaly (or skip if mean is 0)
+            is_anom = (current_value != mean) if mean != 0 else False
+            return {"is_anomaly": is_anom, "score": 0.0, "mean": mean}
             
         z_score = abs(current_value - mean) / std
         
@@ -82,7 +105,7 @@ class AnomalyDetector:
         """
         Processes a new metric value, stores it, and checks for anomalies.
         """
-        # 1. Store the metric
+        # 1. Store the metric (Batch ingestion point in real system)
         new_metric = KPIMetricORM(
             tenant_id=tenant_id,
             entity_id=entity_id,
@@ -91,14 +114,15 @@ class AnomalyDetector:
             tags=tags or {}
         )
         self.session.add(new_metric)
-        # We don't commit yet to keep it in the same transaction if needed,
-        # but for baseline we might need the previous values.
         
-        # 2. Get baseline
-        history = await self.get_historical_window(entity_id, metric_name)
+        # 2. Get baseline (Uses Hot-Path Cache)
+        mean, std = await self.get_baseline(entity_id, metric_name)
         
         # 3. Check for anomaly
-        result = self.is_anomaly_zscore(value, history)
+        if mean == 0 and std == 0:
+            return {"is_anomaly": False, "reason": "Insufficient historical data"}
+            
+        result = self.is_anomaly_zscore(value, mean, std)
         
         if result["is_anomaly"]:
             print(f"🚨 ANOMALY DETECTED: {entity_id} {metric_name} = {value} (Score: {result['score']})")

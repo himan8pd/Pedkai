@@ -60,3 +60,20 @@ class KPIMetricORM(Base):
     
     def __repr__(self) -> str:
         return f"<KPIMetric(entity={self.entity_id}, metric={self.metric_name}, value={self.value})>"
+
+    @staticmethod
+    async def bulk_insert(session, metrics_list: list):
+        """
+        Performs a batch insertion of metrics for high-volume ingestion.
+        """
+        from sqlalchemy.dialects.postgresql import insert
+        
+        if not metrics_list:
+            return
+            
+        stmt = insert(KPIMetricORM).values(metrics_list)
+        # In a real TSDB transition, we might use: 
+        # stmt = stmt.on_conflict_do_nothing() 
+        # or similar for idempotency if metrics are replayed.
+        
+        await session.execute(stmt)
