@@ -22,40 +22,33 @@ class KPIMetricORM(Base):
     
     __tablename__ = "kpi_metrics"
     
-    # Primary key
-    id = Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-        server_default=text("gen_random_uuid()"),
-    )
+    # Multi-tenant isolation (Part of Natural Primary Key)
+    tenant_id = Column(String(255), primary_key=True)
     
-    # Multi-tenant isolation
-    tenant_id = Column(String(255), nullable=False, index=True)
+    # Entity reference (Part of Natural Primary Key)
+    entity_id = Column(String(255), primary_key=True)
     
-    # Entity reference (cell site, node, customer, etc.)
-    entity_id = Column(String(255), nullable=False, index=True)
-    
-    # Timestamp
+    # Timestamp (Part of Natural Primary Key)
     timestamp = Column(
         DateTime(timezone=True),
+        primary_key=True,
         default=datetime.utcnow,
         server_default=text("now()"),
         nullable=False,
-        index=True,
     )
     
-    # Metric details
-    metric_name = Column(String(100), nullable=False, index=True)
+    # Metric details (Part of Natural Primary Key)
+    metric_name = Column(String(100), primary_key=True)
+    
+    # Metric value
     value = Column(Float, nullable=False)
     
     # Additional context
     tags = Column(JSONB, nullable=False, default=dict)
     
-    # Indexes for time-aware queries
+    # Indexes are implicitly created for Primary Key, but we keep time-based ones for performance
     __table_args__ = (
-        Index("ix_kpi_metrics_entity_metric_time", "entity_id", "metric_name", "timestamp"),
-        Index("ix_kpi_metrics_tenant_time", "tenant_id", "timestamp"),
+        Index("ix_kpi_metrics_timestamp", "timestamp"),
     )
     
     def __repr__(self) -> str:
@@ -72,8 +65,9 @@ class KPIMetricORM(Base):
             return
             
         stmt = insert(KPIMetricORM).values(metrics_list)
-        # In a real TSDB transition, we might use: 
-        # stmt = stmt.on_conflict_do_nothing() 
-        # or similar for idempotency if metrics are replayed.
+        
+        # Idempotency Fix: Ignore duplicates based on Primary Key 
+        # (tenant_id, entity_id, metric_name, timestamp)
+        stmt = stmt.on_conflict_do_nothing()
         
         await session.execute(stmt)

@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     
     # Database
-    database_url: str = "postgresql+asyncpg://localhost:5432/pedkai"
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/pedkai"
+    metrics_database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/pedkai_metrics"
     database_pool_size: int = 5
     database_max_overflow: int = 10
     

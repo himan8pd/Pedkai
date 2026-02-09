@@ -17,12 +17,28 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Kafka (using KRaft mode - no Zookeeper needed)
+  # TimescaleDB for KPI Metrics (Hot Path)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: pedkai-timescaledb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pedkai_metrics
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
   kafka:
     image: apache/kafka:3.7.0
     container_name: pedkai-kafka
@@ -40,7 +56,7 @@ services:
     volumes:
       - kafka_data:/apache/kafka
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test: [ "CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -60,3 +76,4 @@ services:
 volumes:
   postgres_data:
   kafka_data:
+  timescaledb_data:

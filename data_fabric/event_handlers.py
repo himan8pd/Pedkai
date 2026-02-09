@@ -77,30 +77,102 @@ async def handle_outcome_event(event_data: dict[str, Any]):
     }
 
 
+from backend.app.core.database import get_metrics_db
+from backend.app.core.config import get_settings
+from anops.anomaly_detection import AnomalyDetector
+
+settings = get_settings()
+
+from anops.root_cause_analysis import RootCauseAnalyzer
+from backend.app.services.llm_service import get_llm_service
+from backend.app.services.decision_repository import DecisionTraceRepository
+from backend.app.services.embedding_service import get_embedding_service
+from backend.app.models.decision_trace import SimilarDecisionQuery, DecisionContext
+from backend.app.core.database import get_db, get_metrics_db
+
 async def handle_metrics_event(event_data: dict[str, Any]):
     """
     Handle incoming metrics/KPI events.
     
-    These provide context for decision-making.
+    Persists metrics to TimescaleDB and runs Anomaly Detection.
+    If anomaly detected -> Trigger autonomous RCA and SITREP generation.
     """
     entity_id = event_data.get("entity_id")
+    tenant_id = event_data.get("tenant_id", settings.default_tenant_id)
     metrics = event_data.get("metrics", {})
+    timestamp = event_data.get("timestamp")
     
     print(f"📈 Metrics received for {entity_id}: {len(metrics)} values")
     
-    # Store as KPI snapshot for decision context
-    snapshot = KPISnapshot(
-        throughput_mbps=metrics.get("throughput_mbps"),
-        latency_ms=metrics.get("latency_ms"),
-        packet_loss_pct=metrics.get("packet_loss_pct"),
-        availability_pct=metrics.get("availability_pct"),
-        cpu_utilization_pct=metrics.get("cpu_utilization_pct"),
-        memory_utilization_pct=metrics.get("memory_utilization_pct"),
-        custom_metrics=metrics,
-    )
-    
+    results = []
+    anomalies_found = []
+
+    # 1. Process Metrics & Detect Anomalies (Hot Path - TimescaleDB)
+    async for metrics_session in get_metrics_db():
+        detector = AnomalyDetector(metrics_session)
+        for metric_name, value in metrics.items():
+            try:
+                val = float(value)
+                result = await detector.process_metric(
+                    tenant_id=tenant_id,
+                    entity_id=entity_id,
+                    metric_name=metric_name,
+                    value=val,
+                    tags={"source": "kafka_consumer", "timestamp": timestamp}
+                )
+                results.append(result)
+                if result["is_anomaly"]:
+                    print(f"🚨 ANOMALY DETECTED: {entity_id} {metric_name}")
+                    anomalies_found.append(metric_name)
+            except Exception as e:
+                print(f"❌ Error processing metric {metric_name}: {e}")
+
+    # 2. Autonomous Reasoning Loop (Warm Path - Context Graph)
+    # Only open Graph DB connection if anomalies were actually found
+    if anomalies_found:
+        async for graph_session in get_db():
+            try:
+                # Service instantiation (efficiently reused logic)
+                rca_service = RootCauseAnalyzer(graph_session)
+                repo = DecisionTraceRepository(graph_session)
+                llm_service = get_llm_service() # Use Singleton!
+                embedding_service = get_embedding_service()
+                
+                print(f"🤖 Brain Activated: Investigating root cause for {entity_id}...")
+                rca_results = await rca_service.analyze_incident(entity_id, tenant_id)
+                
+                # Check for similar decisions (Memory)
+                search_text = f"Anomaly in {anomalies_found} for {entity_id}. RCA: {rca_results.get('upstream_dependencies')}"
+                query_embedding = await embedding_service.generate_embedding(search_text)
+                
+                similar_decisions = []
+                if query_embedding:
+                    mock_query = SimilarDecisionQuery(
+                        tenant_id=tenant_id,
+                        current_context=DecisionContext(
+                            alarm_ids=[f"ANOMALY_{m}" for m in anomalies_found],
+                            affected_entities=[entity_id]
+                        ),
+                        limit=3,
+                        min_similarity=0.7
+                    )
+                    similar_results = await repo.find_similar(mock_query, query_embedding)
+                    similar_decisions = [d for d, _ in similar_results]
+                
+                # Generate SITREP (Intelligence)
+                print(f"🧠 Synthesizing SITREP for {entity_id}...")
+                sitrep = await llm_service.generate_explanation(rca_results, similar_decisions)
+                
+                print("\n==================== OPERATIONAL SITREP ====================")
+                print(sitrep)
+                print("============================================================\n")
+                
+            except Exception as e:
+                 print(f"❌ Error in reasoning loop: {e}")
+        
     return {
         "entity_id": entity_id,
-        "snapshot_created": True,
+        "metrics_processed": len(results),
+        "anomalies_detected": len(anomalies_found),
         "processed_at": datetime.utcnow().isoformat(),
     }
