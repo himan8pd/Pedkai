@@ -1,0 +1,61 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset77 Shobhika-Regular;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww13960\viewh14400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs28 \cf0 Trajectory ID: fa17dcbb-5702-44a1-98ae-15c528bf5ce1\
+Error: model unreachable: UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server: UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server: model api cannot be reached\
+(1) attached stack trace\
+  -- stack trace:\
+  | google3/third_party/gemini_coder/framework/generator/generator.(*PlannerGenerator).generateWithModelOutputRetry\
+  | 	third_party/gemini_coder/framework/generator/planner_generator.go:194\
+  | google3/third_party/gemini_coder/framework/generator/generator.(*PlannerGenerator).Generate\
+  | 	third_party/gemini_coder/framework/generator/planner_generator.go:95\
+  | google3/third_party/gemini_coder/framework/executor/executor.(*Executor).Execute\
+  | 	third_party/gemini_coder/framework/executor/executor.go:303\
+  | google3/third_party/jetski/cortex/cortex.(*CascadeManager).executeHelper.func1\
+  | 	third_party/jetski/cortex/cascade_manager.go:1558\
+  | [...repeated from below...]\
+Wraps: (2) secondary error attachment\
+  | UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server: UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server\
+  | (1) tags: map[stream_receive_count:0 streaming_duration:0s]\
+  | Wraps: (2) attached stack trace\
+  |   -- stack trace:\
+  |   | google3/third_party/gemini_coder/framework/generator/generator.(*streamResponseHandler).processStream\
+  |   | 	third_party/gemini_coder/framework/generator/stream_handler.go:338\
+  |   | google3/third_party/gemini_coder/framework/generator/generator.(*PlannerGenerator).attemptGenerate\
+  |   | 	third_party/gemini_coder/framework/generator/planner_generator.go:437\
+  |   | google3/third_party/gemini_coder/framework/generator/generator.(*PlannerGenerator).generateWithAPIRetry\
+  |   | 	third_party/gemini_coder/framework/generator/planner_generator.go:278\
+  |   | google3/third_party/gemini_coder/framework/generator/generator.(*PlannerGenerator).generateWithModelOutputRetry\
+  |   | 	third_party/gemini_coder/framework/generator/planner_generator.go:154\
+  |   | google3/third_party/gemini_coder/framework/generator/generator.(*PlannerGenerator).Generate\
+  |   | 	third_party/gemini_coder/framework/generator/planner_generator.go:95\
+  |   | google3/third_party/gemini_coder/framework/executor/executor.(*Executor).Execute\
+  |   | 	third_party/gemini_coder/framework/executor/executor.go:303\
+  |   | google3/third_party/jetski/cortex/cortex.(*CascadeManager).executeHelper.func1\
+  |   | 	third_party/jetski/cortex/cascade_manager.go:1558\
+  |   | google3/third_party/jetski/cortex/cortex.(*CascadeManager).executeHelper.func2\
+  |   | 	third_party/jetski/cortex/cascade_manager.go:1676\
+  |   | runtime.goexit\
+  |   | 	third_party/go/gc/src/runtime/asm_arm64.s:1447\
+  | Wraps: (3) UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server\
+  | Wraps: (4) UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server\
+  | Error types: (1) *go_utils.withTags (2) *withstack.withStack (3) *errutil.withPrefix (4) *utils.HTTPError\
+Wraps: (3) model unreachable: UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server: UNAVAILABLE (code 503): No capacity available for model gemini-3-flash on the server\
+Wraps: (4) attached stack trace\
+  -- stack trace:\
+  | google3/third_party/jetski/cortex/shared/shared.init\
+  | 	third_party/jetski/cortex/shared/interfaces.go:21\
+  | runtime.doInit1\
+  | 	third_party/go/gc/src/runtime/proc.go:8105\
+  | runtime.doInit\
+  | 	third_party/go/gc/src/runtime/proc.go:8072\
+  | runtime.main\
+  | 	third_party/go/gc/src/runtime/proc.go:258\
+  | runtime.goexit\
+  | 	third_party/go/gc/src/runtime/asm_arm64.s:1447\
+Wraps: (5) model api cannot be reached\
+Error types: (1) *withstack.withStack (2) *secondary.withSecondaryError (3) *errutil.withPrefix (4) *withstack.withStack (5) *errutil.leafError}

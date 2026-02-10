@@ -16,8 +16,11 @@ from typing import Callable, Optional
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from backend.app.core.config import get_settings
+from backend.app.core.logging import get_logger
+from data_fabric.alarm_normalizer import AlarmNormalizer
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 
 class KafkaEventConsumer:
@@ -33,9 +36,11 @@ class KafkaEventConsumer:
         self.consumer: Optional[AIOKafkaConsumer] = None
         self._running = False
         self._handlers: dict[str, Callable] = {}
+        self.normalizer = AlarmNormalizer()
     
     async def start(self):
         """Start the Kafka consumer."""
+        logger.info(f"Starting Kafka consumer for topics: {self.topics}")
         self.consumer = AIOKafkaConsumer(
             *self.topics,
             bootstrap_servers=settings.kafka_bootstrap_servers,
@@ -45,14 +50,14 @@ class KafkaEventConsumer:
         )
         await self.consumer.start()
         self._running = True
-        print(f"🎧 Kafka consumer started, listening on: {self.topics}")
+        logger.info("Kafka consumer started successfully")
     
     async def stop(self):
         """Stop the Kafka consumer."""
         self._running = False
         if self.consumer:
             await self.consumer.stop()
-            print("👋 Kafka consumer stopped")
+            logger.info("Kafka consumer stopped")
     
     def register_handler(self, event_type: str, handler: Callable):
         """Register a handler function for a specific event type."""
@@ -73,31 +78,40 @@ class KafkaEventConsumer:
                     break
                 
                 try:
-                    event_data = message.value
-                    event_type = event_data.get("event_type", "unknown")
+                    raw_event = message.value
+                    
+                    # Phase 3: Check for vendor-specific signatures
+                    vendor = "generic"
+                    if isinstance(raw_event, str) and "<alarmEvent>" in raw_event:
+                        vendor = "ericsson"
+                    elif isinstance(raw_event, dict) and "sourceIndicator" in raw_event:
+                        vendor = "nokia"
+                        
+                    # Normalize if it's external vendor data
+                    if vendor != "generic":
+                        event_data = self.normalizer.normalize(raw_event, vendor)
+                        event_type = "alarm" # Standard dispatcher type
+                    else:
+                        event_data = raw_event
+                        event_type = event_data.get("event_type", "unknown")
                     
                     if event_type in self._handlers:
                         await self._handlers[event_type](event_data)
                     else:
-                        print(f"⚠️ No handler for event type: {event_type}")
+                        logger.warning(f"No handler for event type: {event_type}")
                 
                 except Exception as e:
-                    print(f"❌ Error processing message: {e}")
+                    logger.error(f"Error processing message: {e}", exc_info=True)
         
         except asyncio.CancelledError:
-            print("Consumer cancelled")
+            logger.info("Consumer cancelled")
         
         finally:
             await self.stop()
 
 
-# Topics definition
-class Topics:
-    """Kafka topic names."""
-    ALARMS = "pedkai.alarms"
-    DECISIONS = "pedkai.decisions"
-    OUTCOMES = "pedkai.outcomes"
-    METRICS = "pedkai.metrics"
+# Topics are now imported from data_fabric.kafka_producer
+from data_fabric.kafka_producer import Topics
 
 
 # Singleton instances

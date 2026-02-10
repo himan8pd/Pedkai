@@ -28,8 +28,15 @@ Pedkai maps its `confidence_score` (0-1) and `anomaly_score` (z-score) to TMF `p
 - **Warning**: Anomaly Score < 3 (Suspicious behavior)
 - **Indeterminate**: System is unsure, requires human in the loop.
 
-## Compliance Gaps & Recommendations
+## Compliance Gaps & Status (Phase 3 Completed)
 
-1. **AckState**: Pedkai doesn't yet have a human-acknowledgment state. We should add `ackState` to `DecisionTrace` to capture when a NOC engineer accepts the system's recommendation.
-2. **CorrelationId**: We should expose our `CorrelationId` (if multi-anomaly) to TMF to allow legacy NMS to group Pedkai-detected events.
-3. **ProbableCause**: Pedkai's RCA output should be mapped to the TMF enumerated list of probable causes (e.g., `thresholdCrossed`, `equipmentFailure`).
+1. ✅ **AckState**: Added `ack_state` to `DecisionTraceORM` and Pydantic models. Exposed via `PATCH /alarm/{id}`.
+2. ✅ **CorrelationId**: Implemented **Dual Correlation Strategy** (Strategic Review GAP 2):
+   - `external_correlation_id`: Preservation of vendor-provided correlation ID.
+   - `internal_correlation_id`: Pedkai RCA-calculated correlation ID (primary TMF reference).
+3. ✅ **ProbableCause**: Added `probable_cause` to ORM. Mapped from vendor XML/JSON during normalization.
+
+## Strategic Enhancements
+
+- **REST Ingress (GAP 1)**: Added `POST /alarm` to allow legacy NMS tools (Nagios, etc.) to push alarms directly via REST if they cannot write to Kafka.
+- **Security Scopes (GAP 3)**: Implemented OAuth2 scopes (`tmf642:alarm:read`, `tmf642:alarm:write`) to prevent unauthorized network control operations.

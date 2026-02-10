@@ -169,6 +169,24 @@ class DecisionTrace(BaseModel):
         description="anops, capacity, customer_experience, etc."
     )
     
+    # TMF642 Compliance Fields (Phase 3 - Revised)
+    ack_state: str = Field(
+        default="unacknowledged",
+        description="unacknowledged or acknowledged"
+    )
+    external_correlation_id: Optional[str] = Field(
+        None,
+        description="Vendor-provided correlation ID"
+    )
+    internal_correlation_id: Optional[str] = Field(
+        None,
+        description="Pedkai RCA-calculated correlation ID"
+    )
+    probable_cause: Optional[str] = Field(
+        None,
+        description="TMF enumerated cause"
+    )
+    
     class Config:
         json_schema_extra = {
             "example": {

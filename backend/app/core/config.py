@@ -19,13 +19,14 @@ class Settings(BaseSettings):
     app_name: str = "Pedkai"
     app_version: str = "0.1.0"
     debug: bool = False
+    log_level: str = "INFO"
     
     # API
     api_prefix: str = "/api/v1"
     
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/pedkai"
-    metrics_database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5433/pedkai_metrics"
+    database_url: str  # Mandatory in production
+    metrics_database_url: str  # Mandatory in production
     database_pool_size: int = 5
     database_max_overflow: int = 10
     
@@ -34,7 +35,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
     
     # Kafka
-    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_bootstrap_servers: str  # Mandatory
     kafka_consumer_group: str = "pedkai-consumers"
     
     # Multi-tenancy

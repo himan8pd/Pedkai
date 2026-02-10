@@ -47,6 +47,12 @@ class DecisionTraceORM(Base):
     tags = Column(JSONB, nullable=False, default=list)
     domain = Column(String(50), nullable=False, default="anops", index=True)
     
+    # TMF642 Compliance Fields (Phase 3 - Revised)
+    ack_state = Column(String(50), default="unacknowledged", nullable=False)  # unacknowledged | acknowledged
+    external_correlation_id = Column(String(255), nullable=True)  # Vendor-provided correlation ID
+    internal_correlation_id = Column(String(255), nullable=True)  # Pedkai RCA-calculated correlation ID
+    probable_cause = Column(String(100), nullable=True)           # TMF enumerated cause
+    
     # Finding #4: This is now a cached aggregate of DecisionFeedbackORM
     feedback_score = Column(Integer, default=0, nullable=False)
     

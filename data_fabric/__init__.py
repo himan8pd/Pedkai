@@ -2,9 +2,11 @@
 
 from data_fabric.kafka_consumer import (
     KafkaEventConsumer,
-    KafkaEventProducer,
     Topics,
     get_kafka_consumer,
+)
+from data_fabric.kafka_producer import (
+    KafkaEventProducer,
     get_kafka_producer,
 )
 from data_fabric.event_handlers import (

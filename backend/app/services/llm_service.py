@@ -10,7 +10,10 @@ from typing import List, Dict, Any, Optional
 import json
 
 from backend.app.core.config import get_settings
+from backend.app.core.logging import get_logger
+from backend.app.core.resilience import llm_circuit_breaker
 
+logger = get_logger(__name__)
 settings = get_settings()
 
 class LLMService:
@@ -106,10 +109,14 @@ Maintain a professional, engineer-first tone. Use markdown formatting.
 """
 
         try:
-            response = self._model.generate_content(prompt)
+            # Wrap external call with Circuit Breaker
+            response = await llm_circuit_breaker.call(
+                self._model.generate_content_async, 
+                prompt
+            )
             return response.text
         except Exception as e:
-            print(f"Error generating LLM explanation: {e}")
+            logger.error(f"Error generating LLM explanation: {e}", exc_info=True)
             return f"Error generating automated SITREP: {str(e)}"
 
 # Singleton instance
