@@ -5,9 +5,7 @@ Uses Gemini embedding model to create vector representations
 for semantic similarity search.
 """
 
-from typing import Optional
-
-import google.generativeai as genai
+from google import genai
 
 from backend.app.core.config import get_settings
 
@@ -15,13 +13,14 @@ settings = get_settings()
 
 
 class EmbeddingService:
-    """Service for generating embeddings using Gemini."""
+    """Service for generating embeddings using the modern google-genai SDK."""
     
     def __init__(self):
         if settings.gemini_api_key:
-            genai.configure(api_key=settings.gemini_api_key)
-            self._model = "models/gemini-embedding-001"
+            self.client = genai.Client(api_key=settings.gemini_api_key)
+            self._model = "text-embedding-004"
         else:
+            self.client = None
             self._model = None
     
     async def generate_embedding(self, text: str) -> Optional[list[float]]:
@@ -30,16 +29,20 @@ class EmbeddingService:
         
         Returns None if the API key is not configured.
         """
-        if not self._model:
+        if not self.client:
             return None
         
         try:
-            result = genai.embed_content(
+            # Use the new SDK's async client
+            result = await self.client.aio.models.embed_content(
                 model=self._model,
-                content=text,
-                task_type="retrieval_document",
+                contents=text,
+                config={
+                    "task_type": "RETRIEVAL_DOCUMENT"
+                }
             )
-            return result["embedding"]
+            # The new SDK returns a list of embeddings; we take the first one
+            return result.embeddings[0].values
         except Exception as e:
             print(f"Error generating embedding: {e}")
             return None

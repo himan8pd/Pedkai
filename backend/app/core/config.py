@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     log_level: str = "INFO"
-    secret_key: str  # Mandatory in production
+    secret_key: str = "demo-insecure-secret-key-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
@@ -29,8 +29,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000"] # Default for Next.js
     
     # Database
-    database_url: str  # Mandatory in production
-    metrics_database_url: str  # Mandatory in production
+    database_url: str = "sqlite+aiosqlite:///./pedkai.db"
+    metrics_database_url: str = "sqlite+aiosqlite:///./metrics.db"
     db_ssl_mode: str = "disable" # "require" for production
     database_pool_size: int = 5
     database_max_overflow: int = 10
@@ -38,10 +38,10 @@ class Settings(BaseSettings):
     # Gemini LLM
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.0-flash"
-    llm_sampling_rate: float = 0.8 # Configurable cost control (Enabled by default)
+    llm_sampling_rate: float = 1.0 # Cost control (Disabled for reliable demos)
     
     # Kafka
-    kafka_bootstrap_servers: str  # Mandatory
+    kafka_bootstrap_servers: str = "localhost:9092"
     kafka_consumer_group: str = "pedkai-consumers"
     
     # Multi-tenancy

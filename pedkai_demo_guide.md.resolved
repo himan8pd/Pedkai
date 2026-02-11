@@ -1,0 +1,107 @@
+# Pedkai: Executive Demonstration Guide
+**Goal:** Prove Pedkai's value in autonomous operations, business-aligned remediation, and secure governance.
+
+---
+
+## 🔑 Story 1: Secure Access & Role-Based Control
+**NOC Context:** "Before any automation runs, the system enforces strict security. Only authorized service accounts or operators can trigger actions."
+
+### Step 1: Obtain Access Token
+1.  Open **http://localhost:8000/docs**.
+2.  Find **Authentication** -> `POST /api/v1/auth/token`.
+3.  Click **Try it out**.
+4.  Enter the following in the form:
+    - **username:** `admin`
+    - **password:** `admin` (Note: for the mock, password is the same as username)
+5.  Click **Execute**.
+6.  **Expected Result:** A JSON response with an [access_token](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/core/security.py#44-56). 
+7.  **Action:** Copy the [access_token](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/core/security.py#44-56) string (without quotes). Click the **Authorize** lock icon at the top of the page, paste the token, and click **Authorize**.
+
+---
+
+## 🤖 Story 2: Autonomous Anomaly Resolution
+**NOC Context:** "A standard interference alarm came in. Pedkai analyzes the topology and recommends a fix based on historical patterns."
+
+### Step 1: Create a Decision Trace (The "Simulated Event")
+1.  Find **Decisions** -> `POST /api/v1/decisions/`.
+2.  Click **Try it out**.
+3.  **Input Payload:**
+```json
+{
+  "tenant_id": "vodafone-uk",
+  "trigger_type": "alarm",
+  "trigger_id": "ALM-INT-001",
+  "trigger_description": "High UL Interference on Sector 3 (Cell-99)",
+  "context": {
+    "alarm_ids": ["ALM-INT-001"],
+    "affected_entities": ["Cell-99", "RU-551"],
+    "kpi_snapshot": {
+      "throughput_mbps": 12.5,
+      "latency_ms": 45.0,
+      "packet_loss_pct": 2.1
+    }
+  },
+  "constraints": [],
+  "options_considered": [
+    {
+      "id": "opt-1",
+      "description": "Reset Sector",
+      "risk_assessment": "Low impact",
+      "estimated_impact": "Probable fix",
+      "was_chosen": true
+    }
+  ],
+  "decision_summary": "Auto-reset sector 3 on Cell-99",
+  "tradeoff_rationale": "Quickest path to restoration; low risk of side effects.",
+  "action_taken": "SECTOR_RESET",
+  "decision_maker": "system:pedkai",
+  "confidence_score": 0.92,
+  "domain": "anops"
+}
+```
+4.  Click **Execute**.
+5.  **Executive Talk-track:** "Notice how we capture not just the action, but the *rationale* and *confidence*. This satisfies audit requirements for AI accountability."
+
+---
+
+## 📈 Story 3: CX-Intelligence (The "Business Value")
+**NOC Context:** "We don't just fix hardware; we protect revenue. Let's see who is affected by that anomaly."
+
+### Step 1: Run CX Impact Analysis
+1.  Find **Customer Experience** -> `GET /api/v1/cx/impact/{anomaly_id}`.
+2.  Click **Try it out**.
+3.  **anomaly_id:** Use the [id](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/services/decision_repository.py#59-70) returned from the previous step (e.g., `Cell-99`).
+4.  Click **Execute**.
+5.  **Executive Talk-track:** "Pedkai automatically traverses the network graph to find subscribers. It identified 'Gold Corp Ltd' as an impacted Enterprise customer. In an older NOC, you'd be staring at hardware logs; here, we're looking at Customer Risk."
+
+---
+
+## 🛡️ Story 4: Safety Policy Enforcement (The "Safety Switch")
+**NOC Context:** "We have a strictly defined policy: Never allow autonomous action if the total revenue-at-risk per hour exceeds $50,000."
+
+### Step 1: Verify Policy Blocking
+1.  (This requires 6+ seeded decisions). Run the [demo/test_demo_scenario.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/demo/test_demo_scenario.py) or seed the DB using the instructions below.
+2.  When the limit is reached, Pedkai returns a `🛑 POLICY BLOCK`.
+3.  **Executive Talk-track:** "This is our safety-first approach. When systemic risk rises, the AI yields to human oversight automatically."
+
+---
+
+## 🔌 Story 5: TMF-Compliance (Seamless Integration)
+**NOC Context:** "We play nice with your existing stack. Pedkai exposes standard TMF642 Alarms so your legacy OSS can still read our decisions."
+
+### Step 1: Poll Alarms (TMF642)
+1.  Find **TMF642 Alarm Management** -> `GET /tmf-api/alarmManagement/v4/alarm`.
+2.  Click **Try it out** and **Execute**.
+3.  **Expected Result:** A list of alarms in pure TMF642 JSON format.
+4.  **Executive Talk-track:** "No vendor lock-in. We are fully compliant with Open API standards from the TM Forum."
+
+---
+
+## 🛠️ Data Cheat Sheet: Input Values
+| Field Name | Example Value | Description |
+| :--- | :--- | :--- |
+| **tenant_id** | `orange-es` / `voda-uk` | Used for multi-tenant isolation. |
+| **external_id** | `CUST-GOLD-001` | Link to internal BSS system. |
+| **domain** | `anops` / `capacity` | Category of the decision. |
+| **probable_cause**| `thresholdCrossed` | Standard TMF alarm cause. |
+| **complexity** | `0.1` to `1.0` | Risk factor for the decision. |

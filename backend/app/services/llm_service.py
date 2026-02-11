@@ -5,7 +5,7 @@ Uses Gemini to generate natural language explanations and recommendations
 for network incidents based on RCA and Decision Memory.
 """
 
-import google.generativeai as genai
+from google import genai
 from typing import List, Dict, Any, Optional
 import json
 import random
@@ -30,13 +30,16 @@ class LLMProvider(ABC):
         pass
 
 class GeminiProvider(LLMProvider):
-    """Google Gemini implementation."""
+    """Google Gemini implementation using the modern google-genai SDK."""
     def __init__(self, api_key: str, model_name: str):
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=api_key)
+        self._model_name = model_name
 
     async def generate(self, prompt: str) -> str:
-        response = await self._model.generate_content_async(prompt)
+        response = await self.client.aio.models.generate_content(
+            model=self._model_name,
+            contents=prompt
+        )
         return response.text
 
 class LLMService:

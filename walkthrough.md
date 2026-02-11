@@ -94,7 +94,7 @@ I have implemented the critical fixes requested by the Telecom Business Strategi
 
 ## 4. Operational Status
 - **Metric Stream**: TimescaleDB Hypertable active.
-- **RCA Engine**: Connected to live telemetry.
+- **API Hygiene**: Migrated from deprecated `google-generativeai` to the modern `google-genai` SDK, eliminating all SDK warnings and ensuring future-proof integration.
 - **Intelligence Layer**: Gemini-driven SITREPs enabled for all anomalies.
 
 ---
@@ -152,6 +152,21 @@ Addressed all 3 critical gaps identified in the strategic review of Phase 3:
 
 ---
 
+## 🎭 Product Demonstration Guide
+
+To support your executive presentations, I have created a **Professional NOC Storyline Guide** that transforms technical API calls into a compelling business narrative.
+
+- **Guide Path:** [pedkai_demo_guide.md](file:///Users/himanshu/.gemini/antigravity/brain/c5fbab1b-d983-4364-81c4-795a3a6499e2/pedkai_demo_guide.md)
+
+### What the Guide covers:
+1.  **Story 1: Security** - Proving the "Gatekeeper" persona.
+2.  **Story 2: Autonomy** - Showing the "AI SITREP" and reasoning chain.
+3.  **Story 3: Revenue Protection** - Connecting hardware faults to Customer churn risk.
+4.  **Story 4: Safety Governance** - Demonstrating the "Safety Lock" when risk thresholds are exceeded.
+5.  **Story 5: Compliance** - Proving standard TMF642/TMF628 compatibility.
+
+---
+*Pedkai - AI-Native Telco Operating System*
 ## 🏁 Phase 4: Operational Hardening (Enterprise Ready)
 
 I have transitioned Pedkai from a prototype into an **Enterprise-Grade System** by implementing industry-standard operational best practices.

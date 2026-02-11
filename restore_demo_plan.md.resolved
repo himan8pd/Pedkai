@@ -1,0 +1,20 @@
+# Implementation Plan: Restore Localhost Demo
+
+## Goal
+Restore the `localhost:8000` Pedkai API environment with the latest successfully hardened code.
+
+## Critical Path
+1.  **Database**: Use **SQLite** (`pedkai_demo.db`) for immediate, dependency-free execution on the user's Mac. This avoids potential Docker networking/volume issues and is sufficient for a demo.
+    *   *Fallback*: If Docker is preferred/required by the user, we can switch, but SQLite is safer for "Just make it work".
+2.  **Configuration**: Set environment variables (`DATABASE_URL`, `PEDKAI_POLICY_PATH`) to point to local files.
+3.  **Seeding**: Re-use [demo/seed_data.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/demo/seed_data.py) logic but direct it to the SQLite DB.
+4.  **Execution**: Run `uvicorn backend.app.main:app --reload`.
+
+## Steps
+1.  **Create Run Script (`run_demo.sh`)**: A single script to set env vars, seed DB, and start the server.
+2.  **Update Seeder**: Ensure [seed_data.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/demo/seed_data.py) can accept a SQLite URL.
+3.  **Execute**: Run the script.
+
+## Verification
+- Access `http://localhost:8000/health`.
+- Access `http://localhost:8000/docs`.
