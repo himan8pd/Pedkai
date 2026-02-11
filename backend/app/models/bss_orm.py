@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 import uuid
 
@@ -17,7 +17,6 @@ class ServicePlanORM(Base):
     monthly_fee = Column(Float, nullable=False)
     sla_guarantee = Column(String(255), nullable=True) # e.g., "99.999% Availability"
     
-    from datetime import timezone
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class BillingAccountORM(Base):

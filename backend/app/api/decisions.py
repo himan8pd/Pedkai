@@ -15,6 +15,8 @@ from backend.app.core.database import get_db
 from backend.app.models.decision_trace import (
     DecisionTrace,
     DecisionTraceCreate,
+    DecisionTraceUpdate,
+    DecisionOutcomeRecord,
     SimilarDecisionQuery,
     ReasoningChain,
 )

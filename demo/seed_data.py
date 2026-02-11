@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text  # Added for text() queries
 
-from backend.app.models.topology_models import SiteORM, EntityRelationshipORM, CellORM, RouterORM
+from backend.app.models.topology_models import EntityRelationshipORM
 from backend.app.models.bss_orm import BillingAccountORM, ServicePlanORM, Base
 from backend.app.models.customer_orm import CustomerORM
 from backend.app.models.decision_trace_orm import DecisionTraceORM
@@ -23,8 +23,9 @@ async def seed_demo_data():
         print("Creating tables...")
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-        # We also need to enable pgvector extension if not present
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        # We also need to enable pgvector extension if not present (Postgres only)
+        if engine.dialect.name == "postgresql":
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
 
     async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -32,17 +33,13 @@ async def seed_demo_data():
         print("Seeding BSS Data...")
         
         # 1. Service Plans
-        plan_gold = ServicePlanORM(id=uuid4(), name="Enterprise Gold", tier="GOLD", price=500.0)
-        plan_bronze = ServicePlanORM(id=uuid4(), name="Consumer Standard", tier="BRONZE", price=40.0)
+        plan_gold = ServicePlanORM(id=uuid4(), name="Enterprise Gold", tier="GOLD", monthly_fee=500.0)
+        plan_bronze = ServicePlanORM(id=uuid4(), name="Consumer Standard", tier="BRONZE", monthly_fee=40.0)
         session.add_all([plan_gold, plan_bronze])
         
-        # 2. Topology
+        # 2. Topology (Defined by Relationships/Edges only)
+        # Site-ABC -> Router-55 -> Cell-99
         print("Seeding Network Topology...")
-        site_abc = SiteORM(id="Site-ABC", name="Downtown Hub", latitude=51.5, longitude=-0.1)
-        router_55 = RouterORM(id="Router-55", name="Aggregation Node 55", status="ACTIVE")
-        cell_99 = CellORM(id="Cell-99", name="Macro Cell 99", status="ACTIVE")
-        
-        session.add_all([site_abc, router_55, cell_99])
         
         # Relationships
         rel1 = EntityRelationshipORM(
@@ -65,7 +62,7 @@ async def seed_demo_data():
         )
         acc_gold = BillingAccountORM(
             id=uuid4(), customer_id=cust_gold.id, 
-            service_plan_id=plan_gold.id, 
+            plan_id=plan_gold.id, 
             last_billing_dispute=None
         )
         
@@ -75,7 +72,7 @@ async def seed_demo_data():
         )
         acc_bronze = BillingAccountORM(
             id=uuid4(), customer_id=cust_bronze.id, 
-            service_plan_id=plan_bronze.id, 
+            plan_id=plan_bronze.id, 
             last_billing_dispute=None
         )
         
