@@ -20,19 +20,25 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     log_level: str = "INFO"
+    secret_key: str  # Mandatory in production
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
     
     # API
     api_prefix: str = "/api/v1"
+    allowed_origins: list[str] = ["http://localhost:3000"] # Default for Next.js
     
     # Database
     database_url: str  # Mandatory in production
     metrics_database_url: str  # Mandatory in production
+    db_ssl_mode: str = "disable" # "require" for production
     database_pool_size: int = 5
     database_max_overflow: int = 10
     
     # Gemini LLM
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.0-flash"
+    llm_sampling_rate: float = 0.8 # Configurable cost control (Enabled by default)
     
     # Kafka
     kafka_bootstrap_servers: str  # Mandatory
@@ -52,7 +58,7 @@ class Settings(BaseSettings):
     kaggle_key: Optional[str] = None
     
     # Decision Memory Search Tuning
-    memory_search_min_similarity: float = 0.0  # Expansive by default for MVP
+    memory_search_min_similarity: float = 0.9  # Expansive by default for MVP
     memory_search_limit: int = 5
     memory_search_global_default: bool = True
 

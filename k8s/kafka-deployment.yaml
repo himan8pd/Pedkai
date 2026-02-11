@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pedkai-kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pedkai
+      component: kafka
+  template:
+    metadata:
+      labels:
+        app: pedkai
+        component: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:7.3.0
+        env:
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "pedkai-zookeeper:2181"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://pedkai-kafka:9092"
+        ports:
+        - containerPort: 9092
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+      volumes:
+      - name: kafka-data
+        persistentVolumeClaim:
+          claimName: pedkai-kafka-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pedkai-kafka-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pedkai-kafka
+spec:
+  selector:
+    app: pedkai
+    component: kafka
+  ports:
+  - protocol: TCP
+    port: 9092
+    targetPort: 9092

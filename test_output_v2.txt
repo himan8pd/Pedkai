@@ -1,0 +1,31 @@
+Form data requires "python-multipart" to be installed. 
+You can install "python-multipart" with: 
+
+pip install python-multipart
+
+ImportError while loading conftest '/Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My Drive/AI Learning/AntiGravity/Pedkai/tests/conftest.py'.
+tests/conftest.py:30: in <module>
+    from backend.app.main import app
+backend/app/main.py:20: in <module>
+    from backend.app.api import decisions, health, tmf642, tmf628, auth
+backend/app/api/auth.py:32: in <module>
+    @router.post("/token")
+     ^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.14/site-packages/fastapi/routing.py:1132: in decorator
+    self.add_api_route(
+venv/lib/python3.14/site-packages/fastapi/routing.py:1071: in add_api_route
+    route = route_class(
+venv/lib/python3.14/site-packages/fastapi/routing.py:670: in __init__
+    self.dependant = get_dependant(
+venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:305: in get_dependant
+    sub_dependant = get_dependant(
+venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:283: in get_dependant
+    param_details = analyze_param(
+venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:506: in analyze_param
+    ensure_multipart_is_installed()
+venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:109: in ensure_multipart_is_installed
+    raise RuntimeError(multipart_not_installed_error) from None
+E   RuntimeError: Form data requires "python-multipart" to be installed.
+E   You can install "python-multipart" with:
+E
+E   pip install python-multipart

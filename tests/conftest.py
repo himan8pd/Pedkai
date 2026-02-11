@@ -87,7 +87,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
             pass
 
     async def override_get_user():
-        return {"username": "testuser", "scopes": ["tmf642:alarm:write", "tmf642:alarm:read"]}
+        from backend.app.core.security import User, Role
+        return User(
+            username="testuser", 
+            role=Role.OPERATOR, 
+            scopes=["tmf642:alarm:write", "tmf642:alarm:read"]
+        )
 
     async def override_oauth2_scheme():
         return "dummy-token"

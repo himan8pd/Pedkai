@@ -1,0 +1,49 @@
+# Pedkai Strategic Audit Report: Final Verification (v8)
+
+**Auditor**: Telecom Business Strategist  
+**Status**: 🔴 **REJECTED (Final Hardening Required)**  
+**Date**: 11 February 2026
+
+---
+
+## ✅ Executive Summary (The Good News)
+The vendor has successfully transitioned from "Demo Theatre" to a functional, data-driven architecture. The implementation of **Recursive CTEs** for topology and **Weighted LLM Sampling** is high-quality. The externalization of operational parameters into the **Telco Constitution** is a significant breakthrough for business governance.
+
+**However**, as a ruthless strategist, I cannot sign off on a production release that contains the following high-severity security and logic gaps.
+
+---
+
+## 🚩 Ruthless Audit Findings
+
+### [H-8] Constitutional Integrity Risk (Security)
+**Finding**: The [global_policies.yaml](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/policies/global_policies.yaml) (The Constitution) resides within the application source tree (`backend/app/policies/`).
+**Risk**: In many cloud deployments, the application process possesses write-access to its own local directory. This creates a "Vicious Loop" where a sophisticated AI agent—or a compromised service—could theoretically rewrite its own "Constitution" to remove revenue limits or safety throttles.
+**Feedback**: Policy files MUST be loaded from a read-only secret manager or a read-only volume mount (K8s ConfigMap) in production.
+
+### [H-9] Site Inference Blind Spot (Logic)
+**Finding**: `CXIntelligenceService.identify_impacted_customers` (lines 31-33) returns an empty list if `site_id` is missing from the context.
+**Risk**: Many network anomalies are detected as "Cluster Alarms" or "Core Faults" where a single `site_id` is ambiguous. By dropping these, the system becomes blind to high-risk churn events during the most critical outages.
+**Feedback**: Implement **Entity Inference**. If `site_id` is missing, traverse the graph upwards from `affected_entities` to find the nearest parent node (Aggregator/Router) and calculate the downstream blast radius from there.
+
+### [M-7] Missing Cumulative Risk Controls (Governance)
+**Finding**: Policy POL-003 limits *single* actions to $10,000 risk.
+**Risk**: A "Death by a Thousand Cuts" scenario where the AI executes 50 distinct optimizations, each risking $9,000. Total risk: $450,000. All would pass without human approval.
+**Feedback**: Introduce **Velocity/Cumulative Policies** (e.g., "Require approval if Total Revenue at Risk across all active sessions > $50k").
+
+### [M-8] Validation Environment Divergence (Technical Debt)
+**Finding**: `benchmark_memory.py` uses manual cosine similarity (SQLite) while Production uses `pgvector` (Postgres).
+**Risk**: Benchmark results for semantic retrieval are effectively "Simulated." High-precision thresholds found in the benchmark may fail in production due to different vector indexing algorithms (HNSW vs single-vector math).
+**Feedback**: Align the Benchmarking environment with Production (Postgres + pgvector) immediately.
+
+---
+
+## 📜 Final Scorecard
+
+| Category | Score | Notes |
+|----------|-------|-------|
+| **Functional Integrity** | 9/10 | CTE logic is excellent. |
+| **Governance & Policy** | 7/10 | Parameterized, but missing cumulative safety. |
+| **Security** | 4/10 | Constitutional file is too accessible. |
+| **Resilience** | 8/10 | BSS joins are real. |
+
+**Final Recommendation**: Do NOT release to Production. Perform one more "Hardening Sprint" to address H-8 and H-9.

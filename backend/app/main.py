@@ -16,8 +16,8 @@ import time
 
 from backend.app.core.config import get_settings
 from backend.app.core.logging import setup_logging, get_logger, correlation_id_ctx
+from backend.app.api import decisions, health, tmf642, tmf628, auth, capacity, cx_router
 from backend.app.core.security import oauth2_scheme
-from backend.app.api import decisions, health, tmf642, tmf628
 from fastapi import Depends
 
 settings = get_settings()
@@ -67,6 +67,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"👋 Shutting down {settings.app_name}")
 
 
+from backend.app.core.observability import setup_tracing
+
 app = FastAPI(
     title=settings.app_name,
     description="Decision intelligence and automation for large-scale telcos",
@@ -74,20 +76,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Initialize Tracing
+setup_tracing(app)
+
 # Add Middleware
 app.add_middleware(RequestContextMiddleware)
 
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure properly in production
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Correlation-ID"],
 )
 
 # Include routers
 app.include_router(health.router, tags=["Health"])
+app.include_router(
+    auth.router,
+    prefix=f"{settings.api_prefix}/auth",
+    tags=["Authentication"]
+)
 app.include_router(
     decisions.router, 
     prefix=f"{settings.api_prefix}/decisions",
@@ -102,11 +112,25 @@ app.include_router(
     dependencies=[Depends(oauth2_scheme)] # Enforce auth on all standard TMF endpoints
 )
 
-# TMF628 Performance Management (Phase 3)
 app.include_router(
     tmf628.router,
     prefix="/tmf-api/performanceManagement/v4",
     tags=["TMF628 Performance Management"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# AI-Driven Capacity Planning (Wedge 2)
+app.include_router(
+    capacity.router,
+    prefix=f"{settings.api_prefix}/capacity",
+    tags=["Capacity Planning"],
+)
+
+# Customer Experience Intelligence (Wedge 3)
+app.include_router(
+    cx_router.router,
+    prefix=f"{settings.api_prefix}/cx",
+    tags=["Customer Experience"],
     dependencies=[Depends(oauth2_scheme)]
 )
 

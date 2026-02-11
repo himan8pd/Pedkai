@@ -8,8 +8,9 @@ Fulfills Strategic Review GAPs 1 and 3.
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Security
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Security
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_user, TMF642_READ, TMF642_WRITE
@@ -17,7 +18,7 @@ from backend.app.models.decision_trace_orm import DecisionTraceORM
 from backend.app.models.tmf642_models import (
     TMF642Alarm, TMF642AlarmRef, TMF642AlarmUpdate,
     PerceivedSeverity, AlarmType, AlarmState, AckState,
-    TMF642AlarmedObject, TMF642Comment
+    TMF642AlarmedObject
 )
 # We assume a utility exists to push to Kafka for the POST endpoint
 from data_fabric.kafka_producer import publish_event, Topics
@@ -64,28 +65,24 @@ async def list_alarms(
     alarmType: Optional[AlarmType] = None,
     perceivedSeverity: Optional[PerceivedSeverity] = None,
     state: Optional[AlarmState] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user=Security(get_current_user, scopes=[TMF642_READ])
 ):
     """List alarms with TMF filters."""
-    query = db.query(DecisionTraceORM)
-    
-    if perceivedSeverity:
-        # Complex mapping would go here
-        pass
-        
-    results = query.limit(100).all()
+    result = await db.execute(select(DecisionTraceORM).limit(100))
+    results = result.scalars().all()
     return [map_orm_to_tmf(r) for r in results]
 
 
 @router.get("/alarm/{id}", response_model=TMF642Alarm)
 async def get_alarm(
     id: UUID, 
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user=Security(get_current_user, scopes=[TMF642_READ])
 ):
     """Retrieve a single alarm by ID."""
-    orm = db.query(DecisionTraceORM).filter(DecisionTraceORM.id == id).first()
+    result = await db.execute(select(DecisionTraceORM).filter(DecisionTraceORM.id == id))
+    orm = result.scalar_one_or_none()
     if not orm:
         raise HTTPException(status_code=404, detail="Alarm not found")
     return map_orm_to_tmf(orm)
@@ -113,7 +110,7 @@ async def create_alarm(
     
     # 2. Publish to Kafka
     # This enables the existing anomaly/RCA pipeline to process it
-    # publish_event(Topics.ALARMS, pedkai_event)
+    # await publish_event(Topics.ALARMS, pedkai_event)
     
     return {"status": "accepted", "id": alarm.id}
 
@@ -122,16 +119,17 @@ async def create_alarm(
 async def update_alarm(
     id: UUID,
     update: TMF642AlarmUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user=Security(get_current_user, scopes=[TMF642_WRITE])
 ):
     """Update alarm state (acknowledge, clear)."""
-    orm = db.query(DecisionTraceORM).filter(DecisionTraceORM.id == id).first()
+    result = await db.execute(select(DecisionTraceORM).filter(DecisionTraceORM.id == id))
+    orm = result.scalar_one_or_none()
     if not orm:
         raise HTTPException(status_code=404, detail="Alarm not found")
         
     if update.ackState:
         orm.ack_state = "acknowledged" if update.ackState == AckState.ACKNOWLEDGED else "unacknowledged"
         
-    db.commit()
+    await db.commit()
     return map_orm_to_tmf(orm)

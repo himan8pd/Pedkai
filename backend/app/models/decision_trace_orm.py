@@ -5,13 +5,13 @@ Maps the Pydantic DecisionTrace schema to PostgreSQL with JSONB storage
 for flexible nested structures and pgvector for semantic similarity search.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Float, Index, Integer, String, text, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Column, DateTime, Float, Index, Integer, String, text, Text, JSON
+from sqlalchemy.dialects.postgresql import UUID
 
 from backend.app.core.database import Base
 from backend.app.core.config import get_settings
@@ -29,22 +29,22 @@ class DecisionTraceORM(Base):
     # ... (rest of the fields) ...
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()"))
     tenant_id = Column(String(255), nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, server_default=text("now()"), nullable=False)
-    decision_made_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=text("now()"), nullable=False)
+    decision_made_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     trigger_type = Column(String(50), nullable=False, index=True)
     trigger_id = Column(String(255), nullable=True)
     trigger_description = Column(Text, nullable=False)
-    context = Column(JSONB, nullable=False, default=dict)
-    constraints = Column(JSONB, nullable=False, default=list)
-    options_considered = Column(JSONB, nullable=False, default=list)
+    context = Column(JSON, nullable=False, default=dict)
+    constraints = Column(JSON, nullable=False, default=list)
+    options_considered = Column(JSON, nullable=False, default=list)
     decision_summary = Column(Text, nullable=False)
     tradeoff_rationale = Column(Text, nullable=False)
     action_taken = Column(Text, nullable=False)
     decision_maker = Column(String(255), nullable=False)
     confidence_score = Column(Float, default=0.0)
-    outcome = Column(JSONB, nullable=True)
+    outcome = Column(JSON, nullable=True)
     embedding = Column(Vector(settings.embedding_dimension), nullable=True)
-    tags = Column(JSONB, nullable=False, default=list)
+    tags = Column(JSON, nullable=False, default=list)
     domain = Column(String(50), nullable=False, default="anops", index=True)
     
     # TMF642 Compliance Fields (Phase 3 - Revised)
@@ -55,6 +55,10 @@ class DecisionTraceORM(Base):
     
     # Finding #4: This is now a cached aggregate of DecisionFeedbackORM
     feedback_score = Column(Integer, default=0, nullable=False)
+    
+    # Phase 15.3: Semantic Context Graph (Recursive Reasoning)
+    parent_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    derivation_type = Column(String(50), nullable=True) # FOLLOW_UP | DIRECT_CAUSE | SIMILAR_PATTERN
     
     __table_args__ = (
         Index("ix_decision_traces_tenant_domain", "tenant_id", "domain"),
@@ -72,7 +76,7 @@ class DecisionFeedbackORM(Base):
     decision_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     operator_id = Column(String(255), nullable=False, index=True)
     score = Column(Integer, nullable=False) # 1 for upvote, -1 for downvote
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=text("now()"), nullable=False)
     
     __table_args__ = (
         # Finding #4: One vote per operator per decision

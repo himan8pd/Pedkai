@@ -1,0 +1,51 @@
+# Pedkai Telco Constitution
+# Version: 1.0.0
+# Authorization: VJV Strategic Board
+
+# Global Operational Parameters
+parameters:
+  rl_reward_improvement_threshold: 0.10  # 10%
+  rl_penalty_degradation_threshold: -0.05 # -5%
+  cx_churn_risk_alert_threshold: 0.70
+  sampling_exclusion_revenue_threshold: 5000 # Incidents > $5k are NEVER sampled out
+
+policies:
+  - id: "POL-001"
+    name: "Emergency Services Protection"
+    description: "Emergency traffic must never be de-prioritized or blocked."
+    priority: 100
+    condition: "service_type == 'EMERGENCY' or slice_id == '112-911-SLICE'"
+    action: "ALLOW"
+    overrides: ["*"]
+
+  - id: "POL-002"
+    name: "Corporate SLA Guarantee"
+    description: "Gold Tier Enterprise traffic has priority over Consumer traffic during congestion."
+    priority: 90
+    condition: "customer_tier == 'GOLD' and network_load > 85"
+    action: "PRIORITIZE"
+    constraints:
+      - "cannot_preempt_emergency"
+
+  - id: "POL-003"
+    name: "Revenue Protection"
+    description: "Actions that risk > $10k/hour revenue require human approval."
+    priority: 80
+    condition: "predicted_revenue_loss > 10000"
+    action: "REQUIRE_APPROVAL"
+
+  - id: "POL-004"
+    name: "Consumer Fair Usage"
+    description: "Bronze users can be throttled if cell load is critical."
+    priority: 50
+    condition: "customer_tier == 'BRONZE' and network_load > 95"
+    action: "THROTTLE"
+    parameters:
+      throttle_limit: "5Mbps"
+
+  - id: "POL-005"
+    name: "Cumulative Revenue Protection"
+    description: "Multi-session audit: If total active revenue-at-risk > $50k, block all autonomus actions."
+    priority: 95
+    condition: "cumulative_revenue_loss > 50000"
+    action: "REQUIRE_APPROVAL"

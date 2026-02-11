@@ -118,8 +118,8 @@ class DecisionTrace(BaseModel):
     tenant_id: str = Field(description="Multi-tenant isolation")
     
     # When
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    decision_made_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    decision_made_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     # What triggered this decision
     trigger_type: str = Field(description="alarm, ticket, scheduled, manual")
@@ -167,6 +167,16 @@ class DecisionTrace(BaseModel):
     domain: str = Field(
         default="network_ops",
         description="anops, capacity, customer_experience, etc."
+    )
+    
+    # Phase 15.3: Semantic Context Graph (Recursive Reasoning)
+    parent_id: Optional[UUID] = Field(
+        None,
+        description="ID of the parent decision in the reasoning chain"
+    )
+    derivation_type: Optional[str] = Field(
+        None,
+        description="Type of derivation: FOLLOW_UP, DIRECT_CAUSE, SIMILAR_PATTERN"
     )
     
     # TMF642 Compliance Fields (Phase 3 - Revised)
@@ -262,12 +272,18 @@ class DecisionTraceCreate(BaseModel):
     confidence_score: float = 0.0
     domain: str = "anops"
     tags: list[str] = Field(default_factory=list)
+    
+    # Phase 15.3: Semantic Context Graph
+    parent_id: Optional[UUID] = None
+    derivation_type: Optional[str] = None
 
 
 class DecisionTraceUpdate(BaseModel):
     """Schema for updating a decision trace (mainly for outcome)."""
     outcome: Optional[DecisionOutcomeRecord] = None
     tags: Optional[list[str]] = None
+    parent_id: Optional[UUID] = None
+    derivation_type: Optional[str] = None
 
 
 class SimilarDecisionQuery(BaseModel):
@@ -277,3 +293,10 @@ class SimilarDecisionQuery(BaseModel):
     domain: Optional[str] = None
     min_similarity: float = Field(default=0.7, ge=0.0, le=1.0)
     limit: int = Field(default=5, ge=1, le=20)
+
+
+class ReasoningChain(BaseModel):
+    """A sequence of linked decisions representing a reasoning path."""
+    decisions: list[DecisionTrace]
+    root_id: UUID
+    length: int

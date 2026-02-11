@@ -9,8 +9,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@pedkai-db:5432/pedkai
-      - METRICS_DATABASE_URL=postgresql+asyncpg://postgres:postgres@pedkai-db:5432/pedkai_metrics
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pedkai-db:5432/pedkai
+      - METRICS_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pedkai-db:5432/pedkai_metrics
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - LOG_LEVEL=INFO
       # Inject secrets via env file or secrets manager
@@ -34,15 +34,15 @@ services:
     container_name: pedkai-db
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword # Change in production!
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: pedkai
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -61,6 +61,8 @@ services:
       - zookeeper
     ports:
       - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -71,3 +73,4 @@ services:
 
 volumes:
   postgres_data:
+  kafka_data:

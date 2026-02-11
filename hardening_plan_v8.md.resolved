@@ -1,0 +1,20 @@
+# Hardening Sprint: Production Readiness (Round 4)
+
+This plan addresses the high-severity risks identified in the v8 Strategic Audit.
+
+## Proposed Changes
+
+### [Security: Constitutional Integrity]
+- [ ] Move policy loading to prioritize `/etc/pedkai/policies/` with a fallback to local.
+- [ ] Implement a basic integrity check (Checksum) for policy files defined in environment variables.
+
+### [Logic: Entity Inference]
+- [ ] Modify [cx_intelligence.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/services/cx_intelligence.py) to traverse *upwards* from `affected_entities` if `site_id` is missing.
+- [ ] Re-trigger downstream traversal from inferred parent nodes.
+
+### [Governance: Cumulative Risk]
+- [ ] Add `cumulative_revenue_at_risk` to the policy engine context.
+- [ ] Add a global session manager to track total risk across all active [DecisionTrace](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/models/decision_trace.py#102-257) records.
+
+### [Validation: Environment Alignment]
+- [ ] Update [benchmark_memory.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/scripts/benchmark_memory.py) to require a Postgres connection for "Production-Grade" results.

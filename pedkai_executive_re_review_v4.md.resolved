@@ -1,0 +1,71 @@
+# Pedkai Strategic Re-Review: Phase 12-15 Remediation Audit
+
+**Reviewer**: Telecom Business Strategist (Lead Auditor)  
+**Date**: 11 February 2026  
+**Status**: 🔴 **REJECTED — UNACCEPTABLE QUALITY & REGRESSION**  
+**Overall Score**: 2/10 (Down from 5/10)
+
+---
+
+## 🛑 Executive Summary: The "Walkthrough vs. Reality" Gap
+
+Following the strategic audit of Phases 12-15, the vendor provided a remediation package and a walkthrough claiming 100% completion of critical and high-severity issues. **A line-by-line inspection of the source code reveals that these claims are factually incorrect and, in several cases, deceptive.**
+
+The remediation efforts have introduced a major regression that prevents the application from starting, while the "fixes" for core architectural flaws (like closed-loop RL and CX graph intelligence) are cosmetic stubs rather than functional logic.
+
+---
+
+## 🔴 CRITICAL REGRESSIONS & FAILED REMEDIATIONS
+
+### 1. Major Regression: System Does Not Start
+The rework of [backend/app/main.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/main.py) has introduced a **NameError**. The vendor added `oauth2_scheme` dependencies to TMF routers but failed to import the variable.
+- **Evidence**: `NameError: name 'oauth2_scheme' is not defined`
+- **Strategist Note**: Claiming a remediation is "complete" and "verified" when the code does not even import successfully is a major governance failure.
+
+### 2. [C-2] RL Evaluator: Still Open-Loop (Fraudulent "Fix")
+The vendor claims to have implemented "Real Closed-Loop RL (KPI checks)".
+- **Reality**: The "fix" in [rl_evaluator.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/scripts/verify_rl_evaluator.py) is purely cosmetic. Line 36 calls [_calculate_kpi_improvement_reward](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/services/rl_evaluator.py#52-71), but that function (Line 62) simply checks if `decision.outcome.status == SUCCESS`. 
+- **The Gap**: It still relies on a **human-labeled status string** rather than querying the metrics database to verify if KPIs actually improved. This remains an open loop.
+
+### 3. [H-3] CX Intelligence: Fake Graph Traversal
+The walkthrough claims "Graph-based correlation" for multi-site impact.
+- **Reality**: The "graph traversal" is a simple `if "-" not in site_id` string check. If the site ID doesn't have a hyphen, it prints a log message saying it's "simulating traversal" and then... **does nothing**. It returns exactly the same primary site it started with.
+- **Strategist Note**: This is "Demo Theatre". No actual neighboring or downstream sites are ever retrieved.
+
+### 4. [H-4] `utcnow()` Deprecation: Factually False Claims
+The walkthrough explicitly states: *"Replaced all utcnow() calls... All instances now use: datetime.now(timezone.utc)"*.
+- **Reality**: A simple `grep` reveals **9 remaining instances** of `datetime.utcnow()` in critical files:
+  - [decision_trace_orm.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/models/decision_trace_orm.py) (Line 32, 33, 79)
+  - [decision_trace.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/models/decision_trace.py) (Line 121, 122)
+  - [kpi_orm.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/models/kpi_orm.py) (Line 35)
+  - [investment_planning.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/models/investment_planning.py) (Line 23, 43)
+
+---
+
+## 🟡 HIGH-SEVERITY DISCREPANCIES
+
+### 5. [H-1] Memory Benchmark: Tautological Testing
+While the dataset was expanded to 28 items, the benchmark logic in [benchmark_memory.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/scripts/benchmark_memory.py) remains invalid.
+- **The Flow**: The script seeds Item A, then queries for Item A using the **exact same text string**, and calculates precision based on finding Item A.
+- **The Flaw**: This does not test "retrieval quality" or "similarity search"; it tests if the database can find a string that is a 100% literal match. It fails to test paraphrases or semantic variations.
+
+### 6. [H-2] Capacity Engine: Pune-Centric Fake Geography
+The walkthrough claims a "tiered cost model" has fixed the cost modeling.
+- **The Gap**: While base costs are now tiered by region type, the **geographic coordinates** are still hardcoded arithmetic offsets (Line 92-93) based on a Pune coordinate. Any densification request for London, New York, or any real network site will result in predicted site placements in a Pune suburb.
+
+---
+
+## 🏗️ Required Actions (Non-Negotiable)
+
+1.  **Fix the Import Regression**: Restore application functionality by importing `oauth2_scheme` in [main.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/main.py).
+2.  **Actually Implement C-2**: The RL Evaluator MUST query the [metrics](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/core/database.py#102-113) table (SQLAlchemy) to compare KPI values before and after a decision. **Reading the `outcome.status` label is not a fix.**
+3.  **Actually Implement H-3**: Use the existing `EntityRelationshipORM` (Context Graph) to find real neighboring site IDs.
+4.  **Complete the H-4 Cleanup**: Remove every single instance of `utcnow()` from the codebase.
+5.  **Implement Real Integration Tests (M-1)**: Provide `pytest` files for CX Intelligence and RL Evaluator that test actual logic, not just "seeding data and reading it back".
+
+---
+
+## Final Verdict
+The vendor has prioritised making the **Walkthrough.md** look compliant over making the **Codebase** compliant. This is a "Scaffolding" delivery. We cannot proceed to Phase 16 until the core engine actually performs the intelligence tasks described in the business requirements.
+
+**Acceptance**: ❌ **DENIED**

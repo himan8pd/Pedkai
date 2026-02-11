@@ -1,0 +1,478 @@
+"use client"
+
+import React, { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Database,
+  Cpu,
+  Network,
+  ChevronRight,
+  Shield,
+  Zap,
+  Lock,
+  TrendingUp,
+  MapPin
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+export default function NOCDashboard() {
+  const [alarms, setAlarms] = useState<any[]>([])
+  const [selectedAlarm, setSelectedAlarm] = useState<any>(null)
+  const [activeView, setActiveView] = useState<'alarms' | 'capacity'>('alarms')
+  const [capacityRequests, setCapacityRequests] = useState<any[]>([])
+  const [selectedRequest, setSelectedRequest] = useState<any>(null)
+  const [investmentPlan, setInvestmentPlan] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [token, setToken] = useState<string | null>(null)
+
+  // Auth State
+  const [username, setUsername] = useState("operator")
+  const [password, setPassword] = useState("operator")
+  const [authError, setAuthError] = useState("")
+
+  // Login Function
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError("")
+    setIsLoading(true)
+
+    try {
+      const formData = new URLSearchParams()
+      formData.append('username', username)
+      formData.append('password', password)
+
+      const res = await fetch('http://localhost:8000/api/v1/auth/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData
+      })
+
+      if (!res.ok) throw new Error("Invalid credentials")
+
+      const data = await res.json()
+      setToken(data.access_token)
+      setIsLoading(false)
+    } catch (err) {
+      setAuthError("Login failed. Check backend credentials.")
+      setIsLoading(false)
+    }
+  }
+
+  // Fetch alarms from real TMF642 API
+  useEffect(() => {
+    if (!token) return
+
+    async function fetchAlarms() {
+      try {
+        const response = await fetch('http://localhost:8000/tmf-api/alarmManagement/v4/alarm', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setAlarms(data)
+        } else if (response.status === 401) {
+          setToken(null) // Logout on 401
+        }
+      } catch (error) {
+        console.error("Failed to fetch alarms:", error)
+      }
+    }
+
+    fetchAlarms()
+    const interval = setInterval(fetchAlarms, 10000) // Polling
+    return () => clearInterval(interval)
+  }, [token])
+
+  // Fetch capacity requests
+  useEffect(() => {
+    if (!token || activeView !== 'capacity') return
+
+    async function fetchCapacity() {
+      try {
+        const response = await fetch('http://localhost:8000/api/v1/capacity/', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setCapacityRequests(data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch capacity requests:", error)
+      }
+    }
+
+    fetchCapacity()
+  }, [token, activeView])
+
+  // Fetch specific investment plan
+  useEffect(() => {
+    if (!token || !selectedRequest) return
+
+    async function fetchPlan() {
+      try {
+        const response = await fetch(`http://localhost:8000/api/v1/capacity/${selectedRequest.id}/plan`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setInvestmentPlan(data)
+        } else {
+          setInvestmentPlan(null)
+        }
+      } catch (error) {
+        console.error("Failed to fetch plan:", error)
+      }
+    }
+
+    fetchPlan()
+  }, [token, selectedRequest])
+
+  const handleAcknowledge = async (id: string) => {
+    if (!token) return
+    try {
+      const response = await fetch(`http://localhost:8000/tmf-api/alarmManagement/v4/alarm/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ ackState: 'acknowledged' })
+      })
+      if (response.ok) {
+        const updatedAlarm = await response.json()
+        setAlarms(prev => prev.map(a => a.id === id ? updatedAlarm : a))
+        setSelectedAlarm(updatedAlarm)
+      }
+    } catch (error) {
+      console.error("Failed to acknowledge alarm:", error)
+    }
+  }
+
+  // LOGIN SCREEN
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-[#020617] text-slate-100 flex items-center justify-center p-6">
+        <div className="glass p-8 rounded-2xl border-slate-800 w-full max-w-md space-y-6">
+          <div className="flex flex-col items-center gap-2 mb-4">
+            <Shield className="w-12 h-12 text-cyan-400" />
+            <h1 className="text-2xl font-bold">Pedkai NOC Access</h1>
+            <p className="text-slate-400 text-sm">Authorized Personnel Only</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="text-xs uppercase font-bold text-slate-500">Operator ID</label>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 mt-1 focus:border-cyan-500 focus:outline-none transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase font-bold text-slate-500">Passcode</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 mt-1 focus:border-cyan-500 focus:outline-none transition-colors"
+              />
+            </div>
+
+            {authError && (
+              <div className="text-rose-400 text-sm flex items-center gap-2 bg-rose-900/20 p-3 rounded-lg border border-rose-900/50">
+                <AlertCircle className="w-4 h-4" /> {authError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg transition-all glow active:scale-95 flex justify-center items-center gap-2"
+            >
+              {isLoading ? <Activity className="animate-spin w-5 h-5" /> : <Lock className="w-4 h-4" />}
+              Init Session
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  // DASHBOARD
+  return (
+    <div className="min-h-screen bg-[#020617] text-slate-100 p-6 flex gap-6 overflow-hidden">
+      {/* Sidebar Navigation - RESTORED */}
+      <nav className="w-16 glass rounded-2xl flex flex-col items-center py-8 gap-8 border-slate-800">
+        <Shield className="text-cyan-400 w-8 h-8" />
+        <div className="flex flex-col gap-6 flex-1">
+          <Activity
+            className={cn("w-6 h-6 cursor-pointer transition-colors", activeView === 'alarms' ? 'text-cyan-400' : 'text-slate-500 hover:text-cyan-400')}
+            onClick={() => setActiveView('alarms')}
+          />
+          <TrendingUp
+            className={cn("w-6 h-6 cursor-pointer transition-colors", activeView === 'capacity' ? 'text-cyan-400' : 'text-slate-500 hover:text-cyan-400')}
+            onClick={() => setActiveView('capacity')}
+          />
+          <Network className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors" />
+          <Database className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors" />
+          <Cpu className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors" />
+        </div>
+      </nav>
+
+      <main className="flex-1 flex flex-col gap-6 h-[calc(100vh-3rem)]">
+        {/* Header Stats - RESTORED */}
+        <header className="flex justify-between items-center bg-slate-900/40 p-6 rounded-2xl glass border-slate-800">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              <Zap className="text-yellow-400 fill-yellow-400 w-5 h-5" />
+              Pedkai NOC Command Center
+            </h1>
+            <p className="text-slate-400 text-sm">Real-time Autonomous Network Operations</p>
+          </div>
+          <div className="flex gap-4">
+            <StatCard icon={<AlertCircle className="text-rose-500" />} label="Critical" value={alarms.filter((a: any) => a.perceivedSeverity === 'critical').length.toString()} />
+            <StatCard icon={<Clock className="text-cyan-400" />} label="MTTR" value="14m" />
+            <StatCard icon={<CheckCircle className="text-emerald-500" />} label="Uptime" value="99.98%" />
+          </div>
+        </header>
+
+        <div className="flex-1 flex gap-6 min-h-0">
+          {activeView === 'alarms' ? (
+            <>
+              {/* Alarm Ingress Feed */}
+              <section className="w-[450px] flex flex-col glass rounded-2xl border-slate-800 overflow-hidden">
+                <div className="p-4 border-b border-slate-800 bg-slate-900/60 flex justify-between items-center">
+                  <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">Alarm Ingress (TMF642)</h2>
+                  <span className="px-2 py-0.5 bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded-full border border-rose-500/30">
+                    {alarms.filter(a => a.perceivedSeverity === 'critical').length} LIVE
+                  </span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                  {isLoading ? (
+                    <div className="flex justify-center p-8"><Activity className="animate-spin text-slate-500" /></div>
+                  ) : alarms.length > 0 ? (
+                    alarms.map((alarm) => (
+                      <AlarmCard
+                        key={alarm.id}
+                        alarm={alarm}
+                        isSelected={selectedAlarm?.id === alarm.id}
+                        onClick={() => setSelectedAlarm(alarm)}
+                      />
+                    ))
+                  ) : (
+                    <div className="text-center p-8 text-slate-500 text-sm">No active alarms</div>
+                  )}
+                </div>
+              </section>
+
+              {/* Situation Analysis / SITREP */}
+              <section className="flex-1 glass rounded-2xl border-slate-800 flex flex-col relative overflow-hidden">
+                <AnimatePresence mode="wait">
+                  {selectedAlarm ? (
+                    <motion.div
+                      key={selectedAlarm.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="p-8 flex flex-col h-full"
+                    >
+                      <div className="flex justify-between items-start mb-8">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={cn(
+                              "uppercase text-[10px] font-black px-2 py-0.5 rounded tracking-widest",
+                              selectedAlarm.perceivedSeverity === 'critical' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                            )}>
+                              {selectedAlarm.perceivedSeverity}
+                            </span>
+                            <span className="text-slate-500 text-xs">{selectedAlarm.id}</span>
+                            {selectedAlarm.ackState === 'acknowledged' && (
+                              <CheckCircle className="w-3 h-3 text-emerald-500" />
+                            )}
+                          </div>
+                          <h2 className="text-3xl font-bold text-white uppercase">{selectedAlarm.specificProblem}</h2>
+                          <p className="text-slate-400 mt-1 flex items-center gap-1.5">
+                            <Network className="w-4 h-4" /> {selectedAlarm.alarmedObject?.id || selectedAlarm.entity}
+                          </p>
+                        </div>
+                        {selectedAlarm.ackState !== 'acknowledged' && (
+                          <button
+                            onClick={() => handleAcknowledge(selectedAlarm.id)}
+                            className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold transition-all glow active:scale-95 shadow-lg shadow-cyan-900/20"
+                          >
+                            Acknowledge Alarm
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-8 flex-1 content-start">
+                        <div className="space-y-6">
+                          <h3 className="text-cyan-400 text-xs font-black uppercase tracking-widest">Autonomous SITREP</h3>
+                          <div className="prose prose-invert max-w-none text-slate-300 bg-slate-900/50 p-6 rounded-xl border border-slate-800/50 leading-relaxed shadow-inner">
+                            <p className="font-bold text-white mb-2">### EXECUTIVE SUMMARY</p>
+                            <p>Critical anomaly detected on {selectedAlarm.alarmedObject?.id}. AI Analysis pending.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500 opacity-50">
+                      <Activity className="w-24 h-24 mb-4" />
+                      <p className="text-lg tracking-widest uppercase font-black">Select an incident to analyze</p>
+                    </div>
+                  )}
+                </AnimatePresence>
+              </section>
+            </>
+          ) : (
+            <>
+              {/* Capacity Requests Feed */}
+              <section className="w-[450px] flex flex-col glass rounded-2xl border-slate-800 overflow-hidden">
+                <div className="p-4 border-b border-slate-800 bg-slate-900/60 flex justify-between items-center">
+                  <h2 className="font-semibold text-sm uppercase tracking-wider text-slate-400">Regional Densification</h2>
+                  <TrendingUp className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                  {capacityRequests.length > 0 ? (
+                    capacityRequests.map((req) => (
+                      <div
+                        key={req.id}
+                        onClick={() => setSelectedRequest(req)}
+                        className={cn(
+                          "p-4 rounded-xl cursor-pointer transition-all border",
+                          selectedRequest?.id === req.id ? "bg-cyan-500/10 border-cyan-500/50" : "bg-slate-900/40 border-slate-800"
+                        )}
+                      >
+                        <h4 className="font-bold text-white uppercase text-sm">{req.region_name}</h4>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className="text-[10px] text-slate-500 font-bold">${req.budget_limit.toLocaleString()}</span>
+                          <span className={cn(
+                            "text-[10px] font-black px-2 py-0.5 rounded",
+                            req.status === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'
+                          )}>{req.status}</span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center p-8 text-slate-500 text-sm">No investment requests</div>
+                  )}
+                </div>
+              </section>
+
+              {/* Investment Plan Detail */}
+              <section className="flex-1 glass rounded-2xl border-slate-800 flex flex-col p-8">
+                {selectedRequest ? (
+                  investmentPlan ? (
+                    <div className="space-y-8">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h2 className="text-3xl font-bold text-white">OPTIMIZED INVESTMENT PLAN</h2>
+                          <p className="text-slate-400 mt-1 uppercase tracking-widest text-xs">Request ID: {selectedRequest.id}</p>
+                        </div>
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl text-right">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Estimated ROI</p>
+                          <p className="text-2xl font-black text-emerald-400">+{investmentPlan.expected_kpi_improvement.toFixed(1)}%</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-800">
+                        <h3 className="text-cyan-400 text-xs font-black uppercase mb-4">Strategic Rationale</h3>
+                        <p className="text-slate-300 leading-relaxed">{investmentPlan.rationale}</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <h3 className="text-cyan-400 text-xs font-black uppercase">Optimized Site Placements</h3>
+                        <div className="grid grid-cols-1 gap-3">
+                          {investmentPlan.site_placements.map((site: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between bg-white/5 p-4 rounded-xl border border-white/10 group hover:border-cyan-500/50 transition-colors">
+                              <div className="flex items-center gap-4">
+                                <div className="p-3 bg-slate-900 rounded-lg group-hover:bg-cyan-500/20 transition-colors">
+                                  <MapPin className="w-5 h-5 text-cyan-400" />
+                                </div>
+                                <div>
+                                  <p className="font-bold text-white">{site.name}</p>
+                                  <p className="text-[10px] text-slate-500">{site.lat}, {site.lon}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-black text-white text-lg">${site.cost.toLocaleString()}</p>
+                                <span className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">{site.backhaul || 'Fiber'}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
+                      <Activity className="animate-spin w-12 h-12 mb-4" />
+                      <p>Generating optimized investment plan...</p>
+                    </div>
+                  )
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-slate-500 opacity-50">
+                    <TrendingUp className="w-24 h-24 mb-4" />
+                    <p className="text-lg tracking-widest uppercase font-black">Select a region to optimize</p>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function StatCard({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
+  return (
+    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10">
+      <div className="p-2 bg-slate-900 rounded-lg">{icon}</div>
+      <div>
+        <p className="text-[10px] uppercase font-bold text-slate-500 leading-tight">{label}</p>
+        <p className="text-lg font-black leading-tight">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function AlarmCard({ alarm, isSelected, onClick }: { alarm: any, isSelected: boolean, onClick: () => void }) {
+  // FIXED: TMF642 Field Mapping
+  const isCritical = alarm.perceivedSeverity === 'critical'
+
+  return (
+    <div
+      onClick={onClick}
+      className={cn(
+        "p-4 rounded-xl cursor-pointer transition-all duration-300 relative overflow-hidden group border",
+        isSelected
+          ? "bg-cyan-500/10 border-cyan-500/50 ring-1 ring-cyan-500/30"
+          : "bg-slate-900/40 border-slate-800 hover:border-slate-700 hover:bg-white/5"
+      )}
+    >
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            "w-2.5 h-2.5 rounded-full relative",
+            isCritical ? "bg-rose-500 pulse" : "bg-orange-500"
+          )} />
+          <span className="text-[11px] font-black text-slate-500 uppercase tracking-tighter truncate max-w-[80px]">{alarm.id}</span>
+        </div>
+        <span className="text-[10px] text-slate-500 font-medium">{new Date(alarm.eventTime).toLocaleTimeString()}</span>
+      </div>
+      <h4 className="font-bold text-white group-hover:text-cyan-400 transition-colors uppercase text-sm tracking-tight truncate">{alarm.specificProblem}</h4>
+      <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+        <Network className="w-3 h-3" /> {alarm.alarmedObject?.id || "Unknown Entity"}
+      </p>
+    </div>
+  )
+}

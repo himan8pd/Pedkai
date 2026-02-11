@@ -32,7 +32,7 @@ class KPIMetricORM(Base):
     timestamp = Column(
         DateTime(timezone=True),
         primary_key=True,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
         server_default=text("now()"),
         nullable=False,
     )

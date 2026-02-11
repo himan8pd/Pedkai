@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pedkai-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pedkai
+      component: db
+  template:
+    metadata:
+      labels:
+        app: pedkai
+        component: db
+    spec:
+      containers:
+      - name: postgres
+        image: ankane/pgvector:v0.4.2
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pedkai-secrets
+              key: postgres-password
+        ports:
+        - containerPort: 5432
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: pedkai-db-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pedkai-db-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pedkai-db
+spec:
+  selector:
+    app: pedkai
+    component: db
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432

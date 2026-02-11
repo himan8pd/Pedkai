@@ -55,7 +55,7 @@ class TMF642AlarmedObject(BaseModel):
 class TMF642Comment(BaseModel):
     """Internal notes on the alarm."""
     id: str
-    time: datetime = Field(default_factory=datetime.utcnow)
+    time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     system_id: str
     text: str
     comment_type: Optional[str] = Field(None, alias="@type")

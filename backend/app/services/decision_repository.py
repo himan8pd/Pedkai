@@ -18,6 +18,7 @@ from backend.app.models.decision_trace import (
     DecisionContext,
     DecisionOutcomeRecord,
     SimilarDecisionQuery,
+    ReasoningChain,
 )
 from backend.app.models.decision_trace_orm import DecisionTraceORM
 
@@ -45,6 +46,8 @@ class DecisionTraceRepository:
             confidence_score=decision.confidence_score,
             domain=decision.domain,
             tags=decision.tags,
+            parent_id=decision.parent_id,
+            derivation_type=decision.derivation_type,
         )
         
         self.session.add(orm_obj)
@@ -83,6 +86,10 @@ class DecisionTraceRepository:
             orm_obj.outcome = update.outcome.model_dump()
         if update.tags is not None:
             orm_obj.tags = update.tags
+        if update.parent_id is not None:
+            orm_obj.parent_id = update.parent_id
+        if update.derivation_type is not None:
+            orm_obj.derivation_type = update.derivation_type
         
         await self.session.flush()
         await self.session.refresh(orm_obj)
@@ -180,13 +187,14 @@ class DecisionTraceRepository:
         from backend.app.models.decision_trace_orm import DecisionFeedbackORM
         from sqlalchemy.dialects.postgresql import insert
         from sqlalchemy import func
+        from datetime import timezone
         
         # 1. Upsert feedback
         stmt = insert(DecisionFeedbackORM).values(
             decision_id=decision_id,
             operator_id=operator_id,
             score=score,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         ).on_conflict_do_update(
             index_elements=["decision_id", "operator_id"],
             set_=dict(score=score)
@@ -230,6 +238,110 @@ class DecisionTraceRepository:
         await self.session.flush()
         
         return True
+
+    async def get_reasoning_chain(self, decision_id: UUID) -> ReasoningChain:
+        """
+        Retrieves the full reasoning chain (lineage) of a decision using recursive CTE.
+        Finding M-4 FIX: Removed N+1 re-queries. Returns chain from root to the given decision.
+        """
+        from sqlalchemy import text
+        
+        # Recursive SQL CTE to traverse UP the parent hierarchy
+        # Note: We query all columns to avoid N+1 fetches later
+        sql = text("""
+            WITH RECURSIVE reasoning_chain AS (
+                -- Anchor member: start with the given decision
+                SELECT * FROM decision_traces
+                WHERE id = :decision_id
+                
+                UNION ALL
+                
+                -- Recursive member: join with parents
+                SELECT dt.* FROM decision_traces dt
+                INNER JOIN reasoning_chain rc ON dt.id = rc.parent_id
+            )
+            SELECT * FROM reasoning_chain;
+        """)
+        
+        result = await self.session.execute(sql, {"decision_id": decision_id})
+        rows = result.all()
+        
+        # Convert rows directly to models (Fixes N+1 issue)
+        decisions = [self._row_to_pydantic(row) for row in reversed(rows)]
+        
+        return ReasoningChain(
+            decisions=decisions,
+            root_id=decisions[0].id if decisions else decision_id,
+            length=len(decisions)
+        )
+
+    async def get_descendants(self, decision_id: UUID) -> list[DecisionTrace]:
+        """
+        Retrieves all descendant decisions (follow-ups) triggered by this decision.
+        Finding M-4 FIX: Removed N+1 re-queries.
+        """
+        from sqlalchemy import text
+        
+        sql = text("""
+            WITH RECURSIVE descendants AS (
+                SELECT * FROM decision_traces
+                WHERE parent_id = :decision_id
+                
+                UNION ALL
+                
+                SELECT dt.* FROM decision_traces dt
+                INNER JOIN descendants d ON dt.parent_id = d.id
+            )
+            SELECT * FROM descendants;
+        """)
+        
+        result = await self.session.execute(sql, {"decision_id": decision_id})
+        rows = result.all()
+        
+        return [self._row_to_pydantic(row) for row in rows]
+
+    def _row_to_pydantic(self, row) -> DecisionTrace:
+        """Helper to convert a raw SQL row to a Pydantic model."""
+        from backend.app.models.decision_trace import (
+            Constraint,
+            Option,
+            DecisionContext,
+            DecisionOutcomeRecord,
+        )
+        import json
+        
+        # Handle potential string-encoded JSON from raw SQL rows in SQLite/Postgres
+        def parse_json(val):
+            if isinstance(val, str):
+                return json.loads(val)
+            return val
+
+        return DecisionTrace(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            created_at=row.created_at,
+            decision_made_at=row.decision_made_at,
+            trigger_type=row.trigger_type,
+            trigger_id=row.trigger_id,
+            trigger_description=row.trigger_description,
+            context=DecisionContext(**parse_json(row.context)),
+            constraints=[Constraint(**c) for c in parse_json(row.constraints)],
+            options_considered=[Option(**o) for o in parse_json(row.options_considered)],
+            decision_summary=row.decision_summary,
+            tradeoff_rationale=row.tradeoff_rationale,
+            action_taken=row.action_taken,
+            decision_maker=row.decision_maker,
+            confidence_score=row.confidence_score,
+            outcome=(
+                DecisionOutcomeRecord(**parse_json(row.outcome))
+                if row.outcome else None
+            ),
+            embedding=list(row.embedding) if row.embedding is not None else None,
+            tags=row.tags,
+            domain=row.domain,
+            parent_id=row.parent_id,
+            derivation_type=row.derivation_type,
+        )
     
     def _orm_to_pydantic(self, orm_obj: DecisionTraceORM) -> DecisionTrace:
         """Convert ORM object to Pydantic model."""
@@ -263,4 +375,6 @@ class DecisionTraceRepository:
             embedding=list(orm_obj.embedding) if orm_obj.embedding is not None else None,
             tags=orm_obj.tags,
             domain=orm_obj.domain,
+            parent_id=orm_obj.parent_id,
+            derivation_type=orm_obj.derivation_type,
         )

@@ -15,12 +15,12 @@ from backend.app.core.database import get_db
 from backend.app.models.decision_trace import (
     DecisionTrace,
     DecisionTraceCreate,
-    DecisionTraceUpdate,
-    DecisionOutcomeRecord,
     SimilarDecisionQuery,
+    ReasoningChain,
 )
 from backend.app.services.decision_repository import DecisionTraceRepository
 from backend.app.services.embedding_service import get_embedding_service
+from backend.app.services.rl_evaluator import get_rl_evaluator
 
 router = APIRouter()
 settings = get_settings()
@@ -292,7 +292,23 @@ async def record_outcome(
     This closes the feedback loop - we learn what worked and what didn't.
     """
     update = DecisionTraceUpdate(outcome=outcome)
-    return await update_decision_trace(decision_id, update, db)
+    trace = await update_decision_trace(decision_id, update, db)
+    
+    # Phase 15.4: Trigger RL Evaluator
+    if USE_DATABASE and db and trace:
+        try:
+            evaluator = get_rl_evaluator(db)
+            reward = await evaluator.evaluate_decision_outcome(trace)
+            if reward != 0:
+                await evaluator.apply_feedback(trace.id, reward)
+                # Refresh trace to show updated feedback_score if needed, 
+                # though repo handling might require another fetch
+                trace = await get_decision_trace(decision_id, db)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"RL Evaluator failed for decision {decision_id}: {e}")
+            
+    return trace
 
 
 # ====================================================================

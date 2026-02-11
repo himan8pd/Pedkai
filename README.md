@@ -24,22 +24,27 @@ Pedkai/
 │   ├── app/
 │   │   ├── api/       # REST endpoints
 │   │   ├── core/      # Config, auth, database
-│   │   ├── models/    # Pydantic schemas
-│   │   └── services/  # Business logic
+│   │   ├── models/    # Pydantic schemas (incl. BSS ORM)
+│   │   └── services/  # Business logic (incl. Policy Engine)
 │   └── tests/
 ├── decision_memory/   # Context Graph (Decision Traces)
 ├── data_fabric/       # Data ingestion layer
 ├── anops/             # ANOps use case logic
-└── frontend/          # Next.js dashboard (future)
+└── frontend/          # Next.js dashboard
 ```
 
 ## Tech Stack
 
 - **Backend**: Python 3.11+, FastAPI
-- **Database**: PostgreSQL with JSONB + pgvector
+- **Database**: PostgreSQL (TimescaleDB) with JSONB + pgvector
 - **Streaming**: Apache Kafka
-- **LLM**: Gemini API
-- **Frontend**: Next.js (planned)
+- **Intelligence**: Gemini AI + Declarative Policy Engine (YAML)
+- **Financial Context**: BSS Data Layer (Revenue & Billing)
+- **Frontend**: Next.js
+
+## Operational Constraints
+
+- **Artifact Synchronization**: All key project artifacts (`task.md`, `walkthrough.md`, `implementation_plan_consolidated.md`, etc.) must be updated directly in the project root. Internal "brain" copies must be synchronized to the root after every major update.
 
 ## License
 

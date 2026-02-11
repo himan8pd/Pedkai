@@ -1,0 +1,51 @@
+# Pedkai Strategic Audit Report: Iteration 2 Rework (v6)
+
+**Auditor**: Telecom Business Strategist  
+**Status**: 🟡 **CONDITIONALLY APPROVED** (Score: 7.5/10)  
+**Date**: 11 February 2026
+
+---
+
+## ✅ Progress Assessment
+The vendor has made significant strides in moving the system from "Demo Theatre" to "Real Logic." The implementation of **Recursive CTEs** for graph traversal and **Live SQL Queries** for reinforcement learning feedback is a professional-grade improvement.
+
+The system is now functionally stable and the critical regressions (Main.py startup) have been resolved.
+
+---
+
+## 🚩 Residual Risks & Strategic Findings
+
+### [H-6] Operational Parameter Hardcoding (Governance Risk)
+**Finding**: Critical business thresholds are still "buried" in Python service code rather than the Policy Engine.
+- [rl_evaluator.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/scripts/verify_rl_evaluator.py): Hardcoded 10% improvement threshold for rewards.
+- [cx_intelligence.py](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/services/cx_intelligence.py): Hardcoded 0.7 churn risk threshold for customer impact.
+**Impact**: Business users cannot adjust the "sensitivity" of the AI without code changes.
+**Feedback**: Move these into [global_policies.yaml](file:///Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My%20Drive/AI%20Learning/AntiGravity/Pedkai/backend/app/policies/global_policies.yaml) under a `parameters` block.
+
+### [H-7] Heuristic Metric Mapping (Fragility Risk)
+**Finding**: The RL Evaluator uses string searches (`if "latency" in description`) to decide which KPI to check.
+**Impact**: In production, alarm titles are noisy. A title like "Optimization Event: Link Degradation" might default to `throughput` when it should have checked `latency` or `retransmissions`.
+**Feedback**: Integrate with the RCA Engine results which already categorize the event, or use a lookup table based on Alarm IDs.
+
+### [M-5] Topology Ingestion Gap (Architectural Debt)
+**Finding**: While the Recursive CTE works, there is no evidence of a live ingestion pipeline (CIM/Inventory sync) to populate the `topology_relationships` table.
+**Impact**: The graph will become stale as the network evolves.
+**Feedback**: Implement a basic TMF633 (Service Inventory) listener or a periodic CIM ingestor.
+
+### [M-6] Cost Control vs. Visibility Tradeoff
+**Finding**: The LLM sampling rate (Finding #36) prevents redundant calls but might miss high-value incidents.
+**Impact**: A $10,000 revenue-at-risk event might be "sampled out" and never generate a SITREP.
+**Feedback**: Policy-weighted sampling—ensure high-priority or high-revenue events are *never* sampled out.
+
+---
+
+## 📜 Final Scorecard
+
+| Category | Score | Notes |
+|----------|-------|-------|
+| **Functional Integrity** | 8/10 | CTE and SQL logic are robust. |
+| **Governance & Policy** | 5/10 | Thresholds are still code-locked. |
+| **Technical Debt** | 8/10 | `utcnow` removal complete; imports fixed. |
+| **System Resilience** | 9/10 | BSS integration is real and joins correctly. |
+
+**Final Recommendation**: Proceed to Execution of Iteration 3 to externalize parameters, then sign off for Phase 16.
