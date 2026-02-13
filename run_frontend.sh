@@ -1,0 +1,24 @@
+#!/bin/bash
+
+echo "=================================================="
+echo "🚀 Starting Pedkai NOC Dashboard (Frontend)"
+echo "=================================================="
+echo "Directory: ./frontend"
+
+# Frontend / Backend URLs (env-overridable, local defaults)
+FRONTEND_URL="${FRONTEND_URL:-http://localhost:3000}"
+BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
+
+echo "URL:       ${FRONTEND_URL}"
+echo "Backend:   ${BACKEND_URL} (Must be running!)"
+echo "=================================================="
+
+# Check if node_modules exists, if not install
+if [ ! -d "frontend/node_modules" ]; then
+    echo "📦 Dependencies not found. Installing..."
+    cd frontend && npm install && cd ..
+fi
+
+# Navigate and start dev server
+cd frontend
+npm run dev

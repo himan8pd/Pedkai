@@ -20,13 +20,15 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     log_level: str = "INFO"
-    secret_key: str = "demo-insecure-secret-key-change-in-production"
+    # Secret key MUST be provided via environment (e.g. SECRET_KEY in .env)
+    secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
     # API
     api_prefix: str = "/api/v1"
-    allowed_origins: list[str] = ["http://localhost:3000"] # Default for Next.js
+    # Default for local Next.js frontend; override via ALLOWED_ORIGINS env for cloud
+    allowed_origins: list[str] = ["http://localhost:3000"]
     
     # Database
     database_url: str = "sqlite+aiosqlite:///./pedkai.db"
@@ -38,10 +40,10 @@ class Settings(BaseSettings):
     # Gemini LLM
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.0-flash"
-    llm_sampling_rate: float = 1.0 # Cost control (Disabled for reliable demos)
+    llm_sampling_rate: float = 1.0 # Cost control (Disabled for reliable demos, reset to 0.8 later)
     
     # Kafka
-    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_bootstrap_servers: str = "localhost:9092" # hard coded for demo, remove " = "localhost:9092"" for live env.
     kafka_consumer_group: str = "pedkai-consumers"
     
     # Multi-tenancy

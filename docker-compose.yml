@@ -9,8 +9,8 @@ services:
     image: pgvector/pgvector:pg16
     container_name: pedkai-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: pedkai
     ports:
       - "5432:5432"
@@ -27,8 +27,8 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: pedkai-timescaledb
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: pedkai_metrics
     ports:
       - "5433:5432"

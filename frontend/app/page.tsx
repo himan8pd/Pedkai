@@ -19,6 +19,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+
 export default function NOCDashboard() {
   const [alarms, setAlarms] = useState<any[]>([])
   const [selectedAlarm, setSelectedAlarm] = useState<any>(null)
@@ -45,7 +47,7 @@ export default function NOCDashboard() {
       formData.append('username', username)
       formData.append('password', password)
 
-      const res = await fetch('http://localhost:8000/api/v1/auth/token', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -70,7 +72,7 @@ export default function NOCDashboard() {
 
     async function fetchAlarms() {
       try {
-        const response = await fetch('http://localhost:8000/tmf-api/alarmManagement/v4/alarm', {
+        const response = await fetch(`${API_BASE_URL}/tmf-api/alarmManagement/v4/alarm`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -97,7 +99,7 @@ export default function NOCDashboard() {
 
     async function fetchCapacity() {
       try {
-        const response = await fetch('http://localhost:8000/api/v1/capacity/', {
+        const response = await fetch(`${API_BASE_URL}/api/v1/capacity/`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         if (response.ok) {
@@ -118,7 +120,7 @@ export default function NOCDashboard() {
 
     async function fetchPlan() {
       try {
-        const response = await fetch(`http://localhost:8000/api/v1/capacity/${selectedRequest.id}/plan`, {
+        const response = await fetch(`${API_BASE_URL}/api/v1/capacity/${selectedRequest.id}/plan`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         if (response.ok) {
@@ -138,7 +140,7 @@ export default function NOCDashboard() {
   const handleAcknowledge = async (id: string) => {
     if (!token) return
     try {
-      const response = await fetch(`http://localhost:8000/tmf-api/alarmManagement/v4/alarm/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/tmf-api/alarmManagement/v4/alarm/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
