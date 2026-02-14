@@ -97,7 +97,17 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async def override_oauth2_scheme():
         return "dummy-token"
 
+    async def override_get_metrics_db():
+        async with TestingSessionLocal() as session:
+            try:
+                yield session
+                await session.commit()
+            finally:
+                await session.close()
+
+    from backend.app.core.database import get_db, get_metrics_db
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_metrics_db] = override_get_metrics_db
     app.dependency_overrides[get_current_user] = override_get_user
     app.dependency_overrides[oauth2_scheme] = override_oauth2_scheme
     

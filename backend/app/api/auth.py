@@ -19,12 +19,10 @@ settings = get_settings()
 MOCK_USERS_DB = {
     "admin": {
         "username": "admin",
-        "hashed_password": "fakehashed_admin", # In reality, use passlib.hash.bcrypt.hash
         "role": Role.ADMIN,
     },
     "operator": {
         "username": "operator",
-        "hashed_password": "fakehashed_operator",
         "role": Role.OPERATOR,
     }
 }
@@ -44,8 +42,10 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Simple password check for PoC (In production, use hashed_password verification)
-    if form_data.password != user["username"]: # password is the username for mock
+    # Check password against settings
+    expected_password = settings.admin_password if user["username"] == "admin" else settings.operator_password
+    
+    if form_data.password != expected_password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

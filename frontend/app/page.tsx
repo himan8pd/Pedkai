@@ -35,6 +35,13 @@ export default function NOCDashboard() {
   const [username, setUsername] = useState("operator")
   const [password, setPassword] = useState("operator")
   const [authError, setAuthError] = useState("")
+  const [notif, setNotif] = useState<{ msg: string, type: 'info' | 'error' | 'success' } | null>(null)
+  const [showPasswordWarning, setShowPasswordWarning] = useState(false)
+
+  const showNotif = (msg: string, type: 'info' | 'error' | 'success' = 'info') => {
+    setNotif({ msg, type })
+    setTimeout(() => setNotif(null), 5000)
+  }
 
   // Login Function
   const handleLogin = async (e: React.FormEvent) => {
@@ -59,6 +66,7 @@ export default function NOCDashboard() {
 
       const data = await res.json()
       setToken(data.access_token)
+      if (username === "operator") setShowPasswordWarning(true)
       setIsLoading(false)
     } catch (err) {
       setAuthError("Login failed. Check backend credentials.")
@@ -140,6 +148,7 @@ export default function NOCDashboard() {
   const handleAcknowledge = async (id: string) => {
     if (!token) return
     try {
+      showNotif("Acknowledging alarm...", "info")
       const response = await fetch(`${API_BASE_URL}/tmf-api/alarmManagement/v4/alarm/${id}`, {
         method: 'PATCH',
         headers: {
@@ -152,9 +161,22 @@ export default function NOCDashboard() {
         const updatedAlarm = await response.json()
         setAlarms(prev => prev.map(a => a.id === id ? updatedAlarm : a))
         setSelectedAlarm(updatedAlarm)
+        showNotif("Alarm acknowledged successfully", "success")
+      } else {
+        const errData = await response.json().catch(() => ({}))
+        showNotif(`Failed to acknowledge: ${errData.detail || response.statusText}`, "error")
       }
     } catch (error) {
       console.error("Failed to acknowledge alarm:", error)
+      showNotif("Network error acknowledging alarm", "error")
+    }
+  }
+
+  const handleSidebarClick = (view: string) => {
+    if (view === 'alarms' || view === 'capacity') {
+      setActiveView(view as any)
+    } else {
+      showNotif(`${view.charAt(0).toUpperCase() + view.slice(1)} view is coming in a future release`, "info")
     }
   }
 
@@ -174,18 +196,22 @@ export default function NOCDashboard() {
               <label className="text-xs uppercase font-bold text-slate-500">Operator ID</label>
               <input
                 type="text"
+                autoComplete="off"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 mt-1 focus:border-cyan-500 focus:outline-none transition-colors"
+                name="operator-id-field"
               />
             </div>
             <div>
               <label className="text-xs uppercase font-bold text-slate-500">Passcode</label>
               <input
                 type="password"
+                autoComplete="new-password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 mt-1 focus:border-cyan-500 focus:outline-none transition-colors"
+                name="passcode-field"
               />
             </div>
 
@@ -211,26 +237,83 @@ export default function NOCDashboard() {
 
   // DASHBOARD
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-100 p-6 flex gap-6 overflow-hidden">
+    <div className="min-h-screen bg-[#020617] text-slate-100 p-6 flex gap-6 overflow-hidden relative">
+      {/* Notifications Toast */}
+      <AnimatePresence>
+        {notif && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className={cn(
+              "fixed top-6 right-6 z-50 p-4 rounded-xl border shadow-2xl flex items-center gap-3 backdrop-blur-xl",
+              notif.type === 'error' ? 'bg-rose-900/60 border-rose-500/50 text-rose-100' :
+                notif.type === 'success' ? 'bg-emerald-900/60 border-emerald-500/50 text-emerald-100' :
+                  'bg-cyan-900/60 border-cyan-500/50 text-cyan-100'
+            )}
+          >
+            {notif.type === 'error' ? <AlertCircle className="w-5 h-5 text-rose-400" /> :
+              notif.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-400" /> :
+                <Activity className="w-5 h-5 text-cyan-400" />}
+            <span className="font-medium text-sm">{notif.msg}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Sidebar Navigation - RESTORED */}
       <nav className="w-16 glass rounded-2xl flex flex-col items-center py-8 gap-8 border-slate-800">
         <Shield className="text-cyan-400 w-8 h-8" />
         <div className="flex flex-col gap-6 flex-1">
           <Activity
             className={cn("w-6 h-6 cursor-pointer transition-colors", activeView === 'alarms' ? 'text-cyan-400' : 'text-slate-500 hover:text-cyan-400')}
-            onClick={() => setActiveView('alarms')}
+            onClick={() => handleSidebarClick('alarms')}
           />
           <TrendingUp
             className={cn("w-6 h-6 cursor-pointer transition-colors", activeView === 'capacity' ? 'text-cyan-400' : 'text-slate-500 hover:text-cyan-400')}
-            onClick={() => setActiveView('capacity')}
+            onClick={() => handleSidebarClick('capacity')}
           />
-          <Network className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors" />
-          <Database className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors" />
-          <Cpu className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors" />
+          <Network
+            className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors"
+            onClick={() => handleSidebarClick('topology')}
+          />
+          <Database
+            className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors"
+            onClick={() => handleSidebarClick('telelogs')}
+          />
+          <Cpu
+            className="text-slate-500 w-6 h-6 hover:text-cyan-400 cursor-pointer transition-colors"
+            onClick={() => handleSidebarClick('processing')}
+          />
         </div>
       </nav>
 
       <main className="flex-1 flex flex-col gap-6 h-[calc(100vh-3rem)]">
+        {/* Password Security Warning - NON-BLOCKING */}
+        <AnimatePresence>
+          {showPasswordWarning && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex items-center justify-between group"
+            >
+              <div className="flex items-center gap-3">
+                <Shield className="w-5 h-5 text-rose-500" />
+                <div>
+                  <p className="text-sm font-bold text-rose-400 uppercase tracking-wider">Security Advisory: Default Password Active</p>
+                  <p className="text-xs text-rose-400/70">Account 'operator' is using a standard passcode. Change recommended for production environments.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPasswordWarning(false)}
+                className="text-xs font-black uppercase text-rose-400 hover:text-white px-3 py-1 rounded-lg hover:bg-rose-500/20 transition-all"
+              >
+                Acknowledge
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Header Stats - RESTORED */}
         <header className="flex justify-between items-center bg-slate-900/40 p-6 rounded-2xl glass border-slate-800">
           <div>

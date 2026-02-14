@@ -4,7 +4,9 @@ API Router for AI-Driven Capacity Planning.
 from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+
 
 from backend.app.core.database import get_db
 from backend.app.core.security import (
@@ -70,7 +72,6 @@ async def get_investment_plan(
     """
     # Logic to fetch plan from DB
     from backend.app.models.investment_planning import InvestmentPlanORM
-    from sqlalchemy import select
     
     query = select(InvestmentPlanORM).where(InvestmentPlanORM.request_id == request_id)
     result = await db.execute(query)

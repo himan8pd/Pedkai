@@ -22,8 +22,11 @@ def setup_tracing(app=None):
         logger.warning("OpenTelemetry SDK not installed. Tracing is disabled.")
         return
 
+    from opentelemetry.sdk.resources import Resource
+    
     # Initialize spans to console for now (standard production uses Jaeger/OTLP)
-    provider = TracerProvider()
+    resource = Resource.create({"service.name": "pedkai-backend"})
+    provider = TracerProvider(resource=resource)
     processor = BatchSpanProcessor(ConsoleSpanExporter())
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)

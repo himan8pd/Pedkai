@@ -29,8 +29,19 @@ body {
 }
 
 @keyframes pulse-ring {
-  0% { transform: scale(.8); opacity: 0.5; }
-  100% { transform: scale(1.2); opacity: 0; }
+  0% {
+    transform: scale(.8);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+.pulse {
+  position: relative;
 }
 
 .pulse::before {
@@ -41,4 +52,38 @@ body {
   border-radius: 50%;
   animation: pulse-ring 2s infinite;
   background: inherit;
+  pointer-events: none;
+}
+
+/* Ensure the main app container sits above any rogue dev overlays */
+#__next>div {
+  position: relative;
+  z-index: 1;
+}
+
+/* Force pointer-events through on all interactive elements */
+nav svg,
+[class*="cursor-pointer"] {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 2;
+}
+
+button {
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 2;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.3);
+  border-radius: 20px;
 }

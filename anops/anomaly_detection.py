@@ -6,7 +6,7 @@ Optimized with a 'Hot Path' cache for baselines to ensure scalability.
 """
 
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,14 +20,15 @@ class AnomalyDetector:
     Includes a class-level cache to avoid redundant historical DB queries.
     """
     
-    # Simple Hot-Path Cache: {(entity_id, metric_name): (mean, std, expiry_time)}
-    _baseline_cache: Dict[Tuple[str, str], Tuple[float, float, datetime]] = {}
+    # Simple Hot-Path Cache: {(tenant_id, entity_id, metric_name): (mean, std, expiry_time)}
+    _baseline_cache: Dict[Tuple[str, str, str], Tuple[float, float, datetime]] = {}
     
     def __init__(self, session: AsyncSession):
         self.session = session
 
     async def get_baseline(
         self, 
+        tenant_id: str,
         entity_id: str, 
         metric_name: str, 
         ttl_minutes: int = 60
@@ -35,8 +36,8 @@ class AnomalyDetector:
         """
         Retrieves baseline (mean, std) from cache or DB.
         """
-        cache_key = (entity_id, metric_name)
-        now = datetime.utcnow()
+        cache_key = (tenant_id, entity_id, metric_name)
+        now = datetime.now(timezone.utc)
         
         # Check cache
         if cache_key in self._baseline_cache:
@@ -45,11 +46,12 @@ class AnomalyDetector:
                 return m, s
 
         # Cache miss or expired: Fetch from DB
-        print(f"🔍 Cache Miss: Recalculating baseline for {entity_id}:{metric_name}...")
+        print(f"🔍 Cache Miss: Recalculating baseline for {tenant_id}:{entity_id}:{metric_name}...")
         since = now - timedelta(hours=24)
         
         query = (
             select(KPIMetricORM.value)
+            .where(KPIMetricORM.tenant_id == tenant_id)
             .where(KPIMetricORM.entity_id == entity_id)
             .where(KPIMetricORM.metric_name == metric_name)
             .where(KPIMetricORM.timestamp >= since)
@@ -105,7 +107,11 @@ class AnomalyDetector:
         """
         Processes a new metric value, stores it, and checks for anomalies.
         """
-        # 1. Store the metric (Batch ingestion point in real system)
+        # 1. Get baseline (Uses Hot-Path Cache)
+        # Fetch from past data BEFORE adding the current point
+        mean, std = await self.get_baseline(tenant_id, entity_id, metric_name)
+        
+        # 2. Store the metric (Batch ingestion point in real system)
         new_metric = KPIMetricORM(
             tenant_id=tenant_id,
             entity_id=entity_id,
@@ -114,9 +120,6 @@ class AnomalyDetector:
             tags=tags or {}
         )
         self.session.add(new_metric)
-        
-        # 2. Get baseline (Uses Hot-Path Cache)
-        mean, std = await self.get_baseline(entity_id, metric_name)
         
         # 3. Check for anomaly
         if mean == 0 and std == 0:

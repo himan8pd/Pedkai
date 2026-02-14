@@ -4,7 +4,7 @@ SQLAlchemy ORM model for KPI Metrics.
 Stores time-series KPI data for anomaly detection and network performance monitoring.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import Column, DateTime, Float, Index, String, text

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
+    # Auth Passwords
+    admin_password: str = "admin" # Default for safety, override in .env
+    operator_password: str = "operator"
+    
     # API
     api_prefix: str = "/api/v1"
     # Default for local Next.js frontend; override via ALLOWED_ORIGINS env for cloud
