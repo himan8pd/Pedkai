@@ -1,3 +1,4 @@
+# Pedkai startup script updated on 16-Feb-26 
 #!/usr/bin/env bash
 set -euo pipefail   # Fail fast on errors, treat unset variables as errors
 
