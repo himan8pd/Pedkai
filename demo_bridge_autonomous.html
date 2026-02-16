@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedkai — Autonomous Business Shield</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            --bg: #0a0e1a;
+            --text: #c8d6e5;
+            --text-muted: #6b7fa0;
+            --text-dim: #3a4f70;
+            --border: #1a2540;
+            --surface: #0c1020;
+            --surface-alt: #111828;
+            --cyan: #00d4ff;
+            --red: #ff3b5c;
+            --amber: #ffb84d;
+            --green: #00e676;
+            --purple: #b388ff;
+            --glass: rgba(12, 18, 40, 0.85);
+            --shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+
+            --layer-oss: #1a2a4a;
+            --layer-ems: #1a2545;
+            --layer-svc: #1a2040;
+            --layer-sdn: #1a3035;
+            --layer-nfvi: #1a2535;
+            --layer-infra: #1a1f35;
+            --console-bg: #05070a;
+            --console-row-border: rgba(255, 255, 255, 0.05);
+            --console-highlight-text: #ffffff;
+        }
+
+        [data-theme="light"] {
+            --bg: #f8fafc;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --text-dim: #94a3b8;
+            --border: #e2e8f0;
+            --surface: #ffffff;
+            --surface-alt: #f1f5f9;
+            --cyan: #0891b2;
+            --red: #e11d48;
+            --amber: #d97706;
+            --green: #059669;
+            --purple: #7c3aed;
+            --glass: rgba(255, 255, 255, 0.9);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+
+            --layer-oss: #e1eaf5;
+            --layer-ems: #e1ebf0;
+            --layer-svc: #f0f4f8;
+            --layer-sdn: #e6f0f0;
+            --layer-nfvi: #eef2f6;
+            --layer-infra: #f5f8fa;
+            --console-bg: #f1f5f9;
+            --console-row-border: rgba(0, 0, 0, 0.05);
+            --console-highlight-text: var(--text);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* TOP NAV */
+        .topnav {
+            height: 60px;
+            background: var(--bg);
+            backdrop-filter: blur(14px);
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 30px;
+            gap: 20px;
+            z-index: 1000;
+        }
+
+        .topnav .logo {
+            font-weight: 800;
+            color: var(--cyan);
+            font-size: 1.2rem;
+            letter-spacing: -0.5px;
+            margin-right: 20px;
+        }
+
+        .scenario-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .scenario-btn:hover {
+            border-color: var(--cyan);
+            color: var(--text);
+        }
+
+        .scenario-btn.active {
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(255, 59, 92, 0.05);
+            box-shadow: 0 0 15px rgba(255, 59, 92, 0.1);
+        }
+
+        .scenario-btn .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .reset-btn {
+            margin-left: auto;
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-size: .8rem;
+            cursor: pointer;
+        }
+
+        /* DASHBOARD GRID */
+        .dashboard {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            overflow: hidden;
+        }
+
+        /* NETWORK PANE */
+        .network-pane {
+            border-right: 2px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .pane-header {
+            padding: 12px 20px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--cyan);
+            background: rgba(0, 212, 255, 0.03);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .arch-layers {
+            flex: 1;
+            overflow-y: auto;
+            padding-bottom: 40px;
+        }
+
+        .layer-band {
+            position: relative;
+            border-bottom: 1px solid var(--border);
+            padding: 8px 16px 8px 140px;
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .layer-label {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            width: 120px;
+        }
+
+        .layer-label span {
+            display: block;
+            font-size: 0.6rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-top: 2px;
+            text-transform: none;
+        }
+
+        .node {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background: var(--surface-alt);
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .node.affected {
+            border-color: var(--red) !important;
+            color: var(--red) !important;
+            background: rgba(255, 59, 92, 0.08) !important;
+            box-shadow: 0 0 10px rgba(255, 59, 92, 0.2);
+            animation: pulse-node 1.5s infinite;
+        }
+
+        .node.root-cause {
+            border-color: var(--red) !important;
+            color: #fff !important;
+            background: linear-gradient(135deg, var(--red), #cc1133) !important;
+            box-shadow: 0 0 20px rgba(255, 59, 92, 0.4);
+            animation: pulse-root 1s infinite;
+        }
+
+        /* IMPACT PANE */
+        .impact-pane {
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            overflow-y: auto;
+        }
+
+        .impact-content {
+            padding: 24px;
+        }
+
+        .metric-card {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card h3 {
+            font-size: 0.9rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--text);
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .metric-item {
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.4rem;
+            font-weight: 800;
+            display: block;
+        }
+
+        .metric-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+
+        /* REASONING STEP */
+        .reason-step {
+            padding: 14px 16px;
+            border-left: 3px solid var(--border);
+            background: rgba(255, 255, 255, 0.02);
+            margin-bottom: 12px;
+            border-radius: 0 8px 8px 0;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.4s;
+        }
+
+        .reason-step.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .reason-step.active {
+            border-color: var(--cyan);
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .reason-step.root {
+            border-color: var(--red);
+            background: rgba(255, 59, 92, 0.05);
+        }
+
+        .step-num {
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+
+        .step-title {
+            font-weight: 700;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+
+        .step-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* THEME TOGGLE */
+        .theme-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 2000;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            color: var(--text);
+            font-size: 0.7rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        @keyframes pulse-node {
+
+            0%,
+            100% {
+                box-shadow: 0 0 10px rgba(255, 59, 92, 0.1);
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(255, 59, 92, 0.3);
+            }
+        }
+
+        @keyframes pulse-root {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(255, 59, 92, 0.3);
+            }
+
+            50% {
+                box-shadow: 0 0 35px rgba(255, 59, 92, 0.5);
+            }
+        }
+
+        .hl {
+            color: var(--cyan);
+            font-weight: 600;
+        }
+
+        .alert {
+            color: var(--red);
+            font-weight: 700;
+        }
+
+        .green {
+            color: var(--green);
+        }
+
+        #impactList {
+            list-style: none;
+            margin-top: 10px;
+        }
+
+        .impact-li {
+            font-size: 0.8rem;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--surface);
+            animation: slideInImpact 0.5s ease forwards;
+            opacity: 0;
+        }
+
+        @keyframes slideInImpact {
+            from {
+                opacity: 0;
+                transform: translateX(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* ALARM WALL (NOC CONSOLE) */
+        .alarm-wall {
+            background: var(--console-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.65rem;
+            padding: 8px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .alarm-row {
+            display: grid;
+            grid-template-columns: 40px 60px 100px 1fr;
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--console-row-border);
+            color: var(--text-muted);
+            opacity: 0.6;
+            transition: all 0.3s;
+        }
+
+        .alarm-row.highlighted {
+            opacity: 1;
+            color: var(--console-highlight-text);
+            background: rgba(0, 212, 255, 0.15);
+            font-weight: 600;
+        }
+
+        .alarm-row.dimmed {
+            opacity: 0.15;
+            filter: grayscale(1);
+        }
+
+        .sev {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .sev.critical {
+            background: var(--red);
+            box-shadow: 0 0 5px var(--red);
+        }
+
+        .sev.major {
+            background: var(--amber);
+        }
+
+        .sev.minor {
+            background: var(--text-dim);
+        }
+
+        /* AI SCORECARD */
+        .scorecard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .score-item {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .score-title {
+            font-size: 0.6rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .score-val {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .val-group {
+            flex: 1;
+        }
+
+        .v-label {
+            font-size: 0.5rem;
+            display: block;
+            margin-top: 4px;
+            color: var(--text-dim);
+        }
+
+        .v-num {
+            font-size: 1.1rem;
+            font-weight: 800;
+        }
+
+        .v-num.before {
+            color: var(--text-dim);
+            text-decoration: line-through;
+        }
+
+        .v-num.after {
+            color: var(--green);
+            animation: pulseGreen 2s infinite;
+        }
+
+        @keyframes pulseGreen {
+
+            0%,
+            100% {
+                opacity: 1;
+                text-shadow: 0 0 5px rgba(0, 230, 118, 0.2);
+            }
+
+            50% {
+                opacity: 0.8;
+                text-shadow: 0 0 15px rgba(0, 230, 118, 0.5);
+            }
+        }
+
+        .arrow-sep {
+            color: var(--text-dim);
+            font-size: 0.8rem;
+        }
+
+        .match-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(179, 136, 255, 0.1);
+            color: var(--purple);
+            border: 1px solid rgba(179, 136, 255, 0.3);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 800;
+            margin-top: 8px;
+        }
+
+        /* MOBILE OVERLAY */
+        @media(max-width: 1000px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .impact-pane {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body data-theme="dark">
+    <div class="topnav">
+        <div class="logo">🛡️ Pedkai Autonomous Shield</div>
+        <button class="scenario-btn" onclick="runScenario('A')"><span class="dot"></span>Security GW Drift</button>
+        <button class="scenario-btn" onclick="runScenario('B')"><span class="dot"></span>Core Mobility Load</button>
+        <button class="scenario-btn" onclick="runScenario('C')"><span class="dot"></span>Border GW Firmware</button>
+        <button class="reset-btn" onclick="resetAll()">↻ Reset Shield</button>
+    </div>
+
+    <div class="dashboard">
+        <!-- LEFT: NETWORK -->
+        <div class="network-pane">
+            <div class="pane-header">
+                Topological Core Architecture
+                <span id="activeNodes" style="font-size: 0.6rem; color: var(--text-muted);">64 Functions
+                    Monitored</span>
+            </div>
+            <div class="arch-layers" id="archLayers">
+                <!-- Layers will be injected here -->
+            </div>
+        </div>
+
+        <!-- RIGHT: IMPACT -->
+        <div class="impact-pane">
+            <div class="pane-header">Intelligence & Service Impact</div>
+            <div class="impact-content">
+                <div class="metric-card">
+                    <h3>Autonomous Protection</h3>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <span class="metric-value" id="m_alarms">0</span>
+                            <span class="metric-label">Prevented Incidents</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-value green" id="m_clusters">—</span>
+                            <span class="metric-label">Uptime Protected</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <h3>NOC Console (Deluge)</h3>
+                    <div class="alarm-wall" id="alarmWall">
+                        <!-- Alarms injected here -->
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <h3>Incident Reasoning</h3>
+                    <div id="reasoningChain">
+                        <div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 20px;">
+                            Select a scenario to witness correlated reasoning.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <h3>Pedkai Zone vs Non-Pedkai Zone</h3>
+                    <div class="scorecard" id="aiScorecard">
+                        <div class="score-item">
+                            <div class="score-title">Monthly Uptime</div>
+                            <div class="score-val">
+                                <div class="val-group"><span class="v-num before">99.82%</span><span
+                                        class="v-label">Non-Pedkai Zone</span></div>
+                                <div class="arrow-sep">→</div>
+                                <div class="val-group"><span class="v-num after">99.997%</span><span
+                                        class="v-label">Pedkai Zone</span></div>
+                            </div>
+                        </div>
+                        <div class="score-item">
+                            <div class="score-title">Avg Incidents / Week</div>
+                            <div class="score-val">
+                                <div class="val-group"><span class="v-num before">14</span><span
+                                        class="v-label">Non-Pedkai Zone</span></div>
+                                <div class="arrow-sep">→</div>
+                                <div class="val-group"><span class="v-num after">0.3</span><span class="v-label">Pedkai
+                                        Zone</span></div>
+                            </div>
+                        </div>
+                        <div class="score-item">
+                            <div class="score-title">Mean Detection Time</div>
+                            <div class="score-val">
+                                <div class="val-group"><span class="v-num before">23m</span><span
+                                        class="v-label">Non-Pedkai Zone</span></div>
+                                <div class="arrow-sep">→</div>
+                                <div class="val-group"><span class="v-num after">&lt; 4s</span><span
+                                        class="v-label">Pedkai Zone</span></div>
+                            </div>
+                        </div>
+                        <div class="score-item">
+                            <div class="score-title">Revenue Shield Rate</div>
+                            <div class="score-val">
+                                <div class="val-group"><span class="v-num before">—</span><span
+                                        class="v-label">Non-Pedkai Zone</span></div>
+                                <div class="arrow-sep">→</div>
+                                <div class="val-group"><span class="v-num after">99.2%</span><span
+                                        class="v-label">Pedkai Zone</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🔆</span>
+        <span id="theme-text">Light Mode</span>
+    </button>
+
+    <script>
+        const ARCH_DATA = [
+            {
+                id: 'oss', label: 'OSS', sub: 'Operations Support', nodes: [
+                    { id: 'servicenow', name: 'ServiceNow', sub: 'ITSM', domain: 'oss' },
+                    { id: 'netcracker', name: 'Netcracker', sub: 'Service Assurance', domain: 'oss' },
+                    { id: 'exfo', name: 'EXFO CEM', sub: 'Customer Experience', domain: 'oss' },
+                    { id: 'teoco', name: 'TEOCO', sub: 'Performance Mgmt', domain: 'oss' },
+                    { id: 'amdocs', name: 'Amdocs', sub: 'Inventory', domain: 'oss' }
+                ]
+            },
+            {
+                id: 'ems', label: 'EMS', sub: 'Element Management', nodes: [
+                    { id: 'enm', name: 'Ericsson ENM', sub: 'Core EMS', domain: 'ems' },
+                    { id: 'ribbonems', name: 'Ribbon EMS', sub: 'SBC Mgmt', domain: 'ems' },
+                    { id: 'vnfm', name: 'Ericsson VNFM', sub: 'VNF Life-cycle', domain: 'infra' }
+                ]
+            },
+            {
+                id: 'svc_ims', label: 'IMS', sub: 'IP Multimedia', nodes: [
+                    { id: 'ribbon-isbc', name: 'Ribbon SBC', sub: 'Interconnect', domain: 'ims' },
+                    { id: 'ericsson-cscf', name: 'Ericsson vCSCF', sub: 'Call Session Ctrl', domain: 'ims' },
+                    { id: 'audiocodes', name: 'AudioCodes 9080', sub: 'Media Resource', domain: 'ims' }
+                ]
+            },
+            {
+                id: 'svc_sdm', label: 'SDM', sub: 'Subscriber Data', nodes: [
+                    { id: 'ericsson-hss', name: 'Ericsson HSS', sub: 'Subscriber Svr', domain: 'sdm' },
+                    { id: 'broadforward-dra', name: 'BroadForward DRA', sub: 'DRA / DEA', domain: 'sdm' },
+                    { id: 'tekelec', name: 'Tekelec EAGLE', sub: 'SS7 STP', domain: 'sdm' }
+                ]
+            },
+            {
+                id: 'svc_ipsec', label: 'IP & Security', sub: 'Routing / Firewall', nodes: [
+                    { id: 'juniper-srx', name: 'Juniper SRX', sub: 'Security GW', domain: 'ipsec' },
+                    { id: 'f5-ltm', name: 'F5 BIG-IP LTM', sub: 'Load Balancer', domain: 'ipsec' },
+                    { id: 'paloalto', name: 'Palo Alto 5260', sub: 'Core Firewall', domain: 'ipsec' }
+                ]
+            },
+            {
+                id: 'svc_epc', label: 'ePC', sub: 'Mobile Core', nodes: [
+                    { id: 'ericsson-vmme', name: 'Ericsson vMME', sub: 'Mobility Ctrl', domain: 'epc' },
+                    { id: 'ericsson-vsaegw', name: 'Ericsson vSAEGW', sub: 'S-GW / P-GW', domain: 'epc' },
+                    { id: 'sandvine', name: 'Sandvine PTS', sub: 'Traffic Shaping', domain: 'epc' }
+                ]
+            },
+            {
+                id: 'vas', label: 'VAS', sub: 'Messaging & Value', nodes: [
+                    { id: 'comverse', name: 'Comverse ONE', sub: 'SMSC/Router', domain: 'vas' },
+                    { id: 'syniverse', name: 'Syniverse MSG-GW', sub: 'MMS Gateway', domain: 'vas' }
+                ]
+            },
+            {
+                id: 'infra', label: 'Cloud & Bare Metal', sub: 'NFVI / Compute', nodes: [
+                    { id: 'openstack', name: 'RH OpenStack', sub: 'Cloud Platform', domain: 'infra' },
+                    { id: 'dell', name: 'Dell PowerEdge', sub: 'R750xa Core', domain: 'infra' }
+                ]
+            }
+        ];
+
+        const ALARMS = [
+            { sev: 'critical', time: '14:31', source: 'SBC-A01', msg: 'RTP session timeout', cluster: 'A' },
+            { sev: 'critical', time: '14:31', source: 'SBC-A02', msg: 'S-CSCF connectivity lost', cluster: 'A' },
+            { sev: 'critical', time: '14:30', source: 'SecGW-01', msg: 'Session table 95.2%', cluster: 'A' },
+            { sev: 'critical', time: '14:34', source: 'DRA-01', msg: 'Diameter request burst', cluster: 'B' },
+            { sev: 'critical', time: '14:34', source: 'DRA-02', msg: 'Routing Loop detected', cluster: 'B' },
+            { sev: 'major', time: '14:32', source: 'VNFM-01', msg: 'Scale-out failed', cluster: 'C' },
+            { sev: 'major', time: '14:30', source: 'vMSG-GW', msg: 'SMPP bind failure', cluster: 'C' },
+            { sev: 'minor', time: '14:30', source: 'ACI-01', msg: 'Normal traffic flow', cluster: 'noise' },
+            { sev: 'minor', time: '14:28', source: 'vDPI-01', msg: 'Update complete', cluster: 'noise' },
+            { sev: 'minor', time: '14:29', source: 'EMS-Core', msg: 'Backup started', cluster: 'noise' },
+            { sev: 'minor', time: '14:32', source: 'RNC-09', msg: 'Fan speed normal', cluster: 'noise' },
+            { sev: 'minor', time: '14:30', source: 'OSS-DB', msg: 'Log rotation done', cluster: 'noise' },
+            { sev: 'critical', time: '14:35', source: 'CORE-SW', msg: 'Port flap Eth 1/12', cluster: 'A' },
+            { sev: 'major', time: '14:35', source: 'HSS-SVR', msg: 'Latency spike (DB)', cluster: 'B' },
+            { sev: 'minor', time: '14:36', source: 'UPS-04', msg: 'Bypass active (Manual)', cluster: 'noise' },
+            { sev: 'minor', time: '14:37', source: 'ZABBIX', msg: 'Agent heartbeat lost (Test)', cluster: 'noise' },
+            { sev: 'minor', time: '14:38', source: 'TEMP-01', msg: 'Rack A1 humidity warning', cluster: 'noise' }
+        ];
+
+        const SCENARIOS = {
+            'A': {
+                name: 'Security Gateway Capacity Drift',
+                networkNodes: ['exfo', 'ericsson-cscf', 'ribbon-isbc', 'juniper-srx', 'f5-ltm'],
+                rootCause: 'juniper-srx',
+                clusterCode: 'A',
+                alarms: 15,
+                uptimeProtected: '99.997%',
+                reasoning: [
+                    { t: 'Infrastructure Drift Detected', d: 'Cognitive Fingerprint on <span class="hl">Juniper SRX</span> detects session-table growth: 72% → 84%, trending 98% in 12 minutes at current rate.', m: [{ l: 'Session Table', v: '84%↑', s: 'amber' }] },
+                    { t: 'Graph Impact Analysis', d: 'Graph traversal: SRX sits upstream of <span class="hl">4 SBC instances</span> serving 12,000 active VoLTE sessions. Correlated with <span class="hl">ServiceNow Change #8432</span>: firewall rule expansion pushed 12m ago.' },
+                    { t: 'Root Cause Identified', d: 'Post-change firewall rule expansion causing session-table bloat. At current trajectory, SRX saturates in 12 min — affecting all downstream voice traffic.', type: 'root', m: [{ l: 'Projected Load', v: '98% in 12m', s: 'danger' }] },
+                    { t: 'Preventive Action Taken', d: 'Automated policy reorder + session redistribution across SRX cluster. Load stabilised at <span class="green">68%</span>. <strong>Zero customer impact. Zero alarms raised downstream.</strong>' }
+                ]
+            },
+            'B': {
+                name: 'Core Mobility Load Balancing',
+                networkNodes: ['ericsson-cscf', 'ericsson-vmme', 'f5-ltm', 'juniper-srx'],
+                rootCause: 'ericsson-vmme',
+                clusterCode: 'B',
+                alarms: 8,
+                uptimeProtected: '99.999%',
+                reasoning: [
+                    { t: 'Load Trend Detected', d: '<span class="hl">Ericsson vMME</span> CPU trending: 72% → 88%. Decision Memory pattern match: "Regional Event Surge" (0.91 similarity).', m: [{ l: 'CPU Trend', v: '88%↑', s: 'amber' }] },
+                    { t: 'Downstream Risk Assessment', d: 'Graph traversal: 14,000 active attach sessions served by this vMME. If CPU breaches 95%, new attaches will fail — but <strong>Pedkai acts now, not then</strong>.' },
+                    { t: 'Root Cause Identified', d: 'Regional event driving 3× normal attach volume. vMME control-plane capacity insufficient for sustained surge.', type: 'root', m: [{ l: 'Attach Rate', v: '3× normal', s: 'danger' }] },
+                    { t: 'Preventive Action Taken', d: 'Elastic slice expansion: +40% C-Plane capacity allocated. CPU stabilised at <span class="green">64%</span>. <strong>Zero sessions dropped. Zero customers affected.</strong>' }
+                ]
+            },
+            'C': {
+                name: 'Border Gateway Firmware Drift',
+                networkNodes: ['ericsson-cscf', 'ribbon-isbc', 'juniper-srx'],
+                rootCause: 'ribbon-isbc',
+                clusterCode: 'C',
+                alarms: 22,
+                uptimeProtected: '99.994%',
+                reasoning: [
+                    { t: 'Anomalous Pattern Detected', d: 'Log Entropy spike on <span class="hl">Ribbon I-SBC</span>: 7.1 → 9.2 bits. Anomalous 0x06 headers appearing in SBC log buffer at increasing rate.', m: [{ l: 'Log Entropy', v: '9.2 bits↑', s: 'danger' }] },
+                    { t: 'Decision Memory Match', d: 'Matched Q3 firmware regression pattern in Decision Memory (Similarity: <span class="hl">0.94</span>). Historical resolution: firmware rollback + hot-standby failover.' },
+                    { t: 'Root Cause Identified', d: 'Firmware version mismatch after partial rollout. SBC-A01 running v3.2.1 while cluster standard is v3.1.8 — causing header parsing anomalies.', type: 'root', m: [{ l: 'Version Gap', v: 'v3.2.1≠v3.1.8', s: 'danger' }] },
+                    { t: 'Preventive Action Taken', d: 'Hot-standby failover to SBC-B02 + firmware rollback queued for maintenance window. <span class="green">Zero calls affected. Zero traffic interruption.</span>' }
+                ]
+            }
+        };
+
+        function renderArchitecture() {
+            const container = document.getElementById('archLayers');
+            container.innerHTML = ARCH_DATA.map(layer => `
+                <div class="layer-band" style="background:var(--layer-${layer.id})">
+                    <div class="layer-label">${layer.label}<span>${layer.sub}</span></div>
+                    ${layer.nodes.map(node => `
+                        <div class="node" id="${node.id}" data-domain="${node.domain}">
+                            ${node.name}
+                            <span style="display:block; font-size:0.6rem; color:var(--text-muted); font-weight:400;">${node.sub}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        function renderAlarmWall() {
+            const wall = document.getElementById('alarmWall');
+            wall.innerHTML = ALARMS.map(a => `
+                <div class="alarm-row" data-cluster="${a.cluster}">
+                    <span class="sev ${a.sev}"></span>
+                    <span>${a.time}</span>
+                    <span style="font-weight:bold;">${a.source}</span>
+                    <span>${a.msg}</span>
+                </div>
+            `).join('');
+        }
+
+        function runScenario(id) {
+            resetAll();
+            const s = SCENARIOS[id];
+
+            // Activate button
+            document.querySelectorAll('.scenario-btn').forEach(b => {
+                if (b.innerText.includes(s.name.split(' ')[0])) b.classList.add('active');
+            });
+
+            // Highlight Network Nodes
+            s.networkNodes.forEach(nid => {
+                const el = document.getElementById(nid);
+                if (el) el.classList.add('affected');
+            });
+            const root = document.getElementById(s.rootCause);
+            if (root) {
+                root.classList.remove('affected');
+                root.classList.add('root-cause');
+            }
+
+            // Highlight Alarm Wall
+            document.querySelectorAll('.alarm-row').forEach(row => {
+                if (row.dataset.cluster === s.clusterCode) {
+                    row.classList.add('highlighted');
+                } else if (row.dataset.cluster !== 'noise') {
+                    row.classList.add('dimmed');
+                }
+            });
+
+            // Update Metrics
+            document.getElementById('m_alarms').innerText = s.alarms;
+            document.getElementById('m_clusters').innerText = s.uptimeProtected || '—';
+
+            // Update Reasoning Chain with delay
+            const chain = document.getElementById('reasoningChain');
+            chain.innerHTML = '';
+            s.reasoning.forEach((step, i) => {
+                setTimeout(() => {
+                    const div = document.createElement('div');
+                    div.className = `reason-step ${step.type || ''}`;
+                    div.innerHTML = `
+                        <div class="step-num">Step 0${i + 1}</div>
+                        <div class="step-title">${step.t}</div>
+                        <div class="step-desc">${step.d}</div>
+                        ${step.t.includes('Match') ? `
+                            <div class="match-badge">
+                                <span>🧠</span> DECISION MEMORY MATCH
+                            </div>
+                        ` : ''}
+                        ${step.m ? `
+                            <div style="display:flex; gap:10px; margin-top:8px;">
+                                ${step.m.map(m => `
+                                    <div style="flex:1; padding:6px; background:var(--surface); border:1px solid var(--border); text-align:center; border-radius:4px;">
+                                        <span class="metric-value ${m.s}" style="font-size:1rem;">${m.v}</span>
+                                        <span class="metric-label">${m.l}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    `;
+                    chain.appendChild(div);
+                    setTimeout(() => div.classList.add('visible'), 50);
+                }, i * 600);
+            });
+        }
+
+        function resetAll() {
+            document.querySelectorAll('.node').forEach(n => n.classList.remove('affected', 'root-cause'));
+            document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('m_alarms').innerText = '0';
+            document.getElementById('m_clusters').innerText = '—';
+            document.getElementById('reasoningChain').innerHTML = '<div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 20px;">Select a scenario.</div>';
+            document.querySelectorAll('.alarm-row').forEach(row => row.classList.remove('highlighted', 'dimmed'));
+        }
+
+        function toggleTheme() {
+            const body = document.body;
+            const newTheme = body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '🔆' : '🌙';
+            document.getElementById('theme-text').innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+        }
+
+        renderArchitecture();
+        renderAlarmWall();
+    </script>
+</body>
+
+</html>

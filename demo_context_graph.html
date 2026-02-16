@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pedkai — Context Graph & Transformation Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      transition: background 0.3s, border-color 0.3s
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+
+    :root {
+      --bg: #020617;
+      --surface: rgba(15, 23, 42, .7);
+      --border: rgba(51, 65, 85, .5);
+      --cyan: #06b6d4;
+      --rose: #f43f5e;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --purple: #a78bfa;
+      --slate: #94a3b8;
+      --white: #f1f5f9;
+      --card-p: rgba(241, 245, 249, .85);
+      --hero-grad: radial-gradient(ellipse at 50% 80%, rgba(6, 182, 212, .08), transparent 70%);
+    }
+
+    [data-theme="light"] {
+      --bg: #f1f5f9;
+      --surface: rgba(255, 255, 255, .8);
+      --border: rgba(203, 213, 225, .8);
+      --white: #1e293b;
+      --slate: #64748b;
+      --card-p: #334155;
+      --hero-grad: radial-gradient(ellipse at 50% 80%, rgba(6, 182, 212, .15), transparent 70%);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      overflow-x: hidden
+    }
+
+    /* THEME TOGGLE */
+    .theme-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      color: var(--white);
+      font-size: 0.7rem;
+      font-weight: 700;
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 24px;
+      position: relative
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--hero-grad);
+      pointer-events: none
+    }
+
+    .hero h1 {
+      font-size: 3.2rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -2px;
+      line-height: 1.1
+    }
+
+    [data-theme="light"] .hero h1 {
+      -webkit-text-fill-color: initial;
+      color: #0891b2;
+      background: none;
+    }
+
+    .hero p {
+      color: var(--slate);
+      margin-top: 16px;
+      font-size: 1rem;
+      max-width: 600px
+    }
+
+    .hero .start-btn {
+      margin-top: 40px;
+      padding: 14px 48px;
+      background: var(--cyan);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-family: inherit;
+      font-weight: 900;
+      font-size: .9rem;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      transition: all .3s
+    }
+
+    .hero .start-btn:hover {
+      box-shadow: 0 0 30px rgba(6, 182, 212, .5);
+      transform: translateY(-2px)
+    }
+
+    /* Sections */
+    .section {
+      min-height: 100vh;
+      padding: 80px 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+      display: none;
+      animation: fadeUp .6s ease-out
+    }
+
+    .section.active {
+      display: block
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .section-num {
+      font-size: .7rem;
+      font-weight: 900;
+      letter-spacing: .2em;
+      color: var(--cyan);
+      text-transform: uppercase;
+      margin-bottom: 8px
+    }
+
+    .section-title {
+      font-size: 2rem;
+      font-weight: 900;
+      margin-bottom: 8px;
+      letter-spacing: -1px
+    }
+
+    .section-sub {
+      color: var(--slate);
+      font-size: .9rem;
+      margin-bottom: 40px;
+      max-width: 700px
+    }
+
+    /* Navigation */
+    .nav {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 40px;
+      padding: 8px 16px;
+      backdrop-filter: blur(16px);
+      z-index: 100
+    }
+
+    .nav-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+      cursor: pointer;
+      transition: all .3s
+    }
+
+    .nav-dot.active {
+      background: var(--cyan);
+      box-shadow: 0 0 10px rgba(6, 182, 212, .5)
+    }
+
+    .nav-dot.done {
+      background: var(--emerald)
+    }
+
+    .nav-arrows {
+      display: flex;
+      gap: 8px;
+      margin-left: 16px;
+      padding-left: 16px;
+      border-left: 1px solid var(--border)
+    }
+
+    .nav-arrows button {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--white);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: .8rem;
+      transition: all .3s;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    .nav-arrows button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan)
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      backdrop-filter: blur(12px)
+    }
+
+    .card-cyan {
+      border-color: rgba(6, 182, 212, .3);
+      background: linear-gradient(135deg, rgba(6, 182, 212, .06), rgba(167, 139, 250, .04))
+    }
+
+    .card-rose {
+      border-color: rgba(244, 63, 94, .3);
+      background: rgba(244, 63, 94, .04)
+    }
+
+    .card-emerald {
+      border-color: rgba(16, 185, 129, .3);
+      background: rgba(16, 185, 129, .04)
+    }
+
+    .card-amber {
+      border-color: rgba(245, 158, 11, .3);
+      background: rgba(245, 158, 11, .04)
+    }
+
+    .card h3 {
+      font-size: .7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      margin-bottom: 12px
+    }
+
+    .card p {
+      font-size: .82rem;
+      line-height: 1.7;
+      color: var(--card-p)
+    }
+
+    /* Grid layouts */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px
+    }
+
+    @media(max-width:900px) {
+
+      .grid-2,
+      .grid-3 {
+        grid-template-columns: 1fr
+      }
+    }
+
+    /* SVG topology */
+    .topo-wrap {
+      display: flex;
+      justify-content: center;
+      margin: 24px 0;
+      overflow: visible
+    }
+
+    .topo-wrap svg text {
+      font-family: 'Inter', sans-serif
+    }
+
+    /* Comparison */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin: 24px 0
+    }
+
+    .compare-col {
+      padding: 24px;
+      border-radius: 14px
+    }
+
+    .compare-col h4 {
+      font-size: .7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin-bottom: 12px
+    }
+
+    .compare-before {
+      background: rgba(244, 63, 94, .04);
+      border: 1px solid rgba(244, 63, 94, .2)
+    }
+
+    .compare-before h4 {
+      color: var(--rose)
+    }
+
+    .compare-after {
+      background: rgba(16, 185, 129, .04);
+      border: 1px solid rgba(16, 185, 129, .2)
+    }
+
+    .compare-after h4 {
+      color: var(--emerald)
+    }
+
+    .compare-col ul {
+      list-style: none;
+      font-size: .82rem;
+      line-height: 2
+    }
+
+    .compare-col ul li::before {
+      content: '→ ';
+      color: var(--slate)
+    }
+
+    /* Badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 12px;
+      border-radius: 20px;
+      font-size: .6rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em
+    }
+
+    .badge-rose {
+      background: rgba(244, 63, 94, .15);
+      color: var(--rose)
+    }
+
+    .badge-cyan {
+      background: rgba(6, 182, 212, .15);
+      color: var(--cyan)
+    }
+
+    .badge-emerald {
+      background: rgba(16, 185, 129, .15);
+      color: var(--emerald)
+    }
+
+    .badge-amber {
+      background: rgba(245, 158, 11, .15);
+      color: var(--amber)
+    }
+
+    .badge-purple {
+      background: rgba(167, 139, 250, .15);
+      color: var(--purple)
+    }
+
+    /* Pulse */
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .4
+      }
+    }
+
+    .pulse {
+      animation: pulse 1.5s ease-in-out infinite
+    }
+
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -16
+      }
+    }
+
+    .dash-anim {
+      stroke-dasharray: 8 4;
+      animation: dash 1s linear infinite
+    }
+
+    /* Timeline */
+    .mem-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 20px 0
+    }
+
+    .mem-entry {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: .8rem
+    }
+
+    .mem-entry .sim {
+      font-weight: 900;
+      min-width: 50px;
+      text-align: center
+    }
+
+    .mem-entry .desc {
+      flex: 1;
+      color: var(--white)
+    }
+
+    .mem-entry .vote {
+      font-size: 1.1rem;
+      cursor: pointer
+    }
+
+    /* Chart area */
+    .chart-area {
+      position: relative;
+      height: 200px;
+      margin: 24px 0;
+      border-left: 2px solid var(--border);
+      border-bottom: 2px solid var(--border);
+      padding: 8px
+    }
+
+    .chart-line {
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round
+    }
+
+    /* Tooltip/Popup for pgvector */
+    .tooltip-trigger {
+      border-bottom: 2px dotted var(--cyan);
+      cursor: help;
+      position: relative;
+    }
+
+    .tooltip-card {
+      position: absolute;
+      bottom: 120%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 280px;
+      background: var(--surface);
+      border: 1px solid var(--cyan);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: none;
+      backdrop-filter: blur(20px);
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .tooltip-trigger:hover .tooltip-card {
+      display: block;
+    }
+
+    /* Signal animations for Sleeping Cell */
+    .signal-pulse {
+      fill: var(--emerald);
+      animation: signalFade 2s infinite;
+    }
+
+    @keyframes signalFade {
+
+      0%,
+      100% {
+        opacity: 0;
+        transform: scale(0.5);
+      }
+
+      50% {
+        opacity: 0.8;
+        transform: scale(1.2);
+      }
+    }
+
+    .sleeping-static {
+      fill: var(--slate);
+      opacity: 0.3;
+    }
+
+    /* JOURNEY ROADMAP */
+    .journey-wrap {
+      max-width: 900px;
+      margin: 40px auto 20px;
+      padding: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .journey-svg {
+      width: 100%;
+      height: 60px;
+    }
+
+    .journey-step text {
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      fill: var(--slate);
+      transition: all 0.4s;
+    }
+
+    .journey-step.active text {
+      fill: var(--cyan);
+    }
+
+    .journey-step.done text {
+      fill: var(--emerald);
+    }
+
+    .journey-dot {
+      transition: all 0.4s;
+      fill: var(--bg);
+      stroke: var(--border);
+      stroke-width: 2.5;
+    }
+
+    .journey-step.active .journey-dot {
+      fill: var(--cyan);
+      stroke: var(--cyan);
+      filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.6));
+    }
+
+    .journey-step.done .journey-dot {
+      fill: var(--emerald);
+      stroke: var(--emerald);
+    }
+
+    .journey-line {
+      stroke: var(--border);
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
+    }
+
+    .journey-line.done {
+      stroke: var(--emerald);
+      stroke-dasharray: none;
+    }
+  </style>
+</head>
+
+<body data-theme="dark">
+  <button class="theme-toggle" onclick="toggleTheme()">
+    <span id="theme-icon">🔆</span>
+    <span id="theme-text">Light Mode</span>
+  </button>
+
+  <!-- Journey Roadmap -->
+  <div class="journey-wrap" id="journeyWrap" style="display:none">
+    <svg class="journey-svg" viewBox="0 0 800 60">
+      <!-- Lines -->
+      <line x1="100" y1="30" x2="220" y2="30" class="journey-line" id="line0" />
+      <line x1="220" y1="30" x2="340" y2="30" class="journey-line" id="line1" />
+      <line x1="340" y1="30" x2="460" y2="30" class="journey-line" id="line2" />
+      <line x1="460" y1="30" x2="580" y2="30" class="journey-line" id="line3" />
+      <line x1="580" y1="30" x2="700" y2="30" class="journey-line" id="line4" />
+
+      <!-- Steps -->
+      <g class="journey-step" id="step0" transform="translate(100, 30)">
+        <circle r="6" class="journey-dot" />
+        <text y="20" text-anchor="middle">Topology</text>
+      </g>
+      <g class="journey-step" id="step1" transform="translate(220, 30)">
+        <circle r="6" class="journey-dot" />
+        <text y="20" text-anchor="middle">Fibre Cut</text>
+      </g>
+      <g class="journey-step" id="step2" transform="translate(340, 30)">
+        <circle r="6" class="journey-dot" />
+        <text y="20" text-anchor="middle">Sleeping Cell</text>
+      </g>
+      <g class="journey-step" id="step3" transform="translate(460, 30)">
+        <circle r="6" class="journey-dot" />
+        <text y="20" text-anchor="middle">Revenue Shield</text>
+      </g>
+      <g class="journey-step" id="step4" transform="translate(580, 30)">
+        <circle r="6" class="journey-dot" />
+        <text y="20" text-anchor="middle">Decision Memory</text>
+      </g>
+      <g class="journey-step" id="step5" transform="translate(700, 30)">
+        <circle r="6" class="journey-dot" />
+        <text y="20" text-anchor="middle">Causal AI</text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero" id="hero">
+    <h1>Context Graph<br>& AI Transformation</h1>
+    <p>How Pedkai's Decision Memory, Causal AI, and Policy Engine transform a telco from reactive fire-fighting to
+      autonomous intelligence.</p>
+    <button class="start-btn" onclick="startDemo()">Begin Demo →</button>
+  </div>
+
+  <!-- NAV -->
+  <div class="nav" id="nav" style="display:none">
+    <div class="nav-dot" data-s="0" onclick="goSection(0)"></div>
+    <div class="nav-dot" data-s="1" onclick="goSection(1)"></div>
+    <div class="nav-dot" data-s="2" onclick="goSection(2)"></div>
+    <div class="nav-dot" data-s="3" onclick="goSection(3)"></div>
+    <div class="nav-dot" data-s="4" onclick="goSection(4)"></div>
+    <div class="nav-dot" data-s="5" onclick="goSection(5)"></div>
+    <div class="nav-arrows">
+      <button onclick="prevSection()">←</button>
+      <button onclick="nextSection()">→</button>
+    </div>
+  </div>
+
+  <!-- SECTION 0: Context Graph Topology -->
+  <div class="section" id="s0">
+    <div class="section-num">Section 01 / 06</div>
+    <div class="section-title">The "Business-Aware" Context Graph</div>
+    <div class="section-sub">Pedkai models the entire telco as a living graph. Nodes are sized and colored by
+      <strong>financial throughput</strong>, allowing the AI to prioritize what matters most to the business.
+    </div>
+    <div style="text-align:center;margin-bottom:20px">
+      <button class="badge badge-purple" onclick="toggleHeatmap()"
+        style="cursor:pointer;border:none;padding:8px 16px;font-size:.7rem">🔥 Toggle Revenue Heatmap</button>
+    </div>
+    <div class="topo-wrap" id="topoMain"></div>
+    <div class="card card-cyan" id="nodeInfo" style="max-width:600px;margin:0 auto;min-height:80px">
+      <h3 style="color:var(--cyan)">☰ Click a node above to inspect</h3>
+      <p>The Context Graph connects 20+ entity types across 8 relationship types — from physical towers to enterprise
+        SLAs.</p>
+    </div>
+  </div>
+
+  <!-- SECTION 1: Scenario A - Fibre Cut -->
+  <div class="section" id="s1">
+    <div class="section-num">Section 02 / 06</div>
+    <div class="section-title">Scenario A: Backhaul Fibre Cut</div>
+    <div class="section-sub">A physical cable cut at Site-ABC. Pedkai traces through the graph to find root cause,
+      assess SLA impact, and recommend action.</div>
+    <div class="topo-wrap" id="topoFibre"></div>
+    <div class="grid-2">
+      <div class="card card-rose">
+        <h3 style="color:var(--rose)">🔍 RCA Graph Traversal</h3>
+        <p><strong>Path:</strong> Cell-α ← <em>hosted_by</em> ← gNB-042 ← <em>hosted_by</em> ←
+          Site-ABC<br><br><strong>Root Cause:</strong> Backhaul fibre degradation at
+          Site-ABC<br><strong>Downstream:</strong> 2 cells degraded, 847 users affected<br><strong>SLA Impact:</strong>
+          Acme Corp (Gold — 99.99%) breach in 6 minutes </p>
+      </div>
+      <div class="card card-cyan">
+        <h3 style="color:var(--cyan)">📋 AI SITREP Generated</h3>
+        <p><strong>Decision Memory Match:</strong> 2 similar incidents (0.92 similarity)<br><strong>Prior
+            Resolution:</strong> Traffic steering to adjacent Cell-γ (12 min MTTR)<br><br><strong>Recommended:</strong>
+          Execute failover to Cell-γ at 62% capacity. Dispatch field engineer.<br><br><span
+            style="color:var(--emerald);font-weight:700">✅ POLICY: Corporate SLA Guarantee applied</span></p>
+      </div>
+    </div>
+    <div class="compare">
+      <div class="compare-col compare-before">
+        <h4>❌ Without Pedkai</h4>
+        <ul>
+          <li>NOC manually triages 3 separate alarms</li>
+          <li>45 min to identify fibre as root cause</li>
+          <li>No SLA awareness — Gold customer missed</li>
+          <li>Reactive — engineer dispatched after complaint</li>
+        </ul>
+      </div>
+      <div class="compare-col compare-after">
+        <h4>✓ With Pedkai</h4>
+        <ul>
+          <li>3 alarms auto-correlated in &lt; 5 seconds</li>
+          <li>Root cause identified via graph traversal</li>
+          <li>SLA breach predicted 6 min before it occurs</li>
+          <li>Proactive failover, MTTR: 14 minutes</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: Scenario B - Sleeping Cell -->
+  <div class="section" id="s2">
+    <div class="section-num">Section 03 / 06</div>
+    <div class="section-title">Scenario B: Sleeping Cell Detection</div>
+    <div class="section-sub">Cell-LON-003 goes silent — zero users,
+      no alarms. Traditional monitoring misses it completely because the hardware is "alive" but the software is "stuck"
+      .</div>
+    <div style="display:flex; justify-content:center; gap:40px; margin-bottom:40px; flex-wrap:wrap">
+      <div style="text-align:center">
+        <div class="badge badge-emerald" style="margin-bottom:12px">Healthy Cluster</div><svg width="240" height="140"
+          viewBox="0 0 240 140"
+          style="background:rgba(16,185,129,0.05); border-radius:12px; border:1px solid rgba(16,185,129,0.2)">
+          <circle cx="120" cy="70" r="10" fill="var(--emerald)" />
+          <circle cx="120" cy="70" r="20" class="signal-pulse" fill="none" stroke="var(--emerald)" stroke-width="2" />
+          <circle cx="120" cy="70" r="35" class="signal-pulse" style="animation-delay:0.5s" fill="none"
+            stroke="var(--emerald)" stroke-width="1" /><text x="120" y="115" text-anchor="middle" fill="var(--emerald)"
+            font-size="10" font-weight="900">ACTIVE HANDSHAKES</text><text x="120" y="128" text-anchor="middle"
+            fill="var(--slate)" font-size="9">Users: 142 | Traffic: 840 Mbps</text>
+        </svg>
+      </div>
+      <div style="text-align:center">
+        <div class="badge badge-rose" style="margin-bottom:12px">Sleeping Cell</div><svg width="240" height="140"
+          viewBox="0 0 240 140"
+          style="background:rgba(244,63,94,0.05); border-radius:12px; border:1px solid rgba(244,63,94,0.2)">
+          <circle cx="120" cy="70" r="10" fill="var(--slate)" />
+          <g class="sleeping-static">
+            <line x1="100" y1="50" x2="140" y2="90" stroke="var(--rose)" stroke-width="2" />
+            <line x1="140" y1="50" x2="100" y2="90" stroke="var(--rose)" stroke-width="2" />
+          </g><text x="120" y="115" text-anchor="middle" fill="var(--rose)" font-size="10" font-weight="900">SILENT
+            DRIFT</text><text x="120" y="128" text-anchor="middle" fill="var(--slate)" font-size="9">Users: 0 | NMS
+            Status: <span style="color:var(--emerald)">GREEN</span></text>
+        </svg>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card" style="border-color:rgba(245,158,11,.3)">
+        <h3 style="color:var(--amber)">😴 Silent Failure Detected</h3>
+        <p><strong>Entity:</strong>CELL_LON_003<br><strong>Anomaly:</strong>Active Users dropped to 0 (expected:
+          120+)<br><strong>Z-score:</strong>−6.8σ (absence-of-signal)<br><br>No hardware alarms raised — this is a
+          <em>silent failure</em>invisible to legacy NMS.
+        </p>
+      </div>
+      <div class="card card-cyan">
+        <h3 style="color:var(--cyan)">🧠 Decision Memory Search</h3>
+        <p><strong>Query:</strong>"Cell with zero active users, no alarm, normal neighbours"
+          <br><strong>Results:</strong>
+        </p>
+        <div class="mem-timeline">
+          <div class="mem-entry">
+            <div class="sim" style="color:var(--emerald)">0.94</div>
+            <div class="desc">Cell-MAN-007: BBU cold-restart resolved sleeping cell in 8 min</div>
+            <div class="vote">👍</div>
+          </div>
+          <div class="mem-entry">
+            <div class="sim" style="color:var(--cyan)">0.88</div>
+            <div class="desc">Cell-BIR-012: Software hang — BBU restart+config reload (15 min)</div>
+            <div class="vote">👍</div>
+          </div>
+          <div class="mem-entry">
+            <div class="sim" style="color:var(--slate)">0.71</div>
+            <div class="desc">Cell-LON-044: Hardware failure — required site visit (rejected)</div>
+            <div class="vote">👎</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card card-emerald" style="margin-top:24px;max-width:700px;margin-left:auto;margin-right:auto">
+      <h3 style="color:var(--emerald)">✓ Auto-Resolution</h3>
+      <p>Pedkai selected the highest-similarity match (0.94) with positive operator feedback. Executed remote BBU
+        cold-restart. Cell recovered in <strong>8 minutes</strong>— before any customer noticed.</p>
+    </div>
+  </div>
+  <div class="section" id="s3">
+    <div class="section-num">Section 04 / 06</div>
+    <div class="section-title">Scenario C: Revenue-at-Risk Protection</div>
+    <div class="section-sub">An enterprise Gold customer's site is affected. Pedkai enforces the Telco Constitution —
+      business rules that govern AI autonomy.</div>
+    <div class="grid-2">
+      <div class="card card-amber">
+        <h3 style="color:var(--amber)">💰 BSS Data Integration</h3>
+        <p><strong>Affected Entity:</strong>gNB-ENTERPRISE-01<br><strong>Customer:</strong>Acme Corp UK
+          Ltd<br><strong>Service Plan:</strong>Enterprise Gold (£12, 000/year)<br><strong>Billing
+            Account:</strong>BA-ACME-001<br><strong>Revenue at Risk:</strong><span
+            style="color:var(--rose);font-weight:900">£6,
+            000/month</span><br><br>Pedkai cross-references BSS billing data in real-time to quantify financial
+          exposure. </p>
+      </div>
+      <div class="card card-rose">
+        <h3 style="color:var(--rose)">🛡️ Policy Engine — Constitution Check</h3>
+        <p>
+          <strong>Rule:</strong>corporate_sla_guarantee.yaml<br><strong>Condition:</strong><code>customer_tier=="gold" and revenue>5000</code><br><strong>Verdict:</strong><span
+            style="color:var(--amber);font-weight:900">REQUIRE_APPROVAL</span><br><br>The Policy Engine
+          <em>blocks</em>autonomous action. Gold-tier customers require human sign-off before any network
+          change.<br><br><span style="color:var(--emerald)">✅ Escalated to NOC Supervisor with full financial
+            context.</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- Revenue Topology for Scenario C -->
+    <div class="topo-wrap" id="topoRevenue"
+      style="margin-top:32px; height: 300px; background: rgba(2,6,23,0.3); border-radius: 12px; border: 1px solid var(--border)">
+    </div>
+    <div id="nodeInfoRevenue" class="card"
+      style="margin: 16px auto; max-width: 400px; min-height: 60px; text-align: center; background: rgba(6, 182, 212, 0.05); border: 1px solid rgba(6, 182, 212, 0.2)">
+      <p style="color:var(--slate); font-size: 0.85rem">Enterprise Financial Topology: Acme Corp UK Ltd</p>
+    </div>
+
+    <div class="compare">
+      <div class="compare-col compare-before">
+        <h4>❌ Without Pedkai</h4>
+        <ul>
+          <li>AI acts blindly — no revenue awareness</li>
+          <li>Auto-restarts could cause Gold SLA breach</li>
+          <li>No audit trail of why action was taken</li>
+          <li>£6,
+            000/mo revenue invisible to operations</li>
+        </ul>
+      </div>
+      <div class="compare-col compare-after">
+        <h4>✓ With Pedkai</h4>
+        <ul>
+          <li>Revenue-at-risk calculated in real-time</li>
+          <li>Policy Engine enforces business constraints</li>
+          <li>Gold-tier flagged for human approval</li>
+          <li>Full decision trace with financial context</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="section" id="s4">
+    <div class="section-num">Section 05 / 06</div>
+    <div class="section-title">Decision Memory & Learning (RLHF)</div>
+    <div class="section-sub">Unlike traditional systems that store what happened,
+      Pedkai stores why decisions were made — and learns from operator feedback.</div>
+    <div class="grid-2">
+      <div class="card card-cyan">
+        <h3 style="color:var(--cyan)">📝 Decision Trace Structure</h3>
+        <p
+          style="font-family:monospace;font-size:.75rem;line-height:1.8;background:rgba(2,6,23,.5);padding:16px;border-radius:8px;margin-top:8px">
+          {
+          <br>&nbsp;
+          &nbsp;
+          "decision_id": "dt-2024-0208-001", <br> &nbsp;
+          &nbsp;
+
+          "context": {
+
+          "alarms": ["A1",
+          "A2"],
+          "kpis": {
+          ...
+          }
+          }
+
+          ,
+          <br>&nbsp;
+          &nbsp;
+
+          "constraints": {
+          "sla": "Gold 99.99%", "window": "none"
+          }
+
+          ,
+          <br>&nbsp;
+          &nbsp;
+          "options": ["restart BBU",
+          "failover",
+          "escalate"],
+          <br>&nbsp;
+          &nbsp;
+          "tradeoff": "Chose failover — capacity ok",
+          <br>&nbsp;
+          &nbsp;
+
+          "outcome": {
+          "mttr": "12m", "success": true
+          }
+
+          ,
+          <br>&nbsp;
+          &nbsp;
+          "learning": "Failover works at &lt;70% load" <br>
+          }
+
+        </p>
+      </div>
+      <div class="card card-emerald">
+        <h3 style="color:var(--emerald)">📈 Retrieval Precision Tuning</h3>
+        <p>Pedkai uses <span class="tooltip-trigger"><strong>pgvector semantic search</strong><span
+              class="tooltip-card"><strong style="color:var(--cyan); display:block; margin-bottom:8px">🧠 Semantic
+                Similarity Logic</strong>Instead of exact keyword matching, Pedkai maps incidents into
+              high-dimensional vector space. <br><br>The system calculates <strong>cosine similarity</strong>
+              between the current incident and 10,000+ past resolutions to find functionally identical patterns,
+              even when technical descriptions differ.</span></span> with Gemini
+          embeddings (3072-dim). The optimal similarity threshold was benchmarked at <strong>0.9</strong>.</p>
+        <div style="margin:16px 0">
+          <div style="display:flex;align-items:center;gap:12px;margin:8px 0">
+            <div style="width:60px;font-size:.7rem;font-weight:900;color:var(--emerald)">0.90</div>
+            <div style="flex:1;height:24px;background:rgba(16,185,129,.15);border-radius:6px;position:relative">
+              <div
+                style="position:absolute;inset:0;width:100%;background:var(--emerald);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;color:var(--bg)">
+                P:1.0 R:1.0</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin:8px 0">
+            <div style="width:60px;font-size:.7rem;font-weight:900;color:var(--amber)">0.80</div>
+            <div style="flex:1;height:24px;background:rgba(245,158,11,.15);border-radius:6px;position:relative">
+              <div
+                style="position:absolute;inset:0;width:33%;background:var(--amber);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;color:var(--bg)">
+                P:0.33</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin:8px 0">
+            <div style="width:60px;font-size:.7rem;font-weight:900;color:var(--rose)">0.70</div>
+            <div style="flex:1;height:24px;background:rgba(244,63,94,.15);border-radius:6px;position:relative">
+              <div
+                style="position:absolute;inset:0;width:33%;background:var(--rose);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;color:var(--bg)">
+                P:0.33</div>
+            </div>
+          </div>
+        </div>
+        <p style="font-size:.75rem;color:var(--slate)">Benchmark: 0.9 threshold achieves 100% precision & recall on
+          Gold Standard test set.</p>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-top:24px">
+      <div class="card">
+        <h3 style="color:var(--purple)">🔗 Semantic Embedding</h3>
+        <p>Each decision is vectorized via Gemini API. Similar contexts cluster naturally in embedding space.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--cyan)">👍 RLHF Feedback</h3>
+        <p>Operators upvote/downvote recommendations. Multi-operator junction table prevents gaming. Feedback boost
+          applied post-filter.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--emerald)">🏆 Continuous Learning</h3>
+        <p>Each resolved incident feeds back into memory. The system gets smarter with every decision — no
+          retraining needed.</p>
+      </div>
+    </div>
+  </div>
+  <div class="section" id="s5">
+    <div class="section-num">Section 06 / 06</div>
+    <div class="section-title">Causal AI — Beyond Correlation</div>
+    <div class="section-sub">Pedkai doesn't just correlate KPIs — it proves causation using Granger Causality with
+      ADF
+      stationarity tests. This eliminates spurious relationships.</div>
+    <div class="grid-2">
+      <div class="card" style="min-height:300px">
+        <h3 style="color:var(--cyan)">📊 Time-Series: RSRP vs DL_BLER</h3><svg viewBox="0 0 500 200" width="100%"
+          id="causalChart">
+          <defs>
+            <linearGradient id="gCyan" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--cyan)" stop-opacity=".3" />
+              <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0" />
+            </linearGradient>
+            <linearGradient id="gRose" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--rose)" stop-opacity=".3" />
+              <stop offset="100%" stop-color="var(--rose)" stop-opacity="0" />
+            </linearGradient>
+          </defs>
+          <line x1="40" y1="10" x2="40" y2="180" stroke="var(--border)" stroke-width="1" />
+          <line x1="40" y1="180" x2="490" y2="180" stroke="var(--border)" stroke-width="1" /><text x="15" y="18"
+            fill="var(--slate)" font-size="8" font-family="Inter">High</text><text x="15" y="184" fill="var(--slate)"
+            font-size="8" font-family="Inter">Low</text><text x="250" y="198" fill="var(--slate)" font-size="8"
+            font-family="Inter" text-anchor="middle">Time →</text>
+          <polyline
+            points="40,80 80,78 120,82 160,75 200,70 230,85 260,130 290,145 320,140 350,120 380,90 420,78 460,75 490,72"
+            class="chart-line" stroke="var(--cyan)" />
+          <polyline
+            points="40,150 80,148 120,152 160,145 200,140 230,142 260,138 290,90 320,60 340,55 360,70 390,110 430,145 460,150 490,148"
+            class="chart-line" stroke="var(--rose)" />
+          <line x1="260" y1="135" x2="290" y2="95" stroke="var(--amber)" stroke-width="2" stroke-dasharray="4 2" /><text
+            x="268" y="108" fill="var(--amber)" font-size="9" font-weight="700" font-family="Inter">lag=2</text>
+          <rect x="350" y="12" width="8" height="8" rx="2" fill="var(--cyan)" /><text x="362" y="19" fill="var(--cyan)"
+            font-size="8" font-family="Inter" font-weight="700">RSRP (dBm)</text>
+          <rect x="350" y="26" width="8" height="8" rx="2" fill="var(--rose)" /><text x="362" y="33" fill="var(--rose)"
+            font-size="8" font-family="Inter" font-weight="700">DL_BLER (%)</text>
+        </svg>
+      </div>
+      <div class="card card-cyan">
+        <h3 style="color:var(--cyan)">🧪 Granger Causality Result</h3>
+        <p><strong>Hypothesis:</strong>Does RSRP degradation <em>cause</em>DL_BLER spikes?</p>
+        <div
+          style="background:var(--surface);padding:16px;border-radius:8px;margin:12px 0;font-family:monospace;font-size:.75rem;line-height:1.8;border:1px solid var(--border)">
+          Stationarity (ADF): RSRP p=0.002 ✓ Stationary<br>Stationarity (ADF): BLER p=0.001 ✓
+          Stationary<br>Granger Test: F=8.42,
+          <strong style="color:var(--emerald)">p=0.01</strong><br>Optimal Lag: <strong>2 time
+            steps</strong><br>Result: <strong style="color:var(--emerald)">RSRP Granger-causes DL_BLER</strong>
+        </div>
+        <p><strong>Impact:</strong>SITREPs now state "X <em>caused</em> Y" — not just "X correlated with Y" . This
+          gives NOC engineers certainty to act.</p>
+        <div style="margin-top:16px"><span class="badge badge-emerald">Statistically Significant</span><span
+            class="badge badge-cyan" style="margin-left:8px">ADF Verified</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:24px;text-align:center;padding:32px">
+      <h3 style="color:var(--purple);font-size:.8rem">🏁 Pedkai: The AI-Native Telco Operating System</h3>
+      <p style="max-width:700px;margin:16px auto 0;font-size:.95rem;line-height:1.8">From <strong
+          style="color:var(--rose)">reactive fire-fighting</strong>to <strong style="color:var(--emerald)">autonomous
+          intelligence</strong>.<br>Context Graph+Decision Memory+Causal
+        AI+Policy Engine=<strong style="color:var(--cyan)">MTTR reduced by 70%</strong>.<br>Every decision
+        captured. Every outcome learned. Every policy enforced.</p>
+    </div>
+  </div>
+  <script>
+    let current = -1; // -1 = hero
+    let heatmapActive = false;
+
+    function toggleTheme() {
+      const body = document.body;
+      const currentTheme = body.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      body.setAttribute('data-theme', newTheme);
+      document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '🔆' : '🌙';
+      document.getElementById('theme-text').innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+
+      updateRoadmap(current);
+      if (current === 0) buildMainTopo();
+      if (current === 1) buildFibreTopo();
+      if (current === 3) buildRevenueTopo();
+    }
+
+    function toggleHeatmap() {
+      heatmapActive = !heatmapActive;
+      buildMainTopo();
+    }
+
+    function updateRoadmap(i) {
+      if (i < 0) return;
+      document.querySelectorAll('.journey-step').forEach((s, idx) => {
+        s.classList.remove('active', 'done');
+        if (idx === i) s.classList.add('active');
+        if (idx < i) s.classList.add('done');
+      });
+      for (let j = 0; j < 5; j++) {
+        const line = document.getElementById('line' + j);
+        if (line) {
+          line.classList.remove('done');
+          if (j < i) line.classList.add('done');
+        }
+      }
+    }
+
+    const info = {
+      'site': { title: 'Site-ABC (Tower)', desc: 'Physical cell tower installation.', revenue: 45000 },
+      'gnb': { title: 'gNB-042 (5G Base Station)', desc: 'Enterprise gNodeB instance.', revenue: 45000 },
+      'cell-a': { title: 'Cell-α (Sector 1)', desc: 'Primary Enterprise Sector.', revenue: 22000 },
+      'cell-b': { title: 'Cell-β (Sector 2)', desc: 'Secondary Enterprise Sector.', revenue: 15000 },
+      'cell-c': { title: 'Cell-γ (Sector 3)', desc: 'Backup Sector.', revenue: 8000 },
+      'acme': { title: 'Acme Corp (Enterprise Gold)', desc: 'Targeting Gold SLA: 99.99% uptime.', revenue: 12000 },
+      'sla': { title: 'Acme Gold SLA', desc: 'Critical Path - Penalty: £2,000/breach.', revenue: 2000 },
+      'cons': { title: 'Consumer Segment', desc: 'Background Traffic.', revenue: 6000 },
+      'ims': { title: 'IMS Core', desc: 'Core Service Layer.', revenue: 30000 },
+      'bss': { title: 'BSS Billing Engine', desc: 'Revenue Orchestrator.', revenue: 0 }
+    };
+
+    function buildMainTopo() {
+      const isLight = document.body.getAttribute('data-theme') === 'light';
+      const nodeFill = isLight ? '#cbd5e1' : 'rgba(51,65,85,.7)';
+      const el = document.getElementById('topoMain');
+
+      const getHeatColor = (rev) => {
+        if (!heatmapActive) return nodeFill;
+        if (rev > 40000) return 'var(--rose)';
+        if (rev > 20000) return 'var(--amber)';
+        if (rev > 10000) return 'var(--cyan)';
+        if (rev > 0) return 'var(--emerald)';
+        return isLight ? '#e2e8f0' : 'rgba(51,65,85,.3)';
+      };
+
+      const getStrokeWidth = (rev) => heatmapActive ? (rev > 30000 ? 3 : (rev > 0 ? 2 : 1)) : 1.5;
+
+      const nodeG = (id, x, y, w, h, label, sub, colorClass) => {
+        const n = info[id];
+        const fill = getHeatColor(n.revenue);
+        const stroke = heatmapActive ? fill : (colorClass ? `var(--${colorClass})` : 'var(--border)');
+        const opacity = heatmapActive && n.revenue === 0 ? 0.3 : 1;
+
+        return `<g data-node="${id}" onclick="showNode('${id}')" style="opacity:${opacity}; transition: all 0.5s; cursor:pointer">
+                <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="${getStrokeWidth(n.revenue)}" />
+                <text x="${x + w / 2}" y="${y + 20}" text-anchor="middle" fill="${heatmapActive && n.revenue > 0 ? 'white' : 'var(--white)'}" font-size="11" font-weight="700">${label}</text>
+                <text x="${x + w / 2}" y="${y + 34}" text-anchor="middle" fill="${heatmapActive ? 'rgba(255,255,255,.7)' : 'var(--slate)'}" font-size="8" font-weight="600">${heatmapActive && n.revenue > 0 ? '£' + n.revenue.toLocaleString() : sub}</text>
+              </g>`;
+      };
+
+      el.innerHTML = `<svg viewBox="0 0 880 280" width="880" height="280">
+              <line x1="100" y1="140" x2="230" y2="140" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="310" y1="140" x2="420" y2="80" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="310" y1="140" x2="420" y2="140" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="310" y1="140" x2="420" y2="200" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="500" y1="80" x2="610" y2="60" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="500" y1="140" x2="610" y2="200" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="690" y1="60" x2="780" y2="60" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="500" y1="200" x2="610" y2="250" stroke="var(--border)" stroke-width="2" opacity="${heatmapActive ? 0.2 : 1}" />
+              <line x1="690" y1="60" x2="780" y2="120" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 2" opacity="${heatmapActive ? 0.2 : 1}" />
+              ${nodeG('site', 30, 118, 80, 44, 'Site-ABC', 'Tower')}
+              ${nodeG('gnb', 230, 118, 80, 44, 'gNB-042', 'Base Station')}
+              ${nodeG('cell-a', 420, 58, 80, 44, 'Cell-α', 'Sector 1', 'cyan')}
+              ${nodeG('cell-b', 420, 118, 80, 44, 'Cell-β', 'Sector 2', 'cyan')}
+              ${nodeG('cell-c', 420, 178, 80, 44, 'Cell-γ', 'Sector 3', 'cyan')}
+              ${nodeG('acme', 610, 38, 80, 44, 'Acme Corp', 'Enterprise', 'amber')}
+              ${nodeG('sla', 780, 38, 80, 44, 'Gold SLA', '99.99%', 'purple')}
+              ${nodeG('cons', 610, 178, 80, 44, 'Consumers', 'Bronze')}
+              ${nodeG('ims', 610, 228, 80, 44, 'IMS Core', 'VoLTE', 'rose')}
+              ${nodeG('bss', 780, 98, 80, 44, 'BSS', 'Billing', 'emerald')}
+            </svg>`;
+
+      window.showNode = function (id) {
+        const n = info[id];
+        if (!n) return;
+        document.getElementById('nodeInfo').innerHTML = `<h3 style="color:var(--cyan)">📌 ${n.title}</h3><p>${n.desc}</p>`;
+      };
+    }
+
+    function buildRevenueTopo() {
+      const isLight = document.body.getAttribute('data-theme') === 'light';
+      const el = document.getElementById('topoRevenue');
+
+      const getHeatColor = (rev) => {
+        if (rev > 40000) return 'var(--rose)';
+        if (rev > 20000) return 'var(--amber)';
+        if (rev > 10000) return 'var(--cyan)';
+        if (rev > 0) return 'var(--emerald)';
+        return isLight ? '#e2e8f0' : 'rgba(51,65,85,.3)';
+      };
+
+      const getStrokeWidth = (rev) => rev > 30000 ? 3 : (rev > 0 ? 2 : 1);
+
+      const nodeG = (id, x, y, w, h, label, sub) => {
+        const n = info[id];
+        const fill = getHeatColor(n.revenue);
+        const stroke = fill;
+        const opacity = n.revenue === 0 ? 0.3 : 1;
+
+        return `<g data-node="${id}" onclick="showNodeRev('${id}')" style="opacity:${opacity}; cursor:pointer">
+                <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${fill}" stroke="${stroke}" stroke-width="${getStrokeWidth(n.revenue)}" />
+                <text x="${x + w / 2}" y="${y + 20}" text-anchor="middle" fill="${n.revenue > 0 ? 'white' : 'var(--white)'}" font-size="11" font-weight="700">${label}</text>
+                <text x="${x + w / 2}" y="${y + 34}" text-anchor="middle" fill="rgba(255,255,255,.7)" font-size="8" font-weight="600">£${n.revenue.toLocaleString()}</text>
+              </g>`;
+      };
+
+      el.innerHTML = `<svg viewBox="0 0 880 280" width="100%" height="280">
+              <line x1="100" y1="140" x2="230" y2="140" stroke="var(--cyan)" stroke-width="2" opacity="0.3" />
+              <line x1="310" y1="140" x2="420" y2="80" stroke="var(--cyan)" stroke-width="2" opacity="0.3" />
+              <line x1="310" y1="140" x2="420" y2="140" stroke="var(--cyan)" stroke-width="2" opacity="0.3" />
+              <line x1="310" y1="140" x2="420" y2="200" stroke="var(--cyan)" stroke-width="2" opacity="0.3" />
+              <line x1="500" y1="80" x2="610" y2="60" stroke="var(--cyan)" stroke-width="3" />
+              <line x1="690" y1="60" x2="780" y2="60" stroke="var(--cyan)" stroke-width="3" />
+              ${nodeG('site', 30, 118, 80, 44, 'Site-ABC', 'Tower')}
+              ${nodeG('gnb', 230, 118, 80, 44, 'gNB-042', 'Base Station')}
+              ${nodeG('cell-a', 420, 58, 80, 44, 'Cell-α', 'Sector 1')}
+              ${nodeG('cell-b', 420, 118, 80, 44, 'Cell-β', 'Sector 2')}
+              ${nodeG('cell-c', 420, 178, 80, 44, 'Cell-γ', 'Sector 3')}
+              ${nodeG('acme', 610, 38, 80, 44, 'Acme Corp', 'Enterprise')}
+              ${nodeG('sla', 780, 38, 80, 44, 'Gold SLA', '99.99%')}
+              ${nodeG('cons', 610, 178, 80, 44, 'Consumers', 'Bronze')}
+              ${nodeG('ims', 610, 228, 80, 44, 'IMS Core', 'VoLTE')}
+              ${nodeG('bss', 780, 98, 80, 44, 'BSS', 'Billing')}
+            </svg>`;
+
+      window.showNodeRev = function (id) {
+        const n = info[id];
+        if (!n) return;
+        document.getElementById('nodeInfoRevenue').innerHTML = `<h3 style="color:var(--cyan); margin:0; font-size:0.9rem">📌 ${n.title}</h3><p style="margin:4px 0; font-size:0.8rem">${n.desc}</p>`;
+      };
+    }
+
+    function buildFibreTopo() {
+      const isLight = document.body.getAttribute('data-theme') === 'light';
+      document.getElementById('topoFibre').innerHTML = `<svg viewBox="0 0 700 160" width="700" height="160"><line x1="110" y1="80" x2="240" y2="80" stroke="var(--rose)" stroke-width="3" stroke-dasharray="8 4" class="dash-anim" /><text x="175" y="70" fill="var(--rose)" font-size="8" font-weight="900" text-anchor="middle">⚡ FIBRE CUT</text><g><rect x="30" y="58" width="80" height="44" rx="8" fill="rgba(244,63,94,.15)" stroke="rgba(244,63,94,.5)" /><text x="70" y="78" text-anchor="middle" fill="var(--rose)" font-size="11" font-weight="700">Site-ABC</text><text x="70" y="92" text-anchor="middle" fill="var(--slate)" font-size="8">ROOT CAUSE</text></g><g><rect x="240" y="58" width="80" height="44" rx="8" fill="rgba(244,63,94,.1)" stroke="rgba(244,63,94,.4)" /><text x="280" y="78" text-anchor="middle" fill="var(--rose)" font-size="11" font-weight="700">gNB-042</text><text x="280" y="92" text-anchor="middle" fill="var(--slate)" font-size="8">Degraded</text></g><g><rect x="420" y="33" width="72" height="44" rx="8" fill="rgba(244,63,94,.08)" stroke="rgba(244,63,94,.3)" /><text x="456" y="53" text-anchor="middle" fill="var(--white)" font-size="10" font-weight="700">Cell-α</text><text x="456" y="67" text-anchor="middle" fill="var(--rose)" font-size="7" class="pulse">IMPACTED</text></g><g><rect x="588" y="33" width="84" height="44" rx="8" fill="rgba(245,158,11,.1)" stroke="rgba(245,158,11,.3)" /><text x="630" y="53" text-anchor="middle" fill="var(--amber)" font-size="10" font-weight="700">Acme Corp</text><text x="630" y="67" text-anchor="middle" fill="var(--rose)" font-size="7" font-weight="700">SLA AT RISK</text></g></svg>`;
+    }
+
+    function startDemo() {
+      document.getElementById('hero').style.display = 'none';
+      document.getElementById('journeyWrap').style.display = 'block';
+      goSection(0);
+    }
+
+    function goSection(i) {
+      current = i;
+      document.getElementById('nav').style.display = 'flex';
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      const sec = document.getElementById('s' + i);
+      if (sec) {
+        sec.classList.remove('active');
+        void sec.offsetWidth;
+        sec.classList.add('active');
+      }
+      updateRoadmap(i);
+      document.querySelectorAll('.nav-dot').forEach(d => {
+        const si = parseInt(d.dataset.s);
+        d.className = 'nav-dot' + (si === i ? ' active' : '') + (si < i ? ' done' : '');
+      });
+      if (i === 0) buildMainTopo();
+      if (i === 1) buildFibreTopo();
+      if (i === 3) buildRevenueTopo();
+    }
+
+    function nextSection() { if (current < 5) goSection(current + 1); }
+    function prevSection() { if (current > 0) goSection(current - 1); }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') nextSection();
+      if (e.key === 'ArrowLeft') prevSection();
+      if (e.key === ' ' && current === -1) { e.preventDefault(); startDemo(); }
+    });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedkai — Service Impact & Alarm Correlation Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            --bg: #0a0e1a;
+            --text: #c8d6e5;
+            --text-muted: #6b7fa0;
+            --text-dim: #3a4f70;
+            --border: #1a2540;
+            --surface: #0c1020;
+            --surface-alt: #111828;
+            --cyan: #00d4ff;
+            --red: #ff3b5c;
+            --amber: #ffb84d;
+            --green: #00e676;
+            --purple: #b388ff;
+            --glass: rgba(12, 18, 40, 0.85);
+            --card-grad: linear-gradient(145deg, #111828, #0d1225);
+            --shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="light"] {
+            --bg: #f8fafc;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --text-dim: #94a3b8;
+            --border: #e2e8f0;
+            --surface: #ffffff;
+            --surface-alt: #f1f5f9;
+            --cyan: #0891b2;
+            --red: #e11d48;
+            --amber: #d97706;
+            --green: #059669;
+            --purple: #7c3aed;
+            --glass: rgba(255, 255, 255, 0.9);
+            --card-grad: linear-gradient(145deg, #ffffff, #f8fafc);
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden
+        }
+
+        /* THEME TOGGLE */
+        .theme-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 24px;
+            z-index: 201;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            color: var(--text);
+            font-size: 0.7rem;
+            font-weight: 700;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        /* STICKY NAV */
+        .topnav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 200;
+            background: var(--bg);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 10px 30px;
+            gap: 20px
+        }
+
+        .topnav .logo {
+            font-weight: 700;
+            color: var(--cyan);
+            font-size: 1rem;
+            margin-right: auto
+        }
+
+        .topnav .sec-btn {
+            padding: 6px 14px;
+            border: 1px solid var(--border);
+            background: none;
+            color: var(--text-muted);
+            font-size: .72rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all .3s;
+            font-weight: 600
+        }
+
+        .topnav .sec-btn:hover,
+        .topnav .sec-btn.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: rgba(8, 145, 178, 0.05);
+        }
+
+        /* SECTION BASE */
+        .section {
+            min-height: 100vh;
+            padding: 80px 40px 100px;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: none;
+            opacity: 0;
+            transition: opacity .5s
+        }
+
+        .section.visible {
+            display: block;
+            opacity: 1
+        }
+
+        .section-tag {
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--cyan);
+            margin-bottom: 8px
+        }
+
+        .section h2 {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 8px;
+            letter-spacing: -.5px
+        }
+
+        .section .subtitle {
+            color: var(--text-muted);
+            font-size: .95rem;
+            margin-bottom: 32px;
+            max-width: 700px;
+            line-height: 1.6
+        }
+
+        /* CUSTOMER CARDS */
+        .customer-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 40px
+        }
+
+        .customer-card {
+            background: var(--card-grad);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+            transition: all .4s;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+        }
+
+        .customer-card:hover {
+            border-color: var(--cyan);
+            transform: translateY(-3px);
+        }
+
+        .customer-card .avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 14px;
+            background: var(--surface-alt);
+            border: 2px solid var(--border);
+        }
+
+        .customer-card .name {
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--text);
+            margin-bottom: 4px
+        }
+
+        .customer-card .complaint {
+            font-size: .85rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 14px
+        }
+
+        .impact-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: .7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .impact-tag.high {
+            background: rgba(225, 29, 72, 0.1);
+            color: var(--red);
+        }
+
+        .impact-tag.medium {
+            background: rgba(217, 119, 6, 0.1);
+            color: var(--amber);
+        }
+
+        .customer-card .waiting {
+            font-size: .75rem;
+            color: var(--text-dim);
+            margin-top: 10px
+        }
+
+        .customer-card .waiting span {
+            color: var(--red);
+            font-weight: 700
+        }
+
+        /* NOC ALARM WALL */
+        .alarm-wall {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .alarm-wall .wall-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px
+        }
+
+        .alarm-wall .wall-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text)
+        }
+
+        .alarm-wall .count-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: .75rem;
+            font-weight: 700;
+            background: rgba(225, 29, 72, 0.1);
+            color: var(--red);
+        }
+
+        .alarm-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            font-size: .75rem;
+            transition: all 0.2s;
+            border: 1px solid transparent
+        }
+
+        .alarm-row .sev {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0
+        }
+
+        .alarm-row .sev.critical {
+            background: var(--red)
+        }
+
+        .alarm-row .sev.major {
+            background: var(--amber)
+        }
+
+        .alarm-row .sev.minor {
+            background: var(--text-muted)
+        }
+
+        .alarm-row .time {
+            color: var(--text-dim);
+            width: 60px;
+            flex-shrink: 0
+        }
+
+        .alarm-row .source {
+            color: var(--text-muted);
+            width: 160px;
+            flex-shrink: 0;
+            font-weight: 600
+        }
+
+        .alarm-row .msg {
+            color: var(--text);
+            flex: 1
+        }
+
+        .alarm-row .domain {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: .65rem;
+            font-weight: 700;
+            background: var(--surface-alt);
+            color: var(--text-dim);
+            flex-shrink: 0
+        }
+
+        /* Cluster highlight */
+        .alarm-row.cluster-a {
+            background: rgba(225, 29, 72, 0.05);
+            border-color: rgba(225, 29, 72, 0.1);
+        }
+
+        .alarm-row.cluster-a .domain {
+            color: var(--red);
+            background: rgba(225, 29, 72, 0.1);
+        }
+
+        .alarm-row.cluster-b {
+            background: rgba(217, 119, 6, 0.05);
+            border-color: rgba(217, 119, 6, 0.1);
+        }
+
+        .alarm-row.cluster-b .domain {
+            color: var(--amber);
+            background: rgba(217, 119, 6, 0.1);
+        }
+
+        .alarm-row.cluster-c {
+            background: rgba(5, 150, 105, 0.05);
+            border-color: rgba(5, 150, 105, 0.1);
+        }
+
+        .alarm-row.cluster-c .domain {
+            color: var(--green);
+            background: rgba(5, 150, 105, 0.1);
+        }
+
+        .alarm-row.noise {
+            opacity: .4;
+            filter: grayscale(1);
+        }
+
+        /* PEDKAI CLUSTER VIEW */
+        .cluster-view {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 24px
+        }
+
+        .cluster-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            transition: all .4s
+        }
+
+        .cluster-card h4 {
+            font-size: .85rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text);
+        }
+
+        .cluster-card h4 .cdot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%
+        }
+
+        .cluster-card .cluster-desc {
+            font-size: .78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 12px
+        }
+
+        .cluster-card .cluster-path {
+            font-size: .72rem;
+            color: var(--text-muted);
+            padding: 10px;
+            background: var(--surface-alt);
+            border-radius: 6px;
+            font-family: 'SF Mono', monospace;
+            line-height: 1.6;
+            border: 1px solid var(--border);
+        }
+
+        .cluster-card .cluster-path .arrow {
+            color: var(--cyan)
+        }
+
+        .cluster-card .cluster-path .root {
+            color: var(--red);
+            font-weight: 700
+        }
+
+        .cluster-card .alarms-in {
+            font-size: .7rem;
+            color: var(--text-dim);
+            margin-top: 10px
+        }
+
+        /* DEEP DIVE CHAIN */
+        .chain-wrap {
+            max-width: 700px;
+            margin: 0 auto
+        }
+
+        .chain-step {
+            position: relative;
+            padding: 20px 20px 20px 60px;
+            border-left: 2px solid var(--border);
+        }
+
+        .chain-step::before {
+            content: attr(data-layer);
+            position: absolute;
+            left: -60px;
+            top: 20px;
+            width: 50px;
+            font-size: .6rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-align: right;
+            letter-spacing: .5px;
+            text-transform: uppercase
+        }
+
+        .chain-step::after {
+            content: '';
+            position: absolute;
+            left: -7px;
+            top: 24px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--border);
+            border: 2px solid var(--bg);
+        }
+
+        .chain-step.active::after {
+            background: var(--cyan);
+            border-color: var(--cyan);
+            box-shadow: 0 0 10px var(--cyan)
+        }
+
+        .chain-step.root::after {
+            background: var(--red);
+            border-color: var(--red);
+            box-shadow: 0 0 10px var(--red)
+        }
+
+        .chain-step .chain-title {
+            font-weight: 700;
+            font-size: .9rem;
+            color: var(--text);
+            margin-bottom: 4px
+        }
+
+        .chain-step .chain-detail {
+            font-size: .8rem;
+            color: var(--text-muted);
+            line-height: 1.6
+        }
+
+        .chain-step .chain-detail .hl {
+            color: var(--cyan);
+            font-weight: 600
+        }
+
+        .chain-step .chain-detail .alert {
+            color: var(--red);
+            font-weight: 700
+        }
+
+        .chain-step .chain-metric {
+            display: inline-block;
+            padding: 3px 8px;
+            background: var(--surface-alt);
+            border-radius: 4px;
+            font-size: .72rem;
+            font-weight: 700;
+            margin: 4px 4px 0 0;
+            border: 1px solid var(--border);
+        }
+
+        .chain-step .chain-metric.bad {
+            color: var(--red)
+        }
+
+        .chain-step .chain-metric.ok {
+            color: var(--green)
+        }
+
+        /* RESOLUTION CASCADE */
+        .resolution-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-top: 24px
+        }
+
+        .res-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .res-card h4 {
+            font-size: .82rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .res-card h4 .badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: .6rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .res-card h4 .badge.auto {
+            background: rgba(5, 150, 105, 0.1);
+            color: var(--green)
+        }
+
+        .res-card h4 .badge.approval {
+            background: rgba(217, 119, 6, 0.1);
+            color: var(--amber)
+        }
+
+        .res-card .action {
+            font-size: .78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 8px
+        }
+
+        .res-card .action .hl {
+            color: var(--cyan);
+            font-weight: 600
+        }
+
+        .res-card .result {
+            font-size: .72rem;
+            color: var(--green);
+            font-weight: 700;
+            padding: 6px 10px;
+            background: rgba(5, 150, 105, 0.05);
+            border-radius: 6px;
+            display: inline-block
+        }
+
+        /* TRANSFORMATION TABLE */
+        .transform-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 24px
+        }
+
+        .transform-table th {
+            text-align: left;
+            font-size: .72rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+            letter-spacing: 1px
+        }
+
+        .transform-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: .85rem
+        }
+
+        .transform-table .metric-label {
+            color: var(--text-muted);
+            font-weight: 600
+        }
+
+        .transform-table .before {
+            color: var(--red);
+            font-weight: 700
+        }
+
+        .transform-table .after {
+            color: var(--green);
+            font-weight: 800
+        }
+
+        .transform-table tr:hover {
+            background: var(--surface-alt)
+        }
+
+        /* BOTTOM NAV */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg);
+            backdrop-filter: blur(14px);
+            border-top: 1px solid var(--border);
+            padding: 12px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            z-index: 200
+        }
+
+        .bottom-nav .prev,
+        .bottom-nav .next {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            color: var(--text-muted);
+            font-size: .8rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all .3s
+        }
+
+        .bottom-nav .prev:hover,
+        .bottom-nav .next:hover {
+            border-color: var(--cyan);
+            color: var(--cyan)
+        }
+
+        .bottom-nav .dots {
+            display: flex;
+            gap: 8px
+        }
+
+        .bottom-nav .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--border);
+            cursor: pointer;
+            transition: all .3s
+        }
+
+        .bottom-nav .dot.active {
+            background: var(--cyan);
+            box-shadow: 0 0 8px var(--cyan)
+        }
+
+        .bottom-nav .progress-label {
+            font-size: .7rem;
+            color: var(--text-dim);
+            margin-left: 12px
+        }
+
+        /* ANIMATIONS */
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        .animate-in {
+            animation: slideUp .5s ease forwards
+        }
+
+        .delay-1 {
+            animation-delay: .1s
+        }
+
+        .delay-2 {
+            animation-delay: .2s
+        }
+
+        /* RESPONSIVE */
+        @media(max-width:900px) {
+
+            .customer-grid,
+            .cluster-view,
+            .resolution-grid {
+                grid-template-columns: 1fr
+            }
+
+            .section {
+                padding: 80px 20px 100px
+            }
+        }
+    </style>
+</head>
+
+<body data-theme="dark">
+
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🔆</span>
+        <span id="theme-text">Light Mode</span>
+    </button>
+
+    <!-- TOP NAV -->
+    <div class="topnav">
+        <div class="logo">⚡ Pedkai</div>
+        <button class="sec-btn active" onclick="goSection(0)">Customers</button>
+        <button class="sec-btn" onclick="goSection(1)">Noise Wall</button>
+        <button class="sec-btn" onclick="goSection(2)">Clustering</button>
+        <button class="sec-btn" onclick="goSection(3)">Deep Dive</button>
+        <button class="sec-btn" onclick="goSection(4)">Resolution</button>
+        <button class="sec-btn" onclick="goSection(5)">Impact</button>
+    </div>
+
+    <!-- SECTIONS -->
+    <!-- SECTION 0: CUSTOMER COMPLAINTS -->
+    <div class="section visible" id="s0">
+        <div class="section-tag">Phase 01 · The Customer View</div>
+        <h2>Disconnected Problems. One Root Cause.</h2>
+        <div class="subtitle">Pedkai connects the dots across isolated complaints to identify systemic failures before
+            they escalate.</div>
+
+        <div class="customer-grid">
+            <div class="customer-card animate-in">
+                <div class="avatar">👩</div>
+                <div class="name">Sarah Mitchell</div>
+                <div class="complaint">"My WhatsApp voice call connects, then drops after about 4 seconds. My signal
+                    bars show full."</div>
+                <div class="impact-tag high">VoLTE Failure</div>
+                <div class="waiting">Waiting: <span>12m</span> · NOC ID: #7742</div>
+            </div>
+            <div class="customer-card animate-in delay-1">
+                <div class="avatar">👨</div>
+                <div class="name">James Chen</div>
+                <div class="complaint">"My banking app just spins forever. 'Connection timed out.' It worked fine this
+                    morning."</div>
+                <div class="impact-tag high">Data Timeout</div>
+                <div class="waiting">Waiting: <span>8m</span> · NOC ID: #7745</div>
+            </div>
+            <div class="customer-card animate-in delay-2">
+                <div class="avatar">👩</div>
+                <div class="name">Priya Sharma</div>
+                <div class="complaint">"I sent an MMS photo 20 minutes ago. The progress bar got to 40% and just froze."
+                </div>
+                <div class="impact-tag medium">MMS Issues</div>
+                <div class="waiting">Waiting: <span>22m</span> · NOC ID: #7718</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 1: NOC wall -->
+    <div class="section" id="s1">
+        <div class="section-tag">Phase 02 · Legacy Monitoring</div>
+        <h2>The Noise Wall: 47 Active Alarms</h2>
+        <div class="subtitle">Traditional NOCs are buried in non-correlated alerts. Which one is the killer?</div>
+        <div class="alarm-wall" id="alarmWall">
+            <div class="wall-header">
+                <h3>⚠ Active System Alarms</h3>
+                <div class="count-badge">47 CRITICAL/MAJOR</div>
+            </div>
+            <div id="alarmList"></div>
+        </div>
+    </div>
+
+    <!-- SECTION 2: clustering -->
+    <div class="section" id="s2">
+        <div class="section-tag">Phase 03 · Autonomous Clustering</div>
+        <h2>47 Alarms → 3 Incident Clusters</h2>
+        <div class="subtitle">Pedkai's Context Graph walks relationships in 4.2s to find cause-and-effect patterns.
+        </div>
+        <div class="alarm-wall" id="clusteredWall">
+            <div class="wall-header">
+                <h3>⚡ Pedkai Intelligence</h3>
+                <div class="count-badge" style="background:rgba(5, 150, 105, 0.1);color:var(--green);border:none;">3
+                    INCIDENTS · 11 NOISE SUPPRESSED</div>
+            </div>
+            <div id="clusteredList"></div>
+        </div>
+        <div class="cluster-view">
+            <div class="cluster-card" style="border-left: 4px solid var(--red)">
+                <h4><span class="cdot" style="background:var(--red)"></span>Cluster A — VoLTE</h4>
+                <div class="cluster-desc">15 alarms trace back to Security Gateway bottlenecks.</div>
+                <div class="cluster-path"><span class="arrow">→</span> vSAEGW <span class="arrow">→</span> <span
+                        class="root">Juniper SRX</span> <span class="arrow">→</span> SBC</div>
+            </div>
+            <div class="cluster-card" style="border-left: 4px solid var(--amber)">
+                <h4><span class="cdot" style="background:var(--amber)"></span>Cluster B — Data</h4>
+                <div class="cluster-desc">12 alarms trace to a Diameter signaling loop.</div>
+                <div class="cluster-path"><span class="arrow">→</span> vMME <span class="arrow">→</span> <span
+                        class="root">BroadForward DRA</span> <span class="arrow">→</span> DNS</div>
+            </div>
+            <div class="cluster-card" style="border-left: 4px solid var(--green)">
+                <h4><span class="cdot" style="background:var(--green)"></span>Cluster C — Messaging</h4>
+                <div class="cluster-desc">9 alarms spanning VAS and virtualisation layers.</div>
+                <div class="cluster-path"><span class="arrow">→</span> <span class="root">vMSG-GW</span> <span
+                        class="arrow">→</span> VNFM <span class="arrow">→</span> RHOSP</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 3: deep dive -->
+    <div class="section" id="s3">
+        <div class="section-tag">Phase 04 · Root Cause Chain</div>
+        <h2>Logic Trace: Cluster A</h2>
+        <div class="subtitle">How Pedkai "thinks" from the customer down to the silicon.</div>
+        <div class="chain-wrap">
+            <div class="chain-step active" data-layer="OSS">
+                <div class="chain-title">EXFO CEM — User Experience Alert</div>
+                <div class="chain-detail">VoIP MOS dropped from <span class="chain-metric ok">4.2</span> to <span
+                        class="chain-metric bad">1.3</span>. Pattern: 5s drop. Signal is <span
+                        class="hl">EXCELLENT</span>.</div>
+            </div>
+            <div class="chain-step active" data-layer="EMS">
+                <div class="chain-title">EMS Correlation — Signalling vs Media</div>
+                <div class="chain-detail">SBC reports SIP 200 OK (Connect) but <span class="alert">RTP Timeout</span>
+                    (No Audio). Path disconnect at SecGW found.</div>
+            </div>
+            <div class="chain-step root" data-layer="INFRA">
+                <div class="chain-title">⚠ Juniper SRX 5800 — Table Exhaustion</div>
+                <div class="chain-detail"><span class="alert">Session table at 95.2%</span>. New media pinholes failing.
+                    Cause: Stale sessions from previous DDoS event.</div>
+            </div>
+            <div class="chain-step active" data-layer="AI">
+                <div class="chain-title">Decision Memory — Fix Found</div>
+                <div class="chain-detail">Match: <span class="hl">INC-2024-008</span> (S: <span class="hl">0.91</span>).
+                    Action: Flush + Rebalance. Success Rate: <span class="hl">98%</span>.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 4: resolution -->
+    <div class="section" id="s4">
+        <div class="section-tag">Phase 05 · Remediation</div>
+        <h2>Coordinated Autonomous Action</h2>
+        <div class="subtitle">Pedkai resolves multiple incidents in parallel across domains.</div>
+        <div class="resolution-grid">
+            <div class="res-card">
+                <h4>Cluster A: SRX Flush <span class="badge auto">AUTO</span></h4>
+                <div class="action">Purge 42k stale sessions. Balance load via <span class="hl">F5 LTM</span>.</div>
+                <div class="result">✓ Recovered in 12s</div>
+            </div>
+            <div class="res-card">
+                <h4>Cluster B: DRA Rollback <span class="badge auto">AUTO</span></h4>
+                <div class="action">Revert <span class="hl">BroadForward BFX</span> table to snapshot.</div>
+                <div class="result">✓ Loop broken in 8s</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 5: transformation -->
+    <div class="section" id="s5">
+        <div class="section-tag">Phase 06 · The Outcome</div>
+        <h2>Strategic Transformation</h2>
+        <div class="subtitle">Telco efficiency transformed by AI-native ops.</div>
+        <table class="transform-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Legacy Ops</th>
+                    <th>Pedkai Ops</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="metric-label">MTTR (Root Cause)</td>
+                    <td class="before">47 Minutes</td>
+                    <td class="after">12 Seconds</td>
+                </tr>
+                <tr>
+                    <td class="metric-label">Cross-Domain View</td>
+                    <td class="before">Manual Silos</td>
+                    <td class="after">Graph-Native</td>
+                </tr>
+                <tr>
+                    <td class="metric-label">Impact Awareness</td>
+                    <td class="before">Reactive</td>
+                    <td class="after">Revenue-at-Risk</td>
+                </tr>
+                <tr>
+                    <td class="metric-label">Staffing</td>
+                    <td class="before">Domain Teams</td>
+                    <td class="after">1 Orchestrator</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- BOTTOM NAV -->
+    <div class="bottom-nav">
+        <button class="prev" onclick="prevSection()">← Previous</button>
+        <div class="dots" id="dots"></div>
+        <button class="next" onclick="nextSection()">Next →</button>
+        <div class="progress-label" id="progressLabel">01 / 06</div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+
+            document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '🔆' : '🌙';
+            document.getElementById('theme-text').innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+        }
+
+        const ALARMS = [
+            // Cluster A: VoLTE (IMS/SecGW)
+            { sev: 'critical', time: '14:31', source: 'SBC-A01', msg: 'RTP session timeout threshold exceeded', domain: 'IMS', cluster: 'a' },
+            { sev: 'critical', time: '14:31', source: 'SBC-A02', msg: 'S-CSCF connectivity lost', domain: 'IMS', cluster: 'a' },
+            { sev: 'critical', time: '14:31', source: 'vCSCF-01', msg: 'SIP BYE storm detected — 340 drops', domain: 'IMS', cluster: 'a' },
+            { sev: 'critical', time: '14:30', source: 'SecGW-01', msg: 'Session table utilisation 95.2%', domain: 'IP&Sec', cluster: 'a' },
+            { sev: 'major', time: '14:32', source: 'SBC-B01', msg: 'Media plane packet loss > 5%', domain: 'IMS', cluster: 'a' },
+            { sev: 'critical', time: '14:30', source: 'vMGW-04', msg: 'H.248 transaction timeout', domain: 'IMS', cluster: 'a' },
+            { sev: 'major', time: '14:31', source: 'vP-CSCF-02', msg: 'Register delay > 2500ms', domain: 'IMS', cluster: 'a' },
+            { sev: 'critical', time: '14:30', source: 'SBC-Proxy', msg: 'TLS Handshake failure pool exhaust', domain: 'IMS', cluster: 'a' },
+            { sev: 'major', time: '14:33', source: 'SecGW-02', msg: 'IKEv2 SA negotiation failure', domain: 'IP&Sec', cluster: 'a' },
+            { sev: 'critical', time: '14:30', source: 'vHSS-01', msg: 'LUA authentication failure (S6a)', domain: 'IMS', cluster: 'a' },
+            { sev: 'major', time: '14:31', source: 'IMS-Coresw-01', msg: 'Ingress queue drop on VLAN-VoLTE', domain: 'SDN', cluster: 'a' },
+            { sev: 'critical', time: '14:30', source: 'vTAS-01', msg: 'SIP Invite timeout downstream', domain: 'IMS', cluster: 'a' },
+            { sev: 'major', time: '14:32', source: 'SBC-Edge-01', msg: 'Transcoding resource low', domain: 'IMS', cluster: 'a' },
+            { sev: 'minor', time: '14:31', source: 'vEMS-IMS', msg: 'SNMP trap overflow from SBC pool', domain: 'IMS', cluster: 'a' },
+            { sev: 'minor', time: '14:32', source: 'vMGW-01', msg: 'Echo cancellation logic restart', domain: 'IMS', cluster: 'a' },
+
+            // Cluster B: Data (EPC/DRA)
+            { sev: 'major', time: '14:35', source: 'ePG-01', msg: 'Diameter CCR timeout — Gx failure', domain: 'ePC', cluster: 'b' },
+            { sev: 'critical', time: '14:34', source: 'DRA-01', msg: 'Diameter request rate 3.5x boost', domain: 'SDM', cluster: 'b' },
+            { sev: 'critical', time: '14:34', source: 'DRA-02', msg: 'Diameter Circular Routing detected', domain: 'SDM', cluster: 'b' },
+            { sev: 'major', time: '14:35', source: 'vHSS-02', msg: 'Diameter stack resource exhaust', domain: 'SDM', cluster: 'b' },
+            { sev: 'major', time: '14:36', source: 'vPCRF-01', msg: 'Policy Gx Gx* mismatch retry', domain: 'SDM', cluster: 'b' },
+            { sev: 'critical', time: '14:34', source: 'DRA-Gateway', msg: 'Origin-Host mismatch drop', domain: 'SDM', cluster: 'b' },
+            { sev: 'major', time: '14:35', source: 'ePG-02', msg: 'GTP-C response timeout V-PLMN', domain: 'ePC', cluster: 'b' },
+            { sev: 'minor', time: '14:36', source: 'vMME-01', msg: 'S6a interface flap detected', domain: 'SDM', cluster: 'b' },
+            { sev: 'major', time: '14:35', source: 'vPCRF-02', msg: 'Gx session table sync delay', domain: 'SDM', cluster: 'b' },
+            { sev: 'major', time: '14:34', source: 'STP-01', msg: 'Diameter/MAP interworking failure', domain: 'SDM', cluster: 'b' },
+            { sev: 'minor', time: '14:37', source: 'vPGW-03', msg: 'Paging rate limit active', domain: 'ePC', cluster: 'b' },
+            { sev: 'major', time: '14:35', source: 'DRA-01', msg: 'Diameter message queue > 80%', domain: 'SDM', cluster: 'b' },
+
+            // Cluster C: Messaging (VAS)
+            { sev: 'major', time: '14:30', source: 'vMSG-GW', msg: 'SMPP outbound bind failure', domain: 'VAS', cluster: 'c' },
+            { sev: 'critical', time: '14:31', source: 'SMSC-01', msg: 'MAP SendRoutingInfo reject', domain: 'VAS', cluster: 'c' },
+            { sev: 'major', time: '14:32', source: 'VNFM-01', msg: 'VDU Scale-out failed (RHOSP timeout)', domain: 'NFVI', cluster: 'c' },
+            { sev: 'major', time: '14:30', source: 'vMMSC-01', msg: 'Content Store IOPS limit reached', domain: 'VAS', cluster: 'c' },
+            { sev: 'minor', time: '14:33', source: 'VNFM-02', msg: 'Heat stack delete failed', domain: 'NFVI', cluster: 'c' },
+            { sev: 'major', time: '14:31', source: 'OAM-VAS', msg: 'Licensing server heart-beat lost', domain: 'OSS', cluster: 'c' },
+            { sev: 'minor', time: '14:32', source: 'RHOSP-Node-08', msg: 'Memory bank parity error non-fatal', domain: 'NFVI', cluster: 'c' },
+            { sev: 'major', time: '14:30', source: 'vMSG-GW', msg: 'Diameter Gy/Ro quota timeout', domain: 'VAS', cluster: 'c' },
+            { sev: 'minor', time: '14:33', source: 'vTAS-04', msg: 'MMS over IMS legacy fallback', domain: 'VAS', cluster: 'c' },
+
+            // Noise (Uncorrelated)
+            { sev: 'minor', time: '14:30', source: 'ACI-01', msg: 'Leaf nodes reporting normal traffic', domain: 'SDN', cluster: 'noise' },
+            { sev: 'minor', time: '14:28', source: 'vDPI-01', msg: 'Signature update complete', domain: 'DPI', cluster: 'noise' },
+            { sev: 'minor', time: '14:29', source: 'EMS-Core', msg: 'Backup job started — Site-D', domain: 'OSS', cluster: 'noise' },
+            { sev: 'minor', time: '14:31', source: 'vMME-04', msg: 'System clock drift recalibrated', domain: 'ePC', cluster: 'noise' },
+            { sev: 'minor', time: '14:32', source: 'RNC-09', msg: 'Non-fatal CPU utilization spike 40%', domain: 'RAN', cluster: 'noise' },
+            { sev: 'minor', time: '14:30', source: 'OSS-DB', msg: 'Log rotation executed successfully', domain: 'OSS', cluster: 'noise' },
+            { sev: 'minor', time: '14:33', source: 'NTP-A', msg: 'Symmetric peer connectivity changed', domain: 'INFRA', cluster: 'noise' },
+            { sev: 'minor', time: '14:25', source: 'FW-D01', msg: 'Rule-set audit check passed', domain: 'SEC', cluster: 'noise' },
+            { sev: 'minor', time: '14:35', source: 'vTAS-09', msg: 'Idle resource cleanup active', domain: 'IMS', cluster: 'noise' },
+            { sev: 'minor', time: '14:34', source: 'SBC-C01', msg: 'Certificate expiry in 45 days', domain: 'IMS', cluster: 'noise' },
+            { sev: 'minor', time: '14:30', source: 'vMGW-09', msg: 'Chassis ambient temperature nominal', domain: 'IMS', cluster: 'noise' }
+        ];
+
+        let current = 0;
+        const TOTAL = 6;
+
+        function buildAlarmRows(containerId, clustered) {
+            const container = document.getElementById(containerId);
+            ALARMS.forEach(a => {
+                const row = document.createElement('div');
+                row.className = 'alarm-row' + (clustered ? (' ' + (a.cluster === 'noise' ? 'noise' : 'cluster-' + a.cluster)) : '');
+                row.innerHTML = `<span class="sev ${a.sev}"></span><span class="time">${a.time}</span><span class="source">${a.source}</span><span class="msg">${a.msg}</span><span class="domain">${a.domain}</span>`;
+                container.appendChild(row);
+            });
+        }
+
+        function goSection(idx) {
+            if (idx < 0 || idx >= TOTAL) return;
+            current = idx;
+            document.querySelectorAll('.section').forEach((s, i) => s.classList.toggle('visible', i === idx));
+            document.querySelectorAll('.sec-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+            document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+            document.getElementById('progressLabel').textContent = String(idx + 1).padStart(2, '0') + ' / ' + String(TOTAL).padStart(2, '0');
+        }
+
+        function prevSection() { goSection(current - 1); }
+        function nextSection() { goSection(current + 1); }
+
+        (function init() {
+            const dots = document.getElementById('dots');
+            for (let i = 0; i < TOTAL; i++) {
+                const d = document.createElement('div');
+                d.className = 'dot' + (i === 0 ? ' active' : '');
+                d.onclick = () => goSection(i);
+                dots.appendChild(d);
+            }
+            buildAlarmRows('alarmList', false);
+            buildAlarmRows('clusteredList', true);
+        })();
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextSection();
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prevSection();
+        });
+    </script>
+</body>
+
+</html>

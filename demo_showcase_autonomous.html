@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pedkai — Autonomous Business Shield Showcase</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      transition: background 0.3s, border-color 0.3s;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+
+    :root {
+      --bg: #020617;
+      --surface: rgba(15, 23, 42, .7);
+      --border: rgba(51, 65, 85, .5);
+      --cyan: #06b6d4;
+      --rose: #f43f5e;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --purple: #a78bfa;
+      --slate: #94a3b8;
+      --white: #f1f5f9;
+      --gauge-bg: rgba(2, 6, 23, .6);
+      --sitrep-bg: rgba(6, 182, 212, .08);
+      --sitrep-border: rgba(6, 182, 212, .3);
+    }
+
+    [data-theme="light"] {
+      --bg: #f1f5f9;
+      --surface: rgba(255, 255, 255, .8);
+      --border: rgba(203, 213, 225, .8);
+      --white: #1e293b;
+      --slate: #64748b;
+      --gauge-bg: rgba(255, 255, 255, .9);
+      --sitrep-bg: rgba(6, 182, 212, .05);
+      --sitrep-border: rgba(6, 182, 212, .2);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden
+    }
+
+    /* THEME TOGGLE */
+    .theme-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      color: var(--white);
+      font-size: .75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .3);
+      backdrop-filter: blur(10px)
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 24px
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px
+    }
+
+    header h1 {
+      font-size: 2.4rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -1px
+    }
+
+    [data-theme="light"] header h1 {
+      -webkit-text-fill-color: initial;
+      color: #0891b2;
+      background: none;
+    }
+
+    header p {
+      color: var(--slate);
+      margin-top: 8px;
+      font-size: .95rem
+    }
+
+    /* Timeline */
+    .timeline {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 48px;
+      position: relative
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 8%;
+      right: 8%;
+      height: 2px;
+      background: var(--border);
+      z-index: 0
+    }
+
+    .act {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+      cursor: pointer;
+      flex: 1;
+      max-width: 140px;
+      transition: all .4s
+    }
+
+    .act-dot {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .75rem;
+      font-weight: 900;
+      transition: all .5s;
+      color: var(--slate)
+    }
+
+    .act.active .act-dot {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      color: white;
+      box-shadow: 0 0 20px rgba(6, 182, 212, .5)
+    }
+
+    [data-theme="light"] .act.active .act-dot {
+      color: white;
+    }
+
+    .act.done .act-dot {
+      background: var(--emerald);
+      border-color: var(--emerald);
+      color: white
+    }
+
+    .act-label {
+      font-size: .65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--slate);
+      text-align: center;
+      transition: color .3s
+    }
+
+    .act.active .act-label {
+      color: var(--cyan)
+    }
+
+    .act.done .act-label {
+      color: var(--emerald)
+    }
+
+    /* Stage Area */
+    .stage {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      min-height: 420px;
+      backdrop-filter: blur(20px);
+      position: relative;
+      overflow: hidden;
+      transition: opacity .4s
+    }
+
+    .stage::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent)
+    }
+
+    .stage-title {
+      font-size: 1.4rem;
+      font-weight: 900;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .03em
+    }
+
+    .stage-sub {
+      color: var(--slate);
+      font-size: .85rem;
+      margin-bottom: 32px
+    }
+
+    /* Topology SVG */
+    .topology {
+      display: flex;
+      justify-content: center;
+      margin: 24px 0
+    }
+
+    .topo-node {
+      transition: all .6s
+    }
+
+    .topo-node text {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 11px;
+      fill: var(--white)
+    }
+
+    .topo-node .label {
+      font-size: 9px;
+      fill: var(--slate);
+      font-weight: 600
+    }
+
+    .topo-edge {
+      stroke: var(--border);
+      stroke-width: 2;
+      fill: none;
+      transition: all .6s
+    }
+
+    .topo-edge.alert {
+      stroke: var(--rose);
+      stroke-width: 3;
+      stroke-dasharray: 8 4;
+      animation: dashflow 1s linear infinite
+    }
+
+    @keyframes dashflow {
+      to {
+        stroke-dashoffset: -12
+      }
+    }
+
+    /* KPI Gauges */
+    .gauges {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 24px 0
+    }
+
+    .gauge {
+      background: var(--gauge-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 28px;
+      text-align: center;
+      min-width: 160px;
+      transition: all .5s;
+      box-shadow: var(--border) 0 4px 6px -1px;
+    }
+
+    .gauge.alert {
+      border-color: var(--rose);
+      box-shadow: 0 0 20px rgba(244, 63, 94, .15)
+    }
+
+    .gauge-label {
+      font-size: .65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--slate);
+      margin-bottom: 8px
+    }
+
+    .gauge-value {
+      font-size: 2rem;
+      font-weight: 900;
+      transition: color .4s
+    }
+
+    .gauge-unit {
+      font-size: .7rem;
+      color: var(--slate);
+      font-weight: 600
+    }
+
+    /* SITREP Card */
+    .sitrep {
+      background: var(--sitrep-bg);
+      border: 1px solid var(--sitrep-border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 700px;
+      margin: 24px auto
+    }
+
+    .sitrep h3 {
+      font-size: .75rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sitrep p {
+      font-size: .85rem;
+      line-height: 1.7;
+      color: var(--white);
+      opacity: .9
+    }
+
+    .sitrep .highlight {
+      color: var(--cyan);
+      font-weight: 700
+    }
+
+    .sitrep .warning {
+      color: var(--rose);
+      font-weight: 700
+    }
+
+    /* Alarm Cascade */
+    .alarms {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 500px;
+      margin: 16px auto
+    }
+
+    .alarm-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(244, 63, 94, .06);
+      border: 1px solid rgba(244, 63, 94, .2);
+      border-radius: 10px;
+      padding: 10px 16px;
+      opacity: 0;
+      transform: translateX(-20px);
+      animation: slideIn .4s forwards
+    }
+
+    .alarm-row .severity {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--rose);
+      flex-shrink: 0
+    }
+
+    .alarm-row .alarm-text {
+      font-size: .78rem;
+      font-weight: 600;
+      flex: 1
+    }
+
+    .alarm-row .alarm-time {
+      font-size: .65rem;
+      color: var(--slate);
+      font-weight: 600
+    }
+
+    @keyframes slideIn {
+      to {
+        opacity: 1;
+        transform: translateX(0)
+      }
+    }
+
+    /* Learning Loop */
+    .learning {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 24px 0
+    }
+
+    .learn-card {
+      background: rgba(16, 185, 129, .06);
+      border: 1px solid rgba(16, 185, 129, .25);
+      border-radius: 14px;
+      padding: 20px 24px;
+      flex: 1;
+      min-width: 200px;
+      max-width: 280px
+    }
+
+    .learn-card h4 {
+      font-size: .7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--emerald);
+      margin-bottom: 8px
+    }
+
+    .learn-card p {
+      font-size: .8rem;
+      line-height: 1.6;
+      color: var(--white);
+      opacity: .85
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 32px
+    }
+
+    .controls button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--white);
+      padding: 10px 28px;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: all .3s;
+      text-transform: uppercase;
+      letter-spacing: .06em
+    }
+
+    .controls button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan)
+    }
+
+    .controls button.primary {
+      background: var(--cyan);
+      color: white;
+      border-color: var(--cyan)
+    }
+
+    [data-theme="light"] .controls button.primary {
+      color: white;
+    }
+
+    .controls button.primary:hover {
+      background: #22d3ee;
+      box-shadow: 0 0 20px rgba(6, 182, 212, .4)
+    }
+
+    /* Fade animation */
+    .fade-in {
+      animation: fadeIn .6s ease-out
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    /* Badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: .6rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em
+    }
+
+    .badge-rose {
+      background: rgba(244, 63, 94, .15);
+      color: var(--rose);
+      border: 1px solid rgba(244, 63, 94, .3)
+    }
+
+    .badge-cyan {
+      background: rgba(6, 182, 212, .15);
+      color: var(--cyan);
+      border: 1px solid rgba(6, 182, 212, .3)
+    }
+
+    .badge-emerald {
+      background: rgba(16, 185, 129, .15);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, .3)
+    }
+  </style>
+</head>
+
+<body data-theme="dark">
+  <button class="theme-toggle" onclick="toggleTheme()">
+    <span id="theme-icon">🔆</span>
+    <span id="theme-text">Light Mode</span>
+  </button>
+
+  <div class="container">
+    <header>
+      <h1>🛡️ Pedkai — Autonomous Business Shield</h1>
+      <p>Continuous Value Protection • Zero-Impact Autonomous Operations</p>
+    </header>
+
+    <!-- Timeline -->
+    <div class="timeline" id="timeline"></div>
+
+    <!-- Stage -->
+    <div class="stage" id="stage"></div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button id="btnPrev" onclick="prevAct()">← Previous</button>
+      <button id="btnAutoPlay" class="primary" onclick="toggleAutoPlay()">▶ Auto Play</button>
+      <button id="btnNext" onclick="nextAct()">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const body = document.body;
+      const currentTheme = body.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      body.setAttribute('data-theme', newTheme);
+
+      document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '🔆' : '🌙';
+      document.getElementById('theme-text').innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+
+      // Re-render the stage to update any hardcoded colors in SVG or strings
+      renderStage();
+    }
+
+    const ACTS = [
+      { id: 1, label: 'Value Protection', icon: '✓' },
+      { id: 2, label: 'Silent Drift', icon: '〰' },
+      { id: 3, label: 'Prediction', icon: '🔮' },
+      { id: 4, label: 'Correlation', icon: '🔗' },
+      { id: 5, label: 'Auto-Shield', icon: '🛡️' },
+      { id: 6, label: 'Intercepted', icon: '🛑' },
+      { id: 7, label: 'Value Capture', icon: '💰' },
+    ];
+
+    let currentAct = 0;
+    let autoPlayTimer = null;
+
+    function buildTimeline() {
+      const tl = document.getElementById('timeline');
+      tl.innerHTML = ACTS.map((a, i) => `
+    <div class="act ${i < currentAct ? 'done' : ''} ${i === currentAct ? 'active' : ''}" onclick="goToAct(${i})">
+      <div class="act-dot">${a.icon}</div>
+      <div class="act-label">${a.label}</div>
+    </div>
+  `).join('');
+    }
+
+    function renderStage() {
+      const stage = document.getElementById('stage');
+      stage.classList.remove('fade-in');
+      void stage.offsetWidth;
+      stage.classList.add('fade-in');
+
+      switch (currentAct) {
+        case 0: renderNormalOps(stage); break;
+        case 1: renderAnomaly(stage); break;
+        case 2: renderDetection(stage); break;
+        case 3: renderRCA(stage); break;
+        case 4: renderSITREP(stage); break;
+        case 5: renderResolution(stage); break;
+        case 6: renderLearning(stage); break;
+      }
+      buildTimeline();
+    }
+
+    function topoSVG(alertEdge = '', alertNodes = []) {
+      const isLight = document.body.getAttribute('data-theme') === 'light';
+      const nodeDefault = isLight ? '#f1f5f9' : 'rgba(51,65,85,.8)';
+      const nColor = (id) => alertNodes.includes(id) ? 'var(--rose)' : nodeDefault;
+      const eClass = (id) => id === alertEdge ? 'topo-edge alert' : 'topo-edge';
+
+      return `<svg viewBox="0 0 700 160" width="700" height="160" xmlns="http://www.w3.org/2000/svg">
+    <!-- Edges -->
+    <line x1="115" y1="80" x2="245" y2="80" class="${eClass('e1')}"/>
+    <line x1="305" y1="80" x2="425" y2="56" class="${eClass('e2')}"/>
+    <line x1="305" y1="80" x2="425" y2="108" class="${eClass('e3')}"/>
+    <line x1="485" y1="56" x2="595" y2="56" class="${eClass('e4')}"/>
+    <line x1="485" y1="108" x2="595" y2="108" class="${eClass('e5')}"/>
+    <!-- Site -->
+    <g class="topo-node"><rect x="30" y="58" width="80" height="44" rx="8" fill="${nColor('site')}" stroke="var(--border)"/>
+      <text x="70" y="76" text-anchor="middle">Site-ABC</text><text x="70" y="90" text-anchor="middle" class="label">Tower</text></g>
+    <!-- gNodeB -->
+    <g class="topo-node"><rect x="240" y="58" width="80" height="44" rx="8" fill="${nColor('gnb')}" stroke="var(--border)"/>
+      <text x="280" y="76" text-anchor="middle">gNB-042</text><text x="280" y="90" text-anchor="middle" class="label">5G Base Station</text></g>
+    <!-- Cell 1 -->
+    <g class="topo-node"><rect x="420" y="34" width="72" height="44" rx="8" fill="${nColor('c1')}" stroke="var(--border)"/>
+      <text x="456" y="52" text-anchor="middle">Cell-α</text><text x="456" y="66" text-anchor="middle" class="label">Sector 1</text></g>
+    <!-- Cell 2 -->
+    <g class="topo-node"><rect x="420" y="86" width="72" height="44" rx="8" fill="${nColor('c2')}" stroke="var(--border)"/>
+      <text x="456" y="104" text-anchor="middle">Cell-β</text><text x="456" y="118" text-anchor="middle" class="label">Sector 2</text></g>
+    <!-- Customer 1 -->
+    <g class="topo-node"><rect x="590" y="34" width="84" height="44" rx="8" fill="${nColor('cu1')}" stroke="var(--border)"/>
+      <text x="632" y="52" text-anchor="middle">Acme Corp</text><text x="632" y="66" text-anchor="middle" class="label">Gold SLA</text></g>
+    <!-- Customer 2 -->
+    <g class="topo-node"><rect x="590" y="86" width="84" height="44" rx="8" fill="${nColor('cu2')}" stroke="var(--border)"/>
+      <text x="632" y="104" text-anchor="middle">Consumers</text><text x="632" y="118" text-anchor="middle" class="label">Bronze</text></g>
+  </svg>`;
+    }
+
+    function gaugeHTML(label, value, unit, alert = false) {
+      return `<div class="gauge ${alert ? 'alert' : ''}">
+    <div class="gauge-label">${label}</div>
+    <div class="gauge-value" style="color:${alert ? 'var(--rose)' : 'var(--emerald)'}">${value}</div>
+    <div class="gauge-unit">${unit}</div>
+  </div>`;
+    }
+
+    function renderNormalOps(s) {
+      s.innerHTML = `
+    <div class="stage-title">Act 1 — Continuous Value Protection</div>
+    <div class="stage-sub">Pedkai monitors "Business Vitality" across nodes. $4.2M/hr at-risk revenue protected.</div>
+    <div class="topology">${topoSVG()}</div>
+    <div class="gauges">
+      ${gaugeHTML('Rev Density', '$1.2k', '/min')}
+      ${gaugeHTML('DL BLER', '0.1', '%')}
+      ${gaugeHTML('Throughput', '285', 'Mbps')}
+      ${gaugeHTML('Vitality', '99.8', '%')}
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-emerald">Business Status: SHIELDED</span></div>`;
+    }
+
+    function renderAnomaly(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--amber)">Act 2 — Silent Drift Detected</div>
+    <div class="stage-sub">Service Drift detected by Cognitive Fingerprint. Thresholds not yet breached, but trajectory is negative.</div>
+    <div class="topology">${topoSVG('', ['gnb'])}</div>
+    <div class="gauges">
+      ${gaugeHTML('Drift Velocity', '+12%', '/min', true)}
+      ${gaugeHTML('DL BLER', '0.4', '%')}
+      ${gaugeHTML('At-Risk Rev', '$4.2k', '/min', true)}
+      ${gaugeHTML('Vitality', '94.2', '%')}
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-amber">⚠ Pre-Incident Drift Detected</span></div>`;
+    }
+
+    function renderDetection(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--amber)">Act 3 — Autonomous Prediction</div>
+    <div class="stage-sub">Pedkai predicts "Full Disruption" in T-minus 12 minutes based on trajectory.</div>
+    <div class="topology">${topoSVG('e1', ['gnb'])}</div>
+    <div class="alarms">
+      <div class="alarm-row" style="animation-delay:.1s; background:rgba(6,182,212,.06); border-color:rgba(6,182,212,.2)"><div class="severity" style="background:var(--cyan)"></div><div class="alarm-text">Predictive Trigger: MOS < 2.0 expected at 14:42</div><div class="alarm-time">14:30:01</div></div>
+      <div class="alarm-row" style="animation-delay:.4s; background:rgba(6,182,212,.06); border-color:rgba(6,182,212,.2)"><div class="severity" style="background:var(--cyan)"></div><div class="alarm-text">Business Impact Forecast: £45,000 loss predicted</div><div class="alarm-time">14:30:02</div></div>
+      <div class="alarm-row" style="animation-delay:.7s"><div class="severity" style="background:var(--amber)"></div><div class="alarm-text">Change Correlation: CMDB change #8432 identified</div><div class="alarm-time">14:30:03</div></div>
+    </div>`;
+    }
+
+    function renderRCA(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--cyan)">Act 4 — Intelligent Correlation</div>
+    <div class="stage-sub">Pedkai links the drift to an external Change Event at the Secure Gateway.</div>
+    <div class="topology">${topoSVG('e1', ['site', 'gnb'])}</div>
+    <div class="sitrep">
+      <h3>⛓️ External Correlation</h3>
+      <p><span class="highlight">Silent Drift</span> ← <em>matched with</em> ← <span class="highlight">ServiceNow Change #8432</span> ← <em>User:</em> net-admin-js</p>
+      <p style="margin-top:12px"><strong>Root Cause Identified:</strong> Sub-optimal Policy applied to Juniper SRX in Site-ABC.<br>
+      <strong>Prevention Plan:</strong> Revert policy #8432 and stabilize gNB-042 sessions.</p>
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-cyan">Reasoning: Policy Trajectory granger-causes Capacity exhaustion</span></div>`;
+    }
+
+    function renderSITREP(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--purple)">Act 5 — Autonomous Shielding</div>
+    <div class="stage-sub">Pedkai triggers autonomous remediation. Change Reversal initiated.</div>
+    <div class="sitrep" style="max-width:750px">
+      <h3>📋 Autonomous Shield — EXECUTION</h3>
+      <p><strong>Action:</strong> Reverting policy change #8432 via Netconf/YANG on Juniper SR-01.</p>
+      <p style="margin-top:12px"><strong>Constraint Check:</strong> Change within safety-buffer? <span class="highlight">YES</span>. Impact on adjacent nodes? <span class="highlight">NEGIGIBLE</span>.</p>
+      <p style="margin-top:12px"><strong>Business Outcome:</strong> Incident intercepted. Expected Service Desk Calls: <span class="highlight">0</span>. Revenue saved: <span class="highlight">£45,300</span>.</p>
+      <p style="margin-top:8px;font-size:.75rem;color:var(--emerald)">✅ SHIELD ACTIVE: Autonomous pre-emption prevents customer visibility.</p>
+    </div>`;
+    }
+
+    function renderResolution(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--emerald)">Act 6 — Incident Intercepted</div>
+    <div class="stage-sub">Remediation successful. Service Desk dashboard remained GREEN throughout.</div>
+    <div class="topology">${topoSVG()}</div>
+    <div class="gauges">
+      ${gaugeHTML('Vitality', '99.9', '%')}
+      ${gaugeHTML('Value Shield', '100', '%')}
+      ${gaugeHTML('Intercepts', '1', 'AUTO')}
+      ${gaugeHTML('MTTI', '1.2', 's')}
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-emerald">✓ Incident Prevented — Zero Customer Impact</span></div>
+    <div style="text-align:center;margin-top:12px;font-size:.78rem;color:var(--slate)">Pedkai intercepted the failure 11 minutes before it would have impacted users.</div>`;
+    }
+
+    function renderLearning(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--emerald)">Act 7 — Value Learning & ROI</div>
+    <div class="stage-sub">Pedkai quantifies the business value of the autonomous shield.</div>
+    <div class="learning">
+      <div class="learn-card">
+        <h4>💵 Revenue Protected</h4>
+        <p>£45,300 in predicted loss prevented. ROI of this single autonomous action calculated at 12.4x monthly sub.</p>
+      </div>
+      <div class="learn-card">
+        <h4>🔗 Fingerprint Match</h4>
+        <p>Policy #8432 tagged as "High Drift Risk." Future pushes will be proactively simulated by Pedkai's Digital Twin.</p>
+      </div>
+      <div class="learn-card">
+        <h4>🧘 Zero NOC Toil</h4>
+        <p>Bridge remained autonomous. 0 manual tickets created. NOC resources remained focused on site build outs.</p>
+      </div>
+    </div>
+    <div class="sitrep" style="border-color:rgba(16,185,129,.3);background:linear-gradient(135deg,rgba(16,185,129,.06),rgba(6,182,212,.06))">
+      <h3 style="color:var(--emerald)">💰 Total Autonomous Value (24h)</h3>
+      <p><strong>Incidents Intercepted:</strong> 12<br>
+      <strong>Average MTTR Reduction:</strong> 94%<br>
+      <strong>Calculated ROI:</strong> <span class="highlight">£242,000</span> saved in OpEx and SLA Penalties.<br>
+      Pedkai has evolved from "Observability" to <strong>"Business Shielding"</strong>.</p>
+    </div>`;
+    }
+
+    function goToAct(i) { currentAct = i; renderStage(); }
+    function nextAct() { if (currentAct < 6) { currentAct++; renderStage(); } else { stopAutoPlay(); } }
+    function prevAct() { if (currentAct > 0) { currentAct--; renderStage(); } }
+
+    function toggleAutoPlay() {
+      if (autoPlayTimer) { stopAutoPlay(); }
+      else {
+        document.getElementById('btnAutoPlay').textContent = '⏸ Pause';
+        autoPlayTimer = setInterval(() => {
+          if (currentAct < 6) { nextAct(); } else { stopAutoPlay(); }
+        }, 3500);
+      }
+    }
+    function stopAutoPlay() {
+      clearInterval(autoPlayTimer); autoPlayTimer = null;
+      document.getElementById('btnAutoPlay').textContent = '▶ Auto Play';
+    }
+
+    renderStage();
+  </script>
+</body>
+
+</html>

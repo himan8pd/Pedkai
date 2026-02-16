@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedkai Reference Core Network Architecture</title>
+    <style>
+        :root {
+            /* DARK THEME (Default) */
+            --bg: #0a0e1a;
+            --bg-alt: #0d1225;
+            --text: #c8d6e5;
+            --text-muted: #5a6f90;
+            --text-dim: #3a4f70;
+            --border: #1a2540;
+            --card-bg: rgba(20, 30, 60, 0.4);
+            --glass: rgba(12, 18, 40, 0.85);
+            --cyan: #00d4ff;
+            --red: #ff3b5c;
+            --amber: #ffb84d;
+            --green: #00e676;
+            --purple: #b388ff;
+            --blue: #4080c0;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="light"] {
+            --bg: #f5f7fa;
+            --bg-alt: #ffffff;
+            --text: #2d3436;
+            --text-muted: #636e72;
+            --text-dim: #b2bec3;
+            --border: #dfe6e9;
+            --card-bg: rgba(255, 255, 255, 0.7);
+            --glass: rgba(255, 255, 255, 0.9);
+            --cyan: #0099cc;
+            --red: #d63031;
+            --amber: #e67e22;
+            --green: #27ae60;
+            --purple: #6c5ce7;
+            --blue: #2980b9;
+            --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            line-height: 1.5;
+        }
+
+        /* THEME TOGGLE */
+        .theme-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 2000;
+            background: var(--bg-alt);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            color: var(--text);
+            font-size: 0.75rem;
+            font-weight: 600;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--cyan);
+        }
+
+        /* HEADER */
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        [data-theme="light"] .header h1 {
+            -webkit-text-fill-color: initial;
+            background: none;
+            color: var(--blue);
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header .v-stamp {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* ARCHITECTURE CONTAINER */
+        .arch-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        /* SERVICE BANDS */
+        .band {
+            background: var(--glass);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 30px;
+            position: relative;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .band-label {
+            position: absolute;
+            top: -12px;
+            left: 30px;
+            background: var(--bg);
+            padding: 0 12px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--cyan);
+            border-radius: 4px;
+        }
+
+        /* LAYER GROUPS */
+        .layer-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .layer-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 24px;
+            padding: 10px 0;
+            border-bottom: 1px dashed var(--border);
+        }
+
+        .layer-row:last-child {
+            border-bottom: none;
+        }
+
+        .layer-info {
+            width: 140px;
+            flex-shrink: 0;
+        }
+
+        .layer-info h3 {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .layer-info p {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        .nodes {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        /* NODE STYLES */
+        .node {
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-alt);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-width: 120px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .node:hover {
+            transform: translateY(-3px);
+            border-color: var(--cyan);
+            box-shadow: 0 10px 20px rgba(0, 212, 255, 0.1);
+        }
+
+        .node .node-name {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .node .node-sub {
+            font-size: 0.58rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* COLOR CODING */
+        .node.oss {
+            border-left: 3px solid var(--blue);
+        }
+
+        .node.ems {
+            border-left: 3px solid #508090;
+        }
+
+        .node.tx {
+            border-left: 3px solid var(--purple);
+        }
+
+        .node.vas {
+            border-left: 3px solid var(--green);
+        }
+
+        .node.ims {
+            border-left: 3px solid #b388ff;
+        }
+
+        .node.sdm {
+            border-left: 3px solid var(--amber);
+        }
+
+        .node.sec {
+            border-left: 3px solid var(--red);
+        }
+
+        .node.epc {
+            border-left: 3px solid var(--cyan);
+        }
+
+        .node.infra {
+            border-left: 3px solid #6070a0;
+        }
+
+        /* GLOSSARY */
+        .glossary {
+            margin-top: 80px;
+            background: var(--bg-alt);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px;
+        }
+
+        .glossary h2 {
+            font-size: 1.4rem;
+            font-weight: 800;
+            margin-bottom: 24px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .glossary h2::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .glossary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .gloss-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .gloss-item dt {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--cyan);
+        }
+
+        .gloss-item dd {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* PRINT */
+        @media print {
+            .theme-toggle {
+                display: none;
+            }
+
+            body {
+                background: white;
+                padding: 20mm;
+            }
+
+            .band {
+                box-shadow: none;
+                border: 1px solid #eee;
+                background: white;
+                page-break-inside: avoid;
+            }
+
+            .node {
+                background: white;
+                border: 1px solid #ddd;
+            }
+        }
+
+        /* DECORATIVE ELEMENTS */
+        .pillar {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, transparent, var(--border), transparent);
+            z-index: -1;
+        }
+
+        .pillar-1 {
+            left: 160px;
+        }
+
+        /* INFO CALLOUT (PowerPoint Style) */
+        #nodeCallout {
+            display: none;
+            position: absolute;
+            z-index: 3000;
+            background: var(--glass);
+            border: 1.5px solid var(--cyan);
+            border-radius: 12px;
+            padding: 16px;
+            max-width: 320px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(20px);
+            pointer-events: auto;
+            animation: calloutPop .2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes calloutPop {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        #nodeCallout h2 {
+            font-size: 0.95rem;
+            color: var(--cyan);
+            margin-bottom: 6px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #nodeCallout p {
+            font-size: 0.8rem;
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        /* Callout Arrow */
+        #nodeCallout::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 8px 8px 0;
+            border-style: solid;
+            border-color: var(--cyan) transparent transparent;
+        }
+
+        #nodeCallout.pos-top::after {
+            bottom: -8px;
+            top: auto;
+            border-width: 8px 8px 0;
+            border-color: var(--cyan) transparent transparent;
+        }
+
+        #nodeCallout.pos-bottom::after {
+            top: -8px;
+            bottom: auto;
+            border-width: 0 8px 8px;
+            border-color: transparent transparent var(--cyan);
+        }
+    </style>
+</head>
+
+<body data-theme="dark">
+
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🔆</span>
+        <span id="theme-text">Switch to Light Mode</span>
+    </button>
+
+    <div class="header">
+        <h1>Pedkai Reference Architecture</h1>
+        <p>A comprehensive functional map of a modern, AI-integrated telco network core. 11 logic layers, 62 network
+            functions, 7 service domains.</p>
+        <div class="v-stamp">Version 2.1 • Pedkai Autonomous OS • February 2026</div>
+    </div>
+
+    <div class="arch-grid">
+        <div class="pillar pillar-1"></div>
+
+        <!-- OPERATIONS BLOCK -->
+        <div class="band">
+            <div class="band-label">Management & Orchestration</div>
+            <div class="layer-group">
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>OSS Layer</h3>
+                        <p>Business & Service Logic</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node oss" onclick="showNodeInfo('ServiceNow')"><span
+                                class="node-name">ServiceNow</span><span class="node-sub">ITSM &
+                                Workflow</span></div>
+                        <div class="node oss"><span class="node-name">Netcracker</span><span class="node-sub">Assurance
+                                & Flow</span></div>
+                        <div class="node oss"><span class="node-name">EXFO CEM</span><span class="node-sub">Customer
+                                Experience</span></div>
+                        <div class="node oss"><span class="node-name">TEOCO</span><span class="node-sub">Performance
+                                Mgmt</span></div>
+                        <div class="node oss"><span class="node-name">Amdocs</span><span class="node-sub">Unified
+                                Inventory</span></div>
+                        <div class="node oss"><span class="node-name">Veritas</span><span class="node-sub">Archive &
+                                Backup</span></div>
+                    </div>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>EMS Layer</h3>
+                        <p>Element Management</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node ems"><span class="node-name">Ericsson ENM</span><span class="node-sub">Core &
+                                SDM Domain EMS</span></div>
+                        <div class="node ems"><span class="node-name">Ribbon E-Manager</span><span class="node-sub">SBC
+                                & IMS Mgmt</span></div>
+                        <div class="node ems"><span class="node-name">AudioCodes OVOC</span><span class="node-sub">Media
+                                Gateway EMS</span></div>
+                        <div class="node ems"><span class="node-name">Cisco Prime Infra</span><span class="node-sub">EPC
+                                & Access EMS</span></div>
+                        <div class="node ems"><span class="node-name">BFX Manager</span><span
+                                class="node-sub">Diameter/Signaling Mgr</span></div>
+                        <div class="node ems"><span class="node-name">Infinera Transcend</span><span
+                                class="node-sub">Optical Core EMS</span></div>
+                        <div class="node ems"><span class="node-name">ADVA Ensemble</span><span
+                                class="node-sub">Metro/Edge EMS</span></div>
+                        <div class="node ems"><span class="node-name">Comverse Insight</span><span class="node-sub">VAS
+                                Domain EMS</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CORE SERVICES BLOCK -->
+        <div class="band">
+            <div class="band-label">Service Core Domains</div>
+            <div class="layer-group">
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>SDM Domain</h3>
+                        <p>Subscriber Data</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node sdm"><span class="node-name">Ericsson HSS-FE</span><span class="node-sub">Home
+                                Subscriber Svr</span></div>
+                        <div class="node sdm"><span class="node-name">Ericsson cuDB</span><span class="node-sub">Unified
+                                Database</span></div>
+                        <div class="node sdm"><span class="node-name">BroadForward BFX</span><span
+                                class="node-sub">Diameter Routing</span></div>
+                        <div class="node sdm"><span class="node-name">Tekelec EAGLE</span><span class="node-sub">SS7
+                                Signal Transfer</span></div>
+                        <div class="node sdm"><span class="node-name">Ericsson EIR</span><span
+                                class="node-sub">Equipment Identity</span></div>
+                        <div class="node sdm"><span class="node-name">Ericsson MNP</span><span class="node-sub">Number
+                                Portability</span></div>
+                    </div>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>IMS Domain</h3>
+                        <p>Voice & Multimedia</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node ims"><span class="node-name">Ribbon SBC 5400</span><span
+                                class="node-sub">Access/Interconnect</span></div>
+                        <div class="node ims"><span class="node-name">Ericsson vCSCF</span><span class="node-sub">Call
+                                Session Control</span></div>
+                        <div class="node ims"><span class="node-name">AudioCodes 9080</span><span class="node-sub">Media
+                                Resource Fn</span></div>
+                        <div class="node ims"><span class="node-name">Ericsson vNTAS</span><span
+                                class="node-sub">Telecom App Server</span></div>
+                        <div class="node ims"><span class="node-name">CSG Intermed.</span><span class="node-sub">CDR
+                                Generation</span></div>
+                        <div class="node ims"><span class="node-name">SS UTProxy</span><span class="node-sub">Suppl.
+                                Services</span></div>
+                    </div>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>VAS Domain</h3>
+                        <p>Messaging & Value</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node vas"><span class="node-name">Comverse ONE</span><span class="node-sub">SMSC /
+                                Router</span></div>
+                        <div class="node vas"><span class="node-name">Syniverse MSG</span><span class="node-sub">MMS
+                                Gateway</span></div>
+                        <div class="node vas"><span class="node-name">Comverse VMS</span><span
+                                class="node-sub">Voicemail Center</span></div>
+                        <div class="node vas"><span class="node-name">Ericsson CBC</span><span class="node-sub">Cell
+                                Broadcast</span></div>
+                        <div class="node vas"><span class="node-name">Infobip GW</span><span class="node-sub">OTT
+                                Messaging</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TRANSPORT & SECURITY BLOCK -->
+        <div class="band">
+            <div class="band-label">Transport, Security & Access</div>
+            <div class="layer-group">
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>IP & Security</h3>
+                        <p>Routing & Defense</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node sec"><span class="node-name">Juniper SRX 5800</span><span
+                                class="node-sub">Security Gateway</span></div>
+                        <div class="node sec"><span class="node-name">F5 BIG-IP LTM</span><span class="node-sub">Load
+                                Balancer</span></div>
+                        <div class="node sec"><span class="node-name">F5 BIG-IP ASM</span><span class="node-sub">WAF /
+                                App Security</span></div>
+                        <div class="node sec"><span class="node-name">Arbor Sightline</span><span class="node-sub">DDoS
+                                Detection</span></div>
+                        <div class="node sec"><span class="node-name">Arbor TMS</span><span class="node-sub">DDoS
+                                Mitigation</span></div>
+                        <div class="node sec"><span class="node-name">Palo Alto 5260</span><span
+                                class="node-sub">Perimeter Firewall</span></div>
+                        <div class="node sec"><span class="node-name">BlueCat DNS</span><span class="node-sub">Global
+                                DNS/DHCP</span></div>
+                        <div class="node sec"><span class="node-name">Cisco ISE</span><span class="node-sub">AAA /
+                                Policy</span></div>
+                    </div>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>ePC Domain</h3>
+                        <p>Mobile Core</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node epc"><span class="node-name">Ericsson vMME</span><span
+                                class="node-sub">Mobility Management</span></div>
+                        <div class="node epc"><span class="node-name">Ericsson vSAEGW</span><span class="node-sub">S-GW
+                                / P-GW</span></div>
+                        <div class="node epc"><span class="node-name">Cisco ASR 5500</span><span
+                                class="node-sub">Enhanced Packet GW</span></div>
+                        <div class="node epc"><span class="node-name">Sandvine PTS</span><span class="node-sub">Policy
+                                Traffic Sw</span></div>
+                    </div>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>Transmission</h3>
+                        <p>Optical Fabric</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node tx"><span class="node-name">Infinera GX G42</span><span
+                                class="node-sub">Photonic Layer</span></div>
+                        <div class="node tx"><span class="node-name">ADVA FSP 3000</span><span class="node-sub">Metro
+                                WDM</span></div>
+                        <div class="node tx"><span class="node-name">Oscilloquartz</span><span class="node-sub">Timing &
+                                Sync</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- INFRASTRUCTURE BLOCK -->
+        <div class="band">
+            <div class="band-label">Cloud Infrastructure & Fabric</div>
+            <div class="layer-group">
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>SDN Fabric</h3>
+                        <p>Network Virtualization</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node infra"><span class="node-name">Cisco ACI APIC</span><span class="node-sub">SDN
+                                Controller</span></div>
+                        <div class="node infra"><span class="node-name">Cisco Nexus 9500</span><span
+                                class="node-sub">Spine/Leaf Switch</span></div>
+                        <div class="node infra"><span class="node-name">Arista 7280R</span><span class="node-sub">DCI
+                                Core Link</span></div>
+                        <div class="node infra"><span class="node-name">Arista CV</span><span class="node-sub">Analytics
+                                Engine</span></div>
+                    </div>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>NFVI / Cloud</h3>
+                        <p>Hypervisor & Orchest.</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node infra"><span class="node-name">RH OpenStack</span><span class="node-sub">Cloud
+                                Platform</span></div>
+                        <div class="node infra"><span class="node-name">VMware VCF</span><span class="node-sub">NFV
+                                Foundation</span></div>
+                        <div class="node infra"><span class="node-name">Wind River TC</span><span
+                                class="node-sub">Real-time Cloud</span></div>
+                        <div class="node infra"><span class="node-name">Ericsson VNFM</span><span class="node-sub">VNF
+                                Life-cycle</span></div>
+                    </div>
+                </div>
+                <div class="layer-row">
+                    <div class="layer-info">
+                        <h3>Hardwire</h3>
+                        <p>Compute Nodes</p>
+                    </div>
+                    <div class="nodes">
+                        <div class="node infra"><span class="node-name">HPE ProLiant</span><span class="node-sub">DL380
+                                Gen10</span></div>
+                        <div class="node infra"><span class="node-name">Dell PowerEdge</span><span
+                                class="node-sub">R750xa Core</span></div>
+                        <div class="node infra"><span class="node-name">Lenovo SR650</span><span
+                                class="node-sub">ThinkSystem Edge</span></div>
+                        <div class="node infra"><span class="node-name">Canonical MAAS</span><span class="node-sub">Bare
+                                Metal Mgmt</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GLOSSARY SECTION -->
+    <div class="glossary">
+        <h2>Technical Glossary</h2>
+        <div class="glossary-grid">
+            <div class="gloss-item">
+                <dt>ServiceNow</dt>
+                <dd>Industry-standard ITSM (IT Service Management) platform for ticketing and incident workflow.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>Netcracker OSS</dt>
+                <dd>Operations Support System for service assurance and order management correlation.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>EXFO CEM</dt>
+                <dd>Customer Experience Management probe system monitoring real-time VoIP/Data quality.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>Ribbon SBC 5400</dt>
+                <dd>Session Border Controller managing SIP signaling and media (RTP) at the network edge.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>AudioCodes OVOC</dt>
+                <dd>One Voice Operations Center - a holistic management system for voice network devices and quality of
+                    service monitoring.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>BroadForward BFX Mgr</dt>
+                <dd>Centralized management for Diameter and Signaling controllers, handling routing logic and subscriber
+                    policy coordination.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>Comverse Insight</dt>
+                <dd>Value Added Services (VAS) analytics and management platform for messaging and voicemail traffic
+                    monitoring.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>Cisco Prime Infra</dt>
+                <dd>Unified management for network access, visibility, and control across wired/wireless and EPC core
+                    domains.</dd>
+            </div>
+            <div class="gloss-item">
+                <dt>RH OpenStack (RHOSP)</dt>
+                <dd>Red Hat OpenStack Platform, the primary virtualization layer (NFVI) for virtualized RAN and Core.
+                </dd>
+            </div>
+        </div>
+    </div>
+
+    <div id="nodeCallout">
+        <h2 id="calloutTitle">Node Info</h2>
+        <p id="calloutBody">Description goes here...</p>
+    </div>
+
+    <script>
+        const GLOSSARY = {
+            'ServiceNow': 'Industry-standard ITSM (IT Service Management) platform for ticketing and incident workflow.',
+            'Netcracker': 'Operations Support System for service assurance and order management correlation.',
+            'EXFO CEM': 'Customer Experience Management probe system monitoring real-time VoIP/Data quality.',
+            'TEOCO': 'Service Assurance solution provider for performance management and fault correlation.',
+            'Amdocs': 'Integrated inventory and orchestration for cross-domain network resources.',
+            'Veritas': 'Enterprise-grade backup and recovery solutions for OSS databases.',
+            'Ericsson ENM': 'Unified element management and infrastructure orchestration for Ericsson core products.',
+            'Ribbon E-Manager': 'Centralized management for Session Border Controllers and IMS elements.',
+            'AudioCodes OVOC': 'One Voice Operations Center - a holistic management system for voice network devices and quality of service monitoring.',
+            'Cisco Prime Infra': 'Unified management for IP access, core network visibility, and device lifecycle.',
+            'BFX Manager': 'Centralized UI for Diameter Routing Agents and Signaling Controllers.',
+            'Infinera Transcend': 'Open SDN orchestration for optical networks and photonic layers.',
+            'ADVA Ensemble': 'Edge and Metro network management focusing on cloud and transport convergence.',
+            'Comverse Insight': 'Analytics and reporting platform for Value Added Services (VAS) and messaging.',
+            'Ericsson HSS-FE': 'Home Subscriber Server front-end for LTE and IMS subscriber management.',
+            'Ericsson cuDB': 'Cloud-native Unified Database for massive scale subscriber data storage.',
+            'BroadForward BFX': 'Advanced Diameter Routing Agent managing signaling between EPC and IMS.',
+            'Tekelec EAGLE': 'Legacy-standard Signaling Transfer Point (STP) for SS7 and GSM signaling.',
+            'Ericsson EIR': 'Equipment Identity Register for verifying mobile device IMEI legitimacy.',
+            'Ericsson MNP': 'Mobile Number Portability database for managing subscriber routing across operators.',
+            'Ribbon SBC 5400': 'Carrier-grade Session Border Controller for secure SIP and media processing.',
+            'Ericsson vCSCF': 'Virtualized Call Session Control Function, the brain of the IMS network.',
+            'AudioCodes 9080': 'High-density Media Resource Function for announcement and conference mixing.',
+            'Ericsson vNTAS': 'Network Telephony Application Server for supplementary voice services.',
+            'CSG Intermed.': 'Mediation platform for gathering usage data (CDRs) for billing systems.',
+            'SS UTProxy': 'Small-cell or supplementary service proxy for IMS architectures.',
+            'Comverse ONE': 'Converged messaging platform for multi-channel SMS and RCS traffic.',
+            'Syniverse MSG': 'Inter-carrier messaging gateway for MMS and international connectivity.',
+            'Comverse VMS': 'Voicemail Server providing traditional and visual voicemail storage.',
+            'Ericsson CBC': 'Cell Broadcast Center for government alerts and location-aware messages.',
+            'Infobip GW': 'CPaaS gateway for bridging telco messaging with OTT application APIs.',
+            'Juniper SRX 5800': 'High-performance Security Gateway providing IPsec tunnels for cell sites.',
+            'F5 BIG-IP LTM': 'Local Traffic Manager providing high-availability load balancing for NFs.',
+            'F5 BIG-IP ASM': 'Application Security Manager (WAF) protecting OSS APIs from external threats.',
+            'Arbor Sightline': 'Global visibility and anomaly detection for large-scale DDoS attacks.',
+            'Arbor TMS': 'Threat Management System for granular scrubbing of malicious traffic.',
+            'Palo Alto 5260': 'Next-gen firewall protecting the Gi/SGi interface from internet attacks.',
+            'BlueCat DNS': 'Mission-critical IP address management and DNS recursion.',
+            'Cisco ISE': 'Identity Services Engine for device-level authentication and policy access (AAA).',
+            'Ericsson vMME': 'Mobility Management Entity handling tracking and paging for LTE users.',
+            'Ericsson vSAEGW': 'Combined S-GW and P-GW for user plane data handling.',
+            'Cisco ASR 5500': 'Core gateway for high-throughput packet processing in LTE/5G.',
+            'Sandvine PTS': 'Policy Traffic Switch for deep packet inspection and traffic shaping.',
+            'Infinera GX G42': 'Open, modular optical transport platform for long-haul core links.',
+            'ADVA FSP 3000': 'WDM transport solution for metro-core and data center interconnects.',
+            'Oscilloquartz': 'Precise synchronization and timing solutions for the whole core network.',
+            'Cisco ACI APIC': 'Application Policy Infrastructure Controller for Software Defined Networking.',
+            'Cisco Nexus 9500': 'Modular data center switch providing spine/leaf fabric connectivity.',
+            'Arista 7280R': 'Universal spine switch for deep-buffer data center interconnects.',
+            'Arista CV': 'CloudVision platform for automated network operations and visualization.',
+            'RH OpenStack': 'Red Hat OpenStack Platform (RHOSP), the cloud OS for carrier-grade VNFs.',
+            'VMware VCF': 'VMware Cloud Foundation, a private cloud solution for telco nfvi.',
+            'Wind River TC': 'Studio Titanium Cloud for low-latency, mission-critical edge computing.',
+            'Ericsson VNFM': 'Virtualized Network Function Manager for lifecycle automation.',
+            'HPE ProLiant': 'Standard compute hardware for hosting virtualized core functions.',
+            'Dell PowerEdge': 'High-density servers optimized for compute-heavy SDM/IMS workloads.',
+            'Lenovo SR650': 'Balanced compute nodes for edge deployments and VAS apps.',
+            'Canonical MAAS': 'Metal as a Service for automated bare metal server provisioning.'
+        };
+
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+
+            document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '🔆' : '🌙';
+            document.getElementById('theme-text').innerText = newTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+        }
+
+        const callout = document.getElementById('nodeCallout');
+        const calloutTitle = document.getElementById('calloutTitle');
+        const calloutBody = document.getElementById('calloutBody');
+
+        function showNodeInfo(name, targetEl) {
+            calloutTitle.innerText = name;
+            calloutBody.innerText = GLOSSARY[name] || `Information for ${name} coming soon.`;
+
+            // Position callout
+            const rect = targetEl.getBoundingClientRect();
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+            callout.style.display = 'block';
+
+            // Default position: above the element
+            let top = rect.top + scrollTop - callout.offsetHeight - 12;
+            let left = rect.left + scrollLeft + (rect.width / 2) - (callout.offsetWidth / 2);
+
+            // Flip to bottom if not enough space above
+            if (rect.top < callout.offsetHeight + 20) {
+                top = rect.bottom + scrollTop + 12;
+                callout.classList.remove('pos-top');
+                callout.classList.add('pos-bottom');
+            } else {
+                callout.classList.remove('pos-bottom');
+                callout.classList.add('pos-top');
+            }
+
+            // Keep within horizontal bounds
+            if (left < 10) left = 10;
+            if (left + callout.offsetWidth > window.innerWidth - 10) {
+                left = window.innerWidth - callout.offsetWidth - 10;
+            }
+
+            callout.style.top = `${top}px`;
+            callout.style.left = `${left}px`;
+        }
+
+        function hideCallout() {
+            callout.style.display = 'none';
+        }
+
+        // Auto-assign click handlers to all nodes
+        document.querySelectorAll('.node').forEach(node => {
+            node.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent immediate dismissal
+                const name = node.querySelector('.node-name').innerText;
+                showNodeInfo(name, node);
+            });
+        });
+
+        // Click outside to hide
+        document.addEventListener('click', (e) => {
+            if (!callout.contains(e.target)) {
+                hideCallout();
+            }
+        });
+
+        // Escape key to hide
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hideCallout();
+            }
+        });
+
+        // Hide on scroll to prevent floating issues
+        window.addEventListener('scroll', hideCallout);
+    </script>
+
+</body>
+
+</html>

@@ -198,3 +198,45 @@
 - [x] [🔴 #15.2] Develop **Policy Engine** (Declarative "Telco Constitution")
 - [x] [🟡 #15.3] Upgrade to **Semantic Context Graph** (Recursive Reasoning)
 - [x] [🟡 #15.4] Implement **Closed-Loop RL Evaluator**
+
+## Phase 16: Sensible Autonomous Rework
+- [x] Implement "Sleeping Cell" comparison diagram in `demo_context_graph*.html`
+- [x] Add layman's "pgvector semantic search" tooltip in `demo_context_graph*.html`
+- [x] Overhaul WhatsApp scenario: "Silent Stabilizer" (Pre-emptive policy drift)
+- [x] Overhaul Banking scenario: "The Financial Interceptor" (Flash sale burst)
+- [x] Overhaul MMS scenario: "Legacy Shield" (Botnet entropy detection)
+- [x] Finalize verification and HTML cleanup (fix duplicate tags/broken comments)
+
+## Phase 17: Sensible Autonomous Rework v2 (Proactive Shield)
+- [x] Rework Bridge Demo scenarios to infrastructure-level proactive prevention
+- [x] Implement "Pedkai Zone vs Non-Pedkai Zone" scorecard in `demo_bridge_autonomous.html`
+- [x] Fix malformed template literals in `demo_context_graph_autonomous.html` (Heatmap fix)
+- [x] Verify proactive logic and heatmap rendering via browser subagent
+
+## Phase 18: Context Graph Diagram Repair
+- [x] Fix malformed HTML comments (`< !--`) in `demo_context_graph_autonomous.html`
+- [x] Verify diagram rendering and heatmap in browser
+- [x] Update walkthrough with final state
+
+## Phase 19: Journey Roadmap Graphic Reconstruction
+- [x] Design and implement a premium SVG "Journey Roadmap" at the top of the demo
+- [x] Sync roadmap state with current navigation logic
+- [x] Verify visual polish and responsiveness
+
+## Phase 20: Technical Tooltip Refinement
+- [x] Professionalize pgvector semantic search tooltip framing
+- [x] Remove "Layman Terms" and simplify/condescending analogies
+- [x] Verify tone and clarity
+
+## Phase 21: Scenario C Revenue Topology Visualization
+- [x] Integrate "Enterprise Financial Topology" into Scenario C
+- [x] Implement `buildRevenueTopo` to force revenue heatmap view
+- [x] Verify visual sync with Acme Corp UK Ltd data
+
+## Phase 22: Synchronize demo_context_graph.html
+- [x] Backport Journey Roadmap SVG & logic
+- [x] Professionalize pgvector tooltip
+- [x] Fix JS template literals & Heatmap logic
+- [x] Integrate Scenario C Revenue Topology
+- [x] Verify functionality & interactive state
+- [x] Cleaned up residual text/broken comments

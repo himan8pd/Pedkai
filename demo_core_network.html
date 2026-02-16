@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedkai — Core Network Intelligence Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            transition: background 0.3s, color 0.3s, border-color 0.3s;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            /* DARK THEME */
+            --bg: #0a0e1a;
+            --text: #c8d6e5;
+            --text-muted: #6b7fa0;
+            --text-dim: #3a4f70;
+            --border: #1a2540;
+            --surface: #0c1020;
+            --surface-alt: #111828;
+            --cyan: #00d4ff;
+            --red: #ff3b5c;
+            --amber: #ffb84d;
+            --green: #00e676;
+            --purple: #b388ff;
+
+            --layer-oss: #1a2a4a;
+            --layer-ems: #1a2545;
+            --layer-svc: #1a2040;
+            --layer-sdn: #1a3035;
+            --layer-nfvi: #1a2535;
+            --layer-infra: #1a1f35;
+
+            --hero-grad: radial-gradient(ellipse at 50% 30%, #0d1b3e 0%, #0a0e1a 70%);
+            --node-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="light"] {
+            /* LIGHT THEME */
+            --bg: #f5f7fa;
+            --text: #2d3436;
+            --text-muted: #636e72;
+            --text-dim: #b2bec3;
+            --border: #dfe6e9;
+            --surface: #ffffff;
+            --surface-alt: #f1f5f9;
+            --cyan: #0099cc;
+            --red: #d63031;
+            --amber: #e67e22;
+            --green: #27ae60;
+            --purple: #6c5ce7;
+
+            --layer-oss: #e1eaf5;
+            --layer-ems: #e1ebf0;
+            --layer-svc: #f0f4f8;
+            --layer-sdn: #e6f0f0;
+            --layer-nfvi: #eef2f6;
+            --layer-infra: #f5f8fa;
+
+            --hero-grad: radial-gradient(ellipse at 50% 30%, #e1e9ff 0%, #f5f7fa 70%);
+            --node-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            min-height: 100vh
+        }
+
+        /* THEME TOGGLE */
+        .theme-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 201;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            color: var(--text);
+            font-size: 0.7rem;
+            font-weight: 700;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        /* HERO */
+        .hero {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            background: var(--hero-grad);
+            position: relative;
+            overflow: hidden
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0v60M0 30h60' stroke='%2388888808' stroke-width='1'/%3E%3C/svg%3E");
+            opacity: .4
+        }
+
+        .hero h1 {
+            font-size: 3.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+            position: relative;
+            z-index: 1;
+            line-height: 1.15
+        }
+
+        [data-theme="light"] .hero h1 {
+            -webkit-text-fill-color: initial;
+            background: none;
+            color: var(--cyan);
+        }
+
+        .hero p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin: 16px 0 36px;
+            max-width: 600px;
+            position: relative;
+            z-index: 1
+        }
+
+        .hero .start {
+            padding: 14px 40px;
+            background: linear-gradient(135deg, var(--cyan), var(--purple));
+            border: none;
+            border-radius: 30px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+            z-index: 1;
+            transition: all .3s
+        }
+
+        .hero .start:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.3)
+        }
+
+        .hero .badge {
+            position: absolute;
+            bottom: 40px;
+            color: var(--text-dim);
+            font-size: .8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            z-index: 1
+        }
+
+        /* MAIN */
+        .main {
+            display: none;
+            min-height: 100vh;
+            padding: 0
+        }
+
+        /* SCENARIO BAR */
+        .scenario-bar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--bg);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 30px;
+            display: flex;
+            align-items: center;
+            gap: 16px
+        }
+
+        .scenario-bar .logo {
+            font-weight: 700;
+            color: var(--cyan);
+            font-size: 1.1rem;
+            margin-right: auto
+        }
+
+        .scenario-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-size: .8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .scenario-btn:hover {
+            border-color: var(--cyan);
+            color: var(--text)
+        }
+
+        .scenario-btn.active {
+            border-color: var(--red);
+            color: var(--red);
+            background: rgba(255, 59, 92, 0.05);
+            box-shadow: 0 0 15px rgba(255, 59, 92, 0.1)
+        }
+
+        .scenario-btn .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor
+        }
+
+        .reset-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            border-radius: 8px;
+            color: var(--text-muted);
+            font-size: .8rem;
+            cursor: pointer;
+            transition: all .3s
+        }
+
+        .reset-btn:hover {
+            border-color: var(--cyan);
+            color: var(--cyan)
+        }
+
+        /* ARCHITECTURE GRID */
+        .arch-container {
+            display: flex;
+            padding: 0
+        }
+
+        .arch-layers {
+            flex: 1;
+            overflow-x: auto
+        }
+
+        /* LAYER BANDS */
+        .layer-band {
+            position: relative;
+            border-bottom: 1px solid var(--border);
+            padding: 8px 16px 8px 140px;
+            min-height: 70px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            transition: background .5s
+        }
+
+        .layer-band .layer-label {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: .85rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            width: 120px;
+            line-height: 1.3
+        }
+
+        .layer-band .layer-label span {
+            display: block;
+            font-size: .65rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-top: 2px;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        /* NODES */
+        .node {
+            padding: 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: .85rem;
+            font-weight: 600;
+            background: var(--surface-alt);
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            white-space: nowrap;
+            line-height: 1.3;
+            box-shadow: var(--node-shadow);
+        }
+
+        .node:hover {
+            border-color: var(--cyan);
+            transform: translateY(-2px)
+        }
+
+        .node .sub {
+            display: block;
+            font-size: .65rem;
+            color: var(--text-muted);
+            font-weight: 400
+        }
+
+        .node.affected {
+            border-color: var(--red) !important;
+            color: var(--red) !important;
+            background: rgba(255, 59, 92, 0.08) !important;
+            box-shadow: 0 0 15px rgba(255, 59, 92, 0.2);
+            animation: pulse-node 1.5s infinite
+        }
+
+        .node.root-cause {
+            border-color: var(--red) !important;
+            color: #fff !important;
+            background: linear-gradient(135deg, var(--red), #cc1133) !important;
+            box-shadow: 0 0 25px rgba(255, 59, 92, 0.4);
+            animation: pulse-root 1s infinite
+        }
+
+        @keyframes pulse-node {
+
+            0%,
+            100% {
+                box-shadow: 0 0 10px rgba(255, 59, 92, 0.1)
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(255, 59, 92, 0.3)
+            }
+        }
+
+        @keyframes pulse-root {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(255, 59, 92, 0.3)
+            }
+
+            50% {
+                box-shadow: 0 0 35px rgba(255, 59, 92, 0.5)
+            }
+        }
+
+        /* Domain color coding */
+        .node[data-domain="transmission"] {
+            border-left: 3px solid var(--purple);
+        }
+
+        .node[data-domain="vas"] {
+            border-left: 3px solid var(--green);
+        }
+
+        .node[data-domain="ims"] {
+            border-left: 3px solid #b388ff;
+        }
+
+        .node[data-domain="sdm"] {
+            border-left: 3px solid var(--amber);
+        }
+
+        .node[data-domain="ipsec"] {
+            border-left: 3px solid var(--red);
+        }
+
+        .node[data-domain="epc"] {
+            border-left: 3px solid var(--cyan);
+        }
+
+        .node[data-domain="infra"] {
+            border-left: 3px solid var(--text-muted);
+        }
+
+        .node[data-domain="oss"] {
+            border-left: 3px solid var(--blue);
+        }
+
+        .node[data-domain="ems"] {
+            border-left: 3px solid #508090;
+        }
+
+        /* REASONING PANEL */
+        .reasoning {
+            width: 380px;
+            min-width: 380px;
+            border-left: 1px solid var(--border);
+            background: var(--surface);
+            overflow-y: auto;
+            max-height: calc(100vh - 52px);
+            position: sticky;
+            top: 52px
+        }
+
+        .reasoning .panel-title {
+            padding: 16px 20px;
+            font-weight: 700;
+            font-size: .95rem;
+            color: var(--cyan);
+            border-bottom: 1px solid var(--border);
+            letter-spacing: .5px;
+            text-transform: uppercase;
+            position: sticky;
+            top: 0;
+            background: var(--surface);
+            z-index: 5
+        }
+
+        .reasoning .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: .95rem;
+            line-height: 1.6
+        }
+
+        .reason-step {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            animation: fadeSlideIn .4s ease forwards;
+            opacity: 0
+        }
+
+        @keyframes fadeSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0)
+            }
+        }
+
+        .reason-step .step-num {
+            font-size: .65rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 4px
+        }
+
+        .reason-step .step-title {
+            font-weight: 700;
+            font-size: .850rem;
+            color: var(--text);
+            margin-bottom: 4px
+        }
+
+        .reason-step .step-detail {
+            font-size: .78rem;
+            color: var(--text-muted);
+            line-height: 1.5
+        }
+
+        .reason-step .step-detail .highlight {
+            color: var(--cyan);
+            font-weight: 600
+        }
+
+        .reason-step .step-detail .alert {
+            color: var(--red);
+            font-weight: 700
+        }
+
+        .reason-step.root {
+            background: rgba(255, 59, 92, 0.05);
+            border-left: 3px solid var(--red)
+        }
+
+        .reason-step.resolution {
+            background: rgba(0, 230, 118, 0.05);
+            border-left: 3px solid var(--green)
+        }
+
+        .reason-step .metric-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px
+        }
+
+        .reason-step .metric {
+            padding: 6px 12px;
+            background: var(--surface-alt);
+            border-radius: 4px;
+            font-size: .7rem;
+            text-align: center;
+            flex: 1;
+            border: 1px solid var(--border)
+        }
+
+        .reason-step .metric .v {
+            font-size: 1.1rem;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 2px
+        }
+
+        .reason-step .metric .v.danger {
+            color: var(--red)
+        }
+
+        .reason-step .metric .v.ok {
+            color: var(--green)
+        }
+
+        /* RESPONSIVE */
+        @media(max-width:1200px) {
+            .reasoning {
+                width: 320px;
+                min-width: 320px
+            }
+        }
+
+        @media(max-width:900px) {
+            .arch-container {
+                flex-direction: column
+            }
+
+            .reasoning {
+                width: 100%;
+                min-width: auto;
+                max-height: 400px;
+                position: relative;
+                top: 0;
+                border-left: none;
+                border-top: 1px solid var(--border)
+            }
+        }
+    </style>
+</head>
+
+<body data-theme="dark">
+
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🔆</span>
+        <span id="theme-text">Light Mode</span>
+    </button>
+
+    <!-- HERO -->
+    <div class="hero" id="hero">
+        <h1>Core Network<br>Intelligence</h1>
+        <p>See how Pedkai traces customer-impacting failures through 60+ network functions across 7 architectural layers
+            — in seconds, not hours.</p>
+        <button class="start" onclick="startDemo()">Explore the Architecture →</button>
+        <div class="badge">Pedkai · AI-Native Telco Operating System</div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main" id="main">
+
+        <!-- SCENARIO BAR -->
+        <div class="scenario-bar">
+            <div class="logo">⚡ Pedkai</div>
+            <button class="scenario-btn" onclick="loadScenario('A')"><span class="dot"></span>WhatsApp Voice
+                Drop</button>
+            <button class="scenario-btn" onclick="loadScenario('B')"><span class="dot"></span>Banking Timeout</button>
+            <button class="scenario-btn" onclick="loadScenario('C')"><span class="dot"></span>MMS Stuck Sending</button>
+            <button class="reset-btn" onclick="resetAll()">↻ Reset</button>
+        </div>
+
+        <div class="arch-container">
+
+            <!-- ARCH LAYERS -->
+            <div class="arch-layers" id="archLayers">
+
+                <!-- OSS -->
+                <div class="layer-band" style="background:var(--layer-oss)">
+                    <div class="layer-label">OSS<span>Operations Support</span></div>
+                    <div class="node" id="servicenow" data-domain="oss">ServiceNow<span class="sub">ITSM</span></div>
+                    <div class="node" id="netcracker" data-domain="oss">Netcracker<span class="sub">Service
+                            Assurance</span></div>
+                    <div class="node" id="exfo" data-domain="oss">EXFO CEM<span class="sub">Customer Experience</span>
+                    </div>
+                    <div class="node" id="teoco" data-domain="oss">TEOCO<span class="sub">Performance Mgmt</span></div>
+                    <div class="node" id="amdocs" data-domain="oss">Amdocs<span class="sub">Inventory</span></div>
+                    <div class="node" id="veritas" data-domain="oss">Veritas<span class="sub">Archive/Backup</span>
+                    </div>
+                </div>
+
+                <!-- EMS -->
+                <div class="layer-band" style="background:var(--layer-ems)">
+                    <div class="layer-label">EMS<span>Element Management</span></div>
+                    <div class="node" id="transcend" data-domain="ems">Infinera Transcend<span class="sub">Optical
+                            EMS</span></div>
+                    <div class="node" id="ensemble" data-domain="ems">ADVA Ensemble<span class="sub">Metro EMS</span>
+                    </div>
+                    <div class="node" id="enm" data-domain="ems">Ericsson ENM<span class="sub">Core Network EMS</span>
+                    </div>
+                    <div class="node" id="ribbonems" data-domain="ems">Ribbon EMS<span class="sub">IMS SBC Mgmt</span>
+                    </div>
+                    <div class="node" id="comverseems" data-domain="ems">Comverse EMS<span class="sub">VAS Mgmt</span>
+                    </div>
+                    <div class="node" id="ciscoprime" data-domain="ems">Cisco Prime<span class="sub">ePC Mgmt</span>
+                    </div>
+                </div>
+
+                <!-- SERVICE DOMAIN: TRANSMISSION -->
+                <div class="layer-band" style="background:var(--layer-svc)">
+                    <div class="layer-label">Transmission<span>Optical Transport</span></div>
+                    <div class="node" id="infinera" data-domain="transmission">Infinera GX G42<span class="sub">Photonic
+                            Layer</span></div>
+                    <div class="node" id="adva" data-domain="transmission">ADVA FSP 3000<span class="sub">Metro
+                            DWDM</span></div>
+                    <div class="node" id="oscilloquartz" data-domain="transmission">Oscilloquartz<span
+                            class="sub">Timing & Sync</span></div>
+                </div>
+
+                <!-- SERVICE DOMAIN: VAS -->
+                <div class="layer-band" style="background:var(--layer-svc)">
+                    <div class="layer-label">VAS<span>Messaging & Value</span></div>
+                    <div class="node" id="comverse" data-domain="vas">Comverse ONE<span class="sub">SMSC/Router</span>
+                    </div>
+                    <div class="node" id="syniverse" data-domain="vas">Syniverse MSG-GW<span class="sub">MMS
+                            Gateway</span></div>
+                    <div class="node" id="comverse-vms" data-domain="vas">Comverse VMS<span class="sub">Voicemail</span>
+                    </div>
+                    <div class="node" id="ericsson-cbc" data-domain="vas">Ericsson CBC<span class="sub">Cell
+                            Broadcast</span></div>
+                </div>
+
+                <!-- SERVICE DOMAIN: IMS -->
+                <div class="layer-band" style="background:var(--layer-svc)">
+                    <div class="layer-label">IMS<span>IP Multimedia</span></div>
+                    <div class="node" id="ribbon-asbc" data-domain="ims">Ribbon SBC 5400<span
+                            class="sub">Access-SBC</span></div>
+                    <div class="node" id="ribbon-isbc" data-domain="ims">Ribbon SBC 5400<span
+                            class="sub">Interconnect</span></div>
+                    <div class="node" id="ericsson-cscf" data-domain="ims">Ericsson vCSCF<span class="sub">Call Session
+                            Ctrl</span></div>
+                    <div class="node" id="audiocodes" data-domain="ims">AudioCodes 9080<span class="sub">Media
+                            Resource</span></div>
+                    <div class="node" id="ericsson-ntas" data-domain="ims">Ericsson vNTAS<span class="sub">Telecom
+                            App</span></div>
+                    <div class="node" id="csg" data-domain="ims">CSG Intermed.<span class="sub">CDR/Charging</span>
+                    </div>
+                    <div class="node" id="ss-utp" data-domain="ims">SS UTProxy<span class="sub">Suppl. Services</span>
+                    </div>
+                </div>
+
+                <!-- SERVICE DOMAIN: SDM -->
+                <div class="layer-band" style="background:var(--layer-svc)">
+                    <div class="layer-label">SDM<span>Subscriber Data</span></div>
+                    <div class="node" id="ericsson-hss" data-domain="sdm">Ericsson HSS-FE<span class="sub">Subscriber
+                            Svr</span></div>
+                    <div class="node" id="ericsson-cudb" data-domain="sdm">Ericsson cuDB<span class="sub">Unified
+                            DB</span></div>
+                    <div class="node" id="broadforward-dra" data-domain="sdm">BroadForward BFX<span class="sub">DRA /
+                            DEA</span></div>
+                    <div class="node" id="tekelec" data-domain="sdm">Tekelec EAGLE<span class="sub">SS7 STP</span></div>
+                    <div class="node" id="ericsson-eir" data-domain="sdm">Ericsson EIR<span class="sub">Device
+                            Identity</span></div>
+                    <div class="node" id="ericsson-mnp" data-domain="sdm">Ericsson MNP<span
+                            class="sub">Portability</span></div>
+                </div>
+
+                <!-- SERVICE DOMAIN: IP & SECURITY -->
+                <div class="layer-band" style="background:var(--layer-svc)">
+                    <div class="layer-label">IP & Security<span>Routing / Firewall</span></div>
+                    <div class="node" id="juniper-srx" data-domain="ipsec">Juniper SRX 5800<span class="sub">Security
+                            GW</span></div>
+                    <div class="node" id="f5-ltm" data-domain="ipsec">F5 BIG-IP LTM<span class="sub">Load
+                            Balancer</span></div>
+                    <div class="node" id="f5-asm" data-domain="ipsec">F5 BIG-IP ASM<span class="sub">App Security</span>
+                    </div>
+                    <div class="node" id="arbor-sightline" data-domain="ipsec">Arbor Sightline<span class="sub">DDoS
+                            Detect</span></div>
+                    <div class="node" id="arbor-tms" data-domain="ipsec">Arbor TMS<span class="sub">DDoS Mitigate</span>
+                    </div>
+                    <div class="node" id="bluecat-dns" data-domain="ipsec">BlueCat DNS<span class="sub">Global
+                            DNS</span></div>
+                    <div class="node" id="paloalto" data-domain="ipsec">Palo Alto 5260<span class="sub">Core
+                            Firewall</span></div>
+                    <div class="node" id="cisco-ise" data-domain="ipsec">Cisco ISE<span class="sub">AAA / Policy</span>
+                    </div>
+                </div>
+
+                <!-- SERVICE DOMAIN: ePC -->
+                <div class="layer-band" style="background:var(--layer-svc)">
+                    <div class="layer-label">ePC<span>Mobile Core</span></div>
+                    <div class="node" id="ericsson-vmme" data-domain="epc">Ericsson vMME<span class="sub">Mobility
+                            Ctrl</span></div>
+                    <div class="node" id="ericsson-vsaegw" data-domain="epc">Ericsson vSAEGW<span class="sub">S-GW /
+                            P-GW</span></div>
+                    <div class="node" id="cisco-epg" data-domain="epc">Cisco ASR 5500<span class="sub">ePG / RPG</span>
+                    </div>
+                    <div class="node" id="sandvine" data-domain="epc">Sandvine PTS<span class="sub">Traffic
+                            Shaping</span></div>
+                </div>
+
+                <!-- SDN FABRIC -->
+                <div class="layer-band" style="background:var(--layer-sdn)">
+                    <div class="layer-label">SDN Fabric<span>Network Fabric</span></div>
+                    <div class="node" id="cisco-apic" data-domain="infra">Cisco ACI APIC<span class="sub">SDN
+                            Controller</span></div>
+                    <div class="node" id="cisco-nexus" data-domain="infra">Cisco Nexus 9500<span
+                            class="sub">Spine/Leaf</span></div>
+                    <div class="node" id="arista" data-domain="infra">Arista 7280R<span class="sub">DCI Core</span>
+                    </div>
+                </div>
+
+                <!-- CLOUD / NFVI -->
+                <div class="layer-band" style="background:var(--layer-nfvi)">
+                    <div class="layer-label">Cloud / NFVI<span>Virtual Platforms</span></div>
+                    <div class="node" id="openstack" data-domain="infra">RH OpenStack<span class="sub">Cloud
+                            Platform</span></div>
+                    <div class="node" id="vmware" data-domain="infra">VMware VCF<span class="sub">NFV Foundation</span>
+                    </div>
+                    <div class="node" id="windriver" data-domain="infra">Wind River TC<span class="sub">Edge
+                            Cloud</span></div>
+                    <div class="node" id="vnfm" data-domain="infra">Ericsson VNFM<span class="sub">VNF Life-cycle</span>
+                    </div>
+                </div>
+
+                <!-- BARE METAL -->
+                <div class="layer-band" style="background:var(--layer-infra)">
+                    <div class="layer-label">Hardwire<span>Compute Nodes</span></div>
+                    <div class="node" id="hpe" data-domain="infra">HPE ProLiant<span class="sub">DL380 Gen10</span>
+                    </div>
+                    <div class="node" id="dell" data-domain="infra">Dell PowerEdge<span class="sub">R750xa Core</span>
+                    </div>
+                    <div class="node" id="lenovo" data-domain="infra">Lenovo SR650<span class="sub">ThinkSystem</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REASONING PANEL -->
+            <div class="reasoning">
+                <div class="panel-title">Pedkai Reasoning Chain</div>
+                <div id="reasoningSteps">
+                    <div class="empty-state">Select a scenario to witness Pedkai's autonomous diagnostic logic trace
+                        through the core architecture.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+
+            document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '🔆' : '🌙';
+            document.getElementById('theme-text').innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+        }
+
+        function startDemo() {
+            document.getElementById('hero').style.display = 'none';
+            document.getElementById('main').style.display = 'block';
+        }
+
+        function resetAll() {
+            document.querySelectorAll('.node').forEach(n => {
+                n.classList.remove('affected', 'root-cause');
+            });
+            document.getElementById('reasoningSteps').innerHTML = '<div class="empty-state">Select a scenario to witness Pedkai\'s autonomous diagnostic logic trace through the core architecture.</div>';
+            document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+        }
+
+        const SCENARIOS = {
+            'A': {
+                name: 'WhatsApp Voice Drop',
+                steps: [
+                    { t: 'Anomaly Detected', d: 'Z-score trigger in <span class="highlight">EXFO CEM</span>: VoLTE Media MOS dropped to 1.2 at edge cells.', m: [{ l: 'MOS', v: '1.2', s: 'danger' }] },
+                    { t: 'Context Graph Search', d: 'Tracing affected media flow. IMS Signaling (S-CSCF) reports SUCCESS, but RTP media packets are timing out at the Security Gateway layer.' },
+                    { t: 'Multi-Domain Trace', d: 'Traversing <span class="highlight">Ericsson vCSCF</span> → <span class="highlight">Ribbon SBC</span> → <span class="highlight">Juniper SRX 5800</span>.' },
+                    {
+                        type: 'root', t: 'Root Cause Identified', d: 'Root cause found at <span class="highlight">Juniper SRX 5800</span>. Session table at 99.8% capacity. Media pinholes failing to open while signaling (SIP) continues.',
+                        m: [{ l: 'Session Tbl', v: '99.8%', s: 'danger' }, { l: 'CPU', v: '42%', s: 'ok' }]
+                    },
+                    { type: 'resolution', t: 'Autonomous Resolution', d: 'Decision: Policy-based session flushing for stale UDP flows + Dynamic rebalance via <span class="highlight">F5 BIG-IP LTM</span>. MTTR: 12 seconds.' }
+                ],
+                nodes: ['exfo', 'ericsson-cscf', 'ribbon-isbc', 'juniper-srx', 'f5-ltm'],
+                root: 'juniper-srx'
+            },
+            'B': {
+                name: 'Banking Timeout',
+                steps: [
+                    { t: 'SLA Alert', d: 'High latency detected for Diameter signaling app-id: 16777216 (Banking Auth). 742 timeouts in last 60s.' },
+                    { t: 'Heuristic Search', d: 'Checking recent changes. BroadForward BFX reported a config reload 3 minutes ago by manual script.' },
+                    {
+                        type: 'root', t: 'Root Cause Identifed', d: 'Diameter Routing Loop detected at <span class="highlight">BroadForward DRA</span>. Host-IP-Address mismatch in peer routing table causing infinite recursion for auth requests.',
+                        m: [{ l: 'Retransmits', v: '12k', s: 'danger' }, { l: 'Latency', v: '1.2s', s: 'danger' }]
+                    },
+                    { type: 'resolution', t: 'Autonomous Resolution', d: 'Pedkai Decision Memory: Reverting BFX Peer Table to v22.4.1. Loop broken. Signaling restored in 8 seconds.' }
+                ],
+                nodes: ['broadforward-dra', 'cisco-epg', 'bluecat-dns'],
+                root: 'broadforward-dra'
+            },
+            'C': {
+                name: 'MMS Stuck Sending',
+                steps: [
+                    { t: 'Massive Anomaly', d: 'Syniverse MSG-GW queue depth rising exponentially. Accumulation of 124,000 pending MMS PDUs.' },
+                    { t: 'Infrastructure Audit', d: 'MSG-GW is virtualised on <span class="highlight">Ericsson VNFM</span> / <span class="highlight">Red Hat OpenStack</span>. Checking resource availability.' },
+                    {
+                        type: 'root', t: 'Root Cause Identified', d: 'Resource exhaustion at <span class="highlight">NFVI Compute Layer</span>. VNFM attempt to auto-scale MSG-GW failed due to vCPU pinning conflict on Dell R750 nodes.',
+                        m: [{ l: 'Queue', v: '124k', s: 'danger' }, { l: 'Scale Status', v: 'FAIL', s: 'danger' }]
+                    },
+                    { type: 'resolution', t: 'Autonomous Resolution', d: 'Coordinated Resolution: Live migration of 4 unrelated low-priority VNFs to secondary rack. Successful scale-out of MSG-GW. Queue cleared in 45s.' }
+                ],
+                nodes: ['syniverse', 'vnfm', 'openstack', 'dell'],
+                root: 'vnfm'
+            }
+        };
+
+        function loadScenario(id) {
+            resetAll();
+            const s = SCENARIOS[id];
+            const btn = document.querySelector(`.scenario-btn:nth-child(${id === 'A' ? 2 : id === 'B' ? 3 : 4})`);
+            btn.classList.add('active');
+
+            // Highlight nodes
+            s.nodes.forEach(nid => {
+                const n = document.getElementById(nid);
+                if (n) n.classList.add('affected');
+            });
+            const root = document.getElementById(s.root);
+            if (root) {
+                root.classList.remove('affected');
+                root.classList.add('root-cause');
+            }
+
+            // Build reasoning
+            const re = document.getElementById('reasoningSteps');
+            re.innerHTML = s.steps.map((step, i) => `
+                <div class="reason-step ${step.type || ''}">
+                    <div class="step-num">Step 0${i + 1}</div>
+                    <div class="step-title">${step.t}</div>
+                    <div class="step-detail">${step.d}</div>
+                    ${step.m ? `
+                        <div class="metric-row">
+                            ${step.m.map(m => `
+                                <div class="metric">
+                                    <span class="v ${m.s}">${m.v}</span>
+                                    ${m.l}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+
+</html>

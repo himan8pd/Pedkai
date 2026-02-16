@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pedkai — Incident Lifecycle Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      transition: background 0.3s, border-color 0.3s;
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+
+    :root {
+      --bg: #020617;
+      --surface: rgba(15, 23, 42, .7);
+      --border: rgba(51, 65, 85, .5);
+      --cyan: #06b6d4;
+      --rose: #f43f5e;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --purple: #a78bfa;
+      --slate: #94a3b8;
+      --white: #f1f5f9;
+      --gauge-bg: rgba(2, 6, 23, .6);
+      --sitrep-bg: rgba(6, 182, 212, .08);
+      --sitrep-border: rgba(6, 182, 212, .3);
+    }
+
+    [data-theme="light"] {
+      --bg: #f1f5f9;
+      --surface: rgba(255, 255, 255, .8);
+      --border: rgba(203, 213, 225, .8);
+      --white: #1e293b;
+      --slate: #64748b;
+      --gauge-bg: rgba(255, 255, 255, .9);
+      --sitrep-bg: rgba(6, 182, 212, .05);
+      --sitrep-border: rgba(6, 182, 212, .2);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden
+    }
+
+    /* THEME TOGGLE */
+    .theme-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      color: var(--white);
+      font-size: .75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .3);
+      backdrop-filter: blur(10px)
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 24px
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px
+    }
+
+    header h1 {
+      font-size: 2.4rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -1px
+    }
+
+    [data-theme="light"] header h1 {
+      -webkit-text-fill-color: initial;
+      color: #0891b2;
+      background: none;
+    }
+
+    header p {
+      color: var(--slate);
+      margin-top: 8px;
+      font-size: .95rem
+    }
+
+    /* Timeline */
+    .timeline {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 48px;
+      position: relative
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 8%;
+      right: 8%;
+      height: 2px;
+      background: var(--border);
+      z-index: 0
+    }
+
+    .act {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+      cursor: pointer;
+      flex: 1;
+      max-width: 140px;
+      transition: all .4s
+    }
+
+    .act-dot {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .75rem;
+      font-weight: 900;
+      transition: all .5s;
+      color: var(--slate)
+    }
+
+    .act.active .act-dot {
+      background: var(--cyan);
+      border-color: var(--cyan);
+      color: white;
+      box-shadow: 0 0 20px rgba(6, 182, 212, .5)
+    }
+
+    [data-theme="light"] .act.active .act-dot {
+      color: white;
+    }
+
+    .act.done .act-dot {
+      background: var(--emerald);
+      border-color: var(--emerald);
+      color: white
+    }
+
+    .act-label {
+      font-size: .65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--slate);
+      text-align: center;
+      transition: color .3s
+    }
+
+    .act.active .act-label {
+      color: var(--cyan)
+    }
+
+    .act.done .act-label {
+      color: var(--emerald)
+    }
+
+    /* Stage Area */
+    .stage {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      min-height: 420px;
+      backdrop-filter: blur(20px);
+      position: relative;
+      overflow: hidden;
+      transition: opacity .4s
+    }
+
+    .stage::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent)
+    }
+
+    .stage-title {
+      font-size: 1.4rem;
+      font-weight: 900;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: .03em
+    }
+
+    .stage-sub {
+      color: var(--slate);
+      font-size: .85rem;
+      margin-bottom: 32px
+    }
+
+    /* Topology SVG */
+    .topology {
+      display: flex;
+      justify-content: center;
+      margin: 24px 0
+    }
+
+    .topo-node {
+      transition: all .6s
+    }
+
+    .topo-node text {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 11px;
+      fill: var(--white)
+    }
+
+    .topo-node .label {
+      font-size: 9px;
+      fill: var(--slate);
+      font-weight: 600
+    }
+
+    .topo-edge {
+      stroke: var(--border);
+      stroke-width: 2;
+      fill: none;
+      transition: all .6s
+    }
+
+    .topo-edge.alert {
+      stroke: var(--rose);
+      stroke-width: 3;
+      stroke-dasharray: 8 4;
+      animation: dashflow 1s linear infinite
+    }
+
+    @keyframes dashflow {
+      to {
+        stroke-dashoffset: -12
+      }
+    }
+
+    /* KPI Gauges */
+    .gauges {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 24px 0
+    }
+
+    .gauge {
+      background: var(--gauge-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 28px;
+      text-align: center;
+      min-width: 160px;
+      transition: all .5s;
+      box-shadow: var(--border) 0 4px 6px -1px;
+    }
+
+    .gauge.alert {
+      border-color: var(--rose);
+      box-shadow: 0 0 20px rgba(244, 63, 94, .15)
+    }
+
+    .gauge-label {
+      font-size: .65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--slate);
+      margin-bottom: 8px
+    }
+
+    .gauge-value {
+      font-size: 2rem;
+      font-weight: 900;
+      transition: color .4s
+    }
+
+    .gauge-unit {
+      font-size: .7rem;
+      color: var(--slate);
+      font-weight: 600
+    }
+
+    /* SITREP Card */
+    .sitrep {
+      background: var(--sitrep-bg);
+      border: 1px solid var(--sitrep-border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 700px;
+      margin: 24px auto
+    }
+
+    .sitrep h3 {
+      font-size: .75rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sitrep p {
+      font-size: .85rem;
+      line-height: 1.7;
+      color: var(--white);
+      opacity: .9
+    }
+
+    .sitrep .highlight {
+      color: var(--cyan);
+      font-weight: 700
+    }
+
+    .sitrep .warning {
+      color: var(--rose);
+      font-weight: 700
+    }
+
+    /* Alarm Cascade */
+    .alarms {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 500px;
+      margin: 16px auto
+    }
+
+    .alarm-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(244, 63, 94, .06);
+      border: 1px solid rgba(244, 63, 94, .2);
+      border-radius: 10px;
+      padding: 10px 16px;
+      opacity: 0;
+      transform: translateX(-20px);
+      animation: slideIn .4s forwards
+    }
+
+    .alarm-row .severity {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--rose);
+      flex-shrink: 0
+    }
+
+    .alarm-row .alarm-text {
+      font-size: .78rem;
+      font-weight: 600;
+      flex: 1
+    }
+
+    .alarm-row .alarm-time {
+      font-size: .65rem;
+      color: var(--slate);
+      font-weight: 600
+    }
+
+    @keyframes slideIn {
+      to {
+        opacity: 1;
+        transform: translateX(0)
+      }
+    }
+
+    /* Learning Loop */
+    .learning {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 24px 0
+    }
+
+    .learn-card {
+      background: rgba(16, 185, 129, .06);
+      border: 1px solid rgba(16, 185, 129, .25);
+      border-radius: 14px;
+      padding: 20px 24px;
+      flex: 1;
+      min-width: 200px;
+      max-width: 280px
+    }
+
+    .learn-card h4 {
+      font-size: .7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--emerald);
+      margin-bottom: 8px
+    }
+
+    .learn-card p {
+      font-size: .8rem;
+      line-height: 1.6;
+      color: var(--white);
+      opacity: .85
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 32px
+    }
+
+    .controls button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--white);
+      padding: 10px 28px;
+      border-radius: 10px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: .8rem;
+      cursor: pointer;
+      transition: all .3s;
+      text-transform: uppercase;
+      letter-spacing: .06em
+    }
+
+    .controls button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan)
+    }
+
+    .controls button.primary {
+      background: var(--cyan);
+      color: white;
+      border-color: var(--cyan)
+    }
+
+    [data-theme="light"] .controls button.primary {
+      color: white;
+    }
+
+    .controls button.primary:hover {
+      background: #22d3ee;
+      box-shadow: 0 0 20px rgba(6, 182, 212, .4)
+    }
+
+    /* Fade animation */
+    .fade-in {
+      animation: fadeIn .6s ease-out
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    /* Badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: .6rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em
+    }
+
+    .badge-rose {
+      background: rgba(244, 63, 94, .15);
+      color: var(--rose);
+      border: 1px solid rgba(244, 63, 94, .3)
+    }
+
+    .badge-cyan {
+      background: rgba(6, 182, 212, .15);
+      color: var(--cyan);
+      border: 1px solid rgba(6, 182, 212, .3)
+    }
+
+    .badge-emerald {
+      background: rgba(16, 185, 129, .15);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, .3)
+    }
+  </style>
+</head>
+
+<body data-theme="dark">
+  <button class="theme-toggle" onclick="toggleTheme()">
+    <span id="theme-icon">🔆</span>
+    <span id="theme-text">Light Mode</span>
+  </button>
+
+  <div class="container">
+    <header>
+      <h1>Pedkai — Incident Lifecycle</h1>
+      <p>AI-Native Telco Operating System • Autonomous Network Operations Demo</p>
+    </header>
+
+    <!-- Timeline -->
+    <div class="timeline" id="timeline"></div>
+
+    <!-- Stage -->
+    <div class="stage" id="stage"></div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button id="btnPrev" onclick="prevAct()">← Previous</button>
+      <button id="btnAutoPlay" class="primary" onclick="toggleAutoPlay()">▶ Auto Play</button>
+      <button id="btnNext" onclick="nextAct()">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const body = document.body;
+      const currentTheme = body.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      body.setAttribute('data-theme', newTheme);
+
+      document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '🔆' : '🌙';
+      document.getElementById('theme-text').innerText = newTheme === 'dark' ? 'Light Mode' : 'Dark Mode';
+
+      // Re-render the stage to update any hardcoded colors in SVG or strings
+      renderStage();
+    }
+
+    const ACTS = [
+      { id: 1, label: 'Normal Ops', icon: '✓' },
+      { id: 2, label: 'Anomaly', icon: '⚡' },
+      { id: 3, label: 'Detection', icon: '🔍' },
+      { id: 4, label: 'RCA', icon: '🧠' },
+      { id: 5, label: 'SITREP', icon: '📋' },
+      { id: 6, label: 'Resolution', icon: '🔧' },
+      { id: 7, label: 'Learning', icon: '💡' },
+    ];
+
+    let currentAct = 0;
+    let autoPlayTimer = null;
+
+    function buildTimeline() {
+      const tl = document.getElementById('timeline');
+      tl.innerHTML = ACTS.map((a, i) => `
+    <div class="act ${i < currentAct ? 'done' : ''} ${i === currentAct ? 'active' : ''}" onclick="goToAct(${i})">
+      <div class="act-dot">${a.icon}</div>
+      <div class="act-label">${a.label}</div>
+    </div>
+  `).join('');
+    }
+
+    function renderStage() {
+      const stage = document.getElementById('stage');
+      stage.classList.remove('fade-in');
+      void stage.offsetWidth;
+      stage.classList.add('fade-in');
+
+      switch (currentAct) {
+        case 0: renderNormalOps(stage); break;
+        case 1: renderAnomaly(stage); break;
+        case 2: renderDetection(stage); break;
+        case 3: renderRCA(stage); break;
+        case 4: renderSITREP(stage); break;
+        case 5: renderResolution(stage); break;
+        case 6: renderLearning(stage); break;
+      }
+      buildTimeline();
+    }
+
+    function topoSVG(alertEdge = '', alertNodes = []) {
+      const isLight = document.body.getAttribute('data-theme') === 'light';
+      const nodeDefault = isLight ? '#f1f5f9' : 'rgba(51,65,85,.8)';
+      const nColor = (id) => alertNodes.includes(id) ? 'var(--rose)' : nodeDefault;
+      const eClass = (id) => id === alertEdge ? 'topo-edge alert' : 'topo-edge';
+
+      return `<svg viewBox="0 0 700 160" width="700" height="160" xmlns="http://www.w3.org/2000/svg">
+    <!-- Edges -->
+    <line x1="115" y1="80" x2="245" y2="80" class="${eClass('e1')}"/>
+    <line x1="305" y1="80" x2="425" y2="56" class="${eClass('e2')}"/>
+    <line x1="305" y1="80" x2="425" y2="108" class="${eClass('e3')}"/>
+    <line x1="485" y1="56" x2="595" y2="56" class="${eClass('e4')}"/>
+    <line x1="485" y1="108" x2="595" y2="108" class="${eClass('e5')}"/>
+    <!-- Site -->
+    <g class="topo-node"><rect x="30" y="58" width="80" height="44" rx="8" fill="${nColor('site')}" stroke="var(--border)"/>
+      <text x="70" y="76" text-anchor="middle">Site-ABC</text><text x="70" y="90" text-anchor="middle" class="label">Tower</text></g>
+    <!-- gNodeB -->
+    <g class="topo-node"><rect x="240" y="58" width="80" height="44" rx="8" fill="${nColor('gnb')}" stroke="var(--border)"/>
+      <text x="280" y="76" text-anchor="middle">gNB-042</text><text x="280" y="90" text-anchor="middle" class="label">5G Base Station</text></g>
+    <!-- Cell 1 -->
+    <g class="topo-node"><rect x="420" y="34" width="72" height="44" rx="8" fill="${nColor('c1')}" stroke="var(--border)"/>
+      <text x="456" y="52" text-anchor="middle">Cell-α</text><text x="456" y="66" text-anchor="middle" class="label">Sector 1</text></g>
+    <!-- Cell 2 -->
+    <g class="topo-node"><rect x="420" y="86" width="72" height="44" rx="8" fill="${nColor('c2')}" stroke="var(--border)"/>
+      <text x="456" y="104" text-anchor="middle">Cell-β</text><text x="456" y="118" text-anchor="middle" class="label">Sector 2</text></g>
+    <!-- Customer 1 -->
+    <g class="topo-node"><rect x="590" y="34" width="84" height="44" rx="8" fill="${nColor('cu1')}" stroke="var(--border)"/>
+      <text x="632" y="52" text-anchor="middle">Acme Corp</text><text x="632" y="66" text-anchor="middle" class="label">Gold SLA</text></g>
+    <!-- Customer 2 -->
+    <g class="topo-node"><rect x="590" y="86" width="84" height="44" rx="8" fill="${nColor('cu2')}" stroke="var(--border)"/>
+      <text x="632" y="104" text-anchor="middle">Consumers</text><text x="632" y="118" text-anchor="middle" class="label">Bronze</text></g>
+  </svg>`;
+    }
+
+    function gaugeHTML(label, value, unit, alert = false) {
+      return `<div class="gauge ${alert ? 'alert' : ''}">
+    <div class="gauge-label">${label}</div>
+    <div class="gauge-value" style="color:${alert ? 'var(--rose)' : 'var(--emerald)'}">${value}</div>
+    <div class="gauge-unit">${unit}</div>
+  </div>`;
+    }
+
+    function renderNormalOps(s) {
+      s.innerHTML = `
+    <div class="stage-title">Act 1 — Normal Operations</div>
+    <div class="stage-sub">All KPIs green. Network operating within SLA bounds.</div>
+    <div class="topology">${topoSVG()}</div>
+    <div class="gauges">
+      ${gaugeHTML('RSRP', '-72', 'dBm')}
+      ${gaugeHTML('DL BLER', '0.3', '%')}
+      ${gaugeHTML('Throughput', '285', 'Mbps')}
+      ${gaugeHTML('Latency', '8', 'ms')}
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-emerald">All Systems Nominal</span></div>`;
+    }
+
+    function renderAnomaly(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--rose)">Act 2 — Service Disruption</div>
+    <div class="stage-sub">Backhaul fibre cut at gNB-042. Signal degradation cascading through cells.</div>
+    <div class="topology">${topoSVG('e1', ['site', 'gnb', 'c1', 'c2'])}</div>
+    <div class="gauges">
+      ${gaugeHTML('RSRP', '-108', 'dBm', true)}
+      ${gaugeHTML('DL BLER', '12.4', '%', true)}
+      ${gaugeHTML('Throughput', '42', 'Mbps', true)}
+      ${gaugeHTML('Latency', '145', 'ms', true)}
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-rose">⚠ SLA Breach Imminent</span></div>`;
+    }
+
+    function renderDetection(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--amber)">Act 3 — Anomaly Detection</div>
+    <div class="stage-sub">Pedkai's Z-score detector triggers on RSRP dip. Alarm cascade begins.</div>
+    <div class="topology">${topoSVG('e1', ['gnb', 'c1', 'c2'])}</div>
+    <div class="alarms">
+      <div class="alarm-row" style="animation-delay:.1s"><div class="severity"></div><div class="alarm-text">RSRP anomaly on Cell-α — Z-score: −4.2σ</div><div class="alarm-time">14:30:01</div></div>
+      <div class="alarm-row" style="animation-delay:.4s"><div class="severity"></div><div class="alarm-text">DL BLER spike on Cell-β — Z-score: +3.8σ</div><div class="alarm-time">14:30:02</div></div>
+      <div class="alarm-row" style="animation-delay:.7s"><div class="severity"></div><div class="alarm-text">Throughput collapse on gNB-042 — Z-score: −5.1σ</div><div class="alarm-time">14:30:03</div></div>
+      <div class="alarm-row" style="animation-delay:1s"><div class="severity" style="background:var(--amber)"></div><div class="alarm-text">Correlated alarm cluster — 3 metrics affected</div><div class="alarm-time">14:30:04</div></div>
+    </div>`;
+    }
+
+    function renderRCA(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--cyan)">Act 4 — Root Cause Analysis</div>
+    <div class="stage-sub">Pedkai traces upstream through the Context Graph to find the root cause.</div>
+    <div class="topology">${topoSVG('e1', ['site', 'gnb'])}</div>
+    <div class="sitrep">
+      <h3>🧠 Graph Traversal</h3>
+      <p><span class="highlight">Cell-α</span> ← <em>hosted by</em> ← <span class="highlight">gNB-042</span> ← <em>hosted by</em> ← <span class="highlight">Site-ABC</span></p>
+      <p style="margin-top:12px"><strong>Root Cause Identified:</strong> Backhaul fibre degradation at <span class="warning">Site-ABC</span>.<br>
+      <strong>Downstream Impact:</strong> 2 cells, 1 enterprise SLA (Acme Corp Gold — 99.99% uptime).</p>
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-cyan">Causal AI: RSRP Granger-causes DL_BLER (p=0.01)</span></div>`;
+    }
+
+    function renderSITREP(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--purple)">Act 5 — AI SITREP</div>
+    <div class="stage-sub">Pedkai generates an actionable Situation Report for the NOC engineer.</div>
+    <div class="sitrep" style="max-width:750px">
+      <h3>📋 Autonomous SITREP — gNB-042</h3>
+      <p><strong>Summary:</strong> Backhaul fibre cut at Site-ABC causing cascading degradation across 2 cells. Enterprise customer <span class="warning">Acme Corp (Gold SLA)</span> impacted. Revenue at risk: <span class="warning">£6,000/mo</span>.</p>
+      <p style="margin-top:12px"><strong>Root Cause:</strong> Physical fibre damage upstream of gNB-042. Confirmed by Granger Causality analysis (RSRP → DL_BLER, p=0.01, lag=2).</p>
+      <p style="margin-top:12px"><strong>Decision Memory:</strong> Found 2 similar past incidents (similarity: 0.92). Prior resolution: <span class="highlight">Traffic steering to adjacent cells</span> resolved in 12 minutes.</p>
+      <p style="margin-top:12px"><strong>Recommended Action:</strong> Execute failover to Cell-γ (neighbour at 62% capacity). Dispatch field engineer for fibre repair.</p>
+      <p style="margin-top:8px;font-size:.75rem;color:var(--emerald)">✅ POLICY APPLIED: Corporate SLA Guarantee — Prioritize Acme Corp traffic.</p>
+    </div>`;
+    }
+
+    function renderResolution(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--emerald)">Act 6 — Resolution</div>
+    <div class="stage-sub">Failover executed. KPIs recovering to nominal levels.</div>
+    <div class="topology">${topoSVG()}</div>
+    <div class="gauges">
+      ${gaugeHTML('RSRP', '-74', 'dBm')}
+      ${gaugeHTML('DL BLER', '0.8', '%')}
+      ${gaugeHTML('Throughput', '241', 'Mbps')}
+      ${gaugeHTML('Latency', '11', 'ms')}
+    </div>
+    <div style="text-align:center;margin-top:16px"><span class="badge badge-emerald">✓ Service Restored — MTTR: 14 minutes</span></div>
+    <div style="text-align:center;margin-top:12px;font-size:.78rem;color:var(--slate)">Decision trace captured. Outcome: SUCCESS. Customer impact: 0 complaints.</div>`;
+    }
+
+    function renderLearning(s) {
+      s.innerHTML = `
+    <div class="stage-title" style="color:var(--emerald)">Act 7 — Decision Memory & Learning</div>
+    <div class="stage-sub">Pedkai captures the full reasoning chain for future retrieval.</div>
+    <div class="learning">
+      <div class="learn-card">
+        <h4>📝 Decision Trace Stored</h4>
+        <p>Context, constraints (Gold SLA), options considered (restart vs failover), and tradeoff rationale preserved in JSONB.</p>
+      </div>
+      <div class="learn-card">
+        <h4>🔗 Embedding Generated</h4>
+        <p>Semantic vector (3072-dim) computed via Gemini. Future similar incidents will retrieve this decision at 0.92+ similarity.</p>
+      </div>
+      <div class="learn-card">
+        <h4>👍 Operator Feedback</h4>
+        <p>NOC engineer upvotes the recommendation. RLHF boost (+0.1) applied to this decision's retrieval score.</p>
+      </div>
+    </div>
+    <div class="sitrep" style="border-color:rgba(16,185,129,.3);background:linear-gradient(135deg,rgba(16,185,129,.06),rgba(6,182,212,.06))">
+      <h3 style="color:var(--emerald)">💡 Learning Applied</h3>
+      <p><strong>Next time</strong> a fibre-cut degrades a gNodeB with a Gold-tier SLA, Pedkai will:<br>
+      1. Retrieve this decision (similarity: 0.92+)<br>
+      2. Auto-recommend failover (confidence: 0.87)<br>
+      3. Apply the same policy constraints<br>
+      4. Reduce MTTR from <span class="warning">~45 min (manual)</span> to <span class="highlight">~14 min (AI-assisted)</span></p>
+    </div>`;
+    }
+
+    function goToAct(i) { currentAct = i; renderStage(); }
+    function nextAct() { if (currentAct < 6) { currentAct++; renderStage(); } else { stopAutoPlay(); } }
+    function prevAct() { if (currentAct > 0) { currentAct--; renderStage(); } }
+
+    function toggleAutoPlay() {
+      if (autoPlayTimer) { stopAutoPlay(); }
+      else {
+        document.getElementById('btnAutoPlay').textContent = '⏸ Pause';
+        autoPlayTimer = setInterval(() => {
+          if (currentAct < 6) { nextAct(); } else { stopAutoPlay(); }
+        }, 3500);
+      }
+    }
+    function stopAutoPlay() {
+      clearInterval(autoPlayTimer); autoPlayTimer = null;
+      document.getElementById('btnAutoPlay').textContent = '▶ Auto Play';
+    }
+
+    renderStage();
+  </script>
+</body>
+
+</html>

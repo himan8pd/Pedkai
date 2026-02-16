@@ -67,6 +67,30 @@ Memory: IMS S-CSCF Traffic Draining/Failover.
 Result: Core signaling stability restored.
 ```
 ````
+## Integrated Intelligence Bridge
+
+The **Integrated Intelligence Bridge** (`demo_intelligence_bridge.html`) is a unified presentation dashboard that correlates:
+1.  **Topological Core Architecture**: A layered view of 64+ network functions.
+2.  **Service Impact Intelligence**: Dynamic metrics, alarm clusters, and business reasoning.
+
+### Key Features
+- **NOC Console (Deluge)**: A raw alarm wall that demonstrates the "noise" environment human operators face, showing a deluge of uncorrelated events.
+- **Synchronized Correlation**: Triggering a scenario now highlights relevant alarms in the console while dimming uncorrelated "noise," visually proving Pedkai's intelligent filtering.
+- **AI Suitability Scorecard**: A punchy, three-metric comparison (Legacy vs. Pedkai) showing:
+  - **MTTR (Root Cause)**: 45m $\rightarrow$ 12s.
+  - **OpEx Reduction**: 84% gain through automation.
+  - **Context Analysis**: 4.2s for real-time graph traversal.
+- **Reasoning Chain & Decision Memory**: Sequential animations lead to a "Decision Memory Match" badge, showing that Pedkai learns from past incidents.
+
+![Refined Intelligence Bridge - AI Scorecard](file:///Users/himanshu/.gemini/antigravity/brain/789c587e-4250-4ccc-8aeb-ac40c22449c0/light_mode_dashboard_1771248963016.png)
+*(Image shows integrated dashboard baseline; animations and highlights trigger upon scenario selection)*
+
+### Unified Controls
+- **AI Pulse Presentation**: Key metrics in the scorecard have a subtle green pulse to draw attention to performance gains.
+- **Shared Theme Toggle**: Seamlessly switch between Dark and Light modes across both panes.
+- **Instant Reset**: A "Reset Dashboard" button to return to a clean baseline state for the next presentation.
+
+---
 
 ## 🛠️ Implementation Details
 
