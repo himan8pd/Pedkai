@@ -36,7 +36,13 @@ export PEDKAI_POLICY_PATH="${PEDKAI_POLICY_PATH:-$SCRIPT_DIR/backend/app/policie
 export PEDKAI_POLICY_CHECKSUM="${PEDKAI_POLICY_CHECKSUM:-}"
 
 # =============================================================================
-# Kill any existing processes on ports 8002 and 3002
+# Port configuration
+# =============================================================================
+BACKEND_PORT="${PEDKAI_BACKEND_PORT:-8000}"
+FRONTEND_PORT="${PEDKAI_FRONTEND_PORT:-3000}"
+
+# =============================================================================
+# Kill any existing processes on configured ports
 # =============================================================================
 cleanup_port() {
     local port=$1
@@ -48,8 +54,8 @@ cleanup_port() {
     fi
 }
 
-cleanup_port 8002
-cleanup_port 3002
+cleanup_port $BACKEND_PORT
+cleanup_port $FRONTEND_PORT
 
 # =============================================================================
 # Start backend in background
@@ -60,14 +66,15 @@ echo "=================================================="
 echo "Python:     $VENV_PYTHON"
 echo "Database:   ./pedkai_demo.db (Seeded)"
 echo "Policies:   backend/app/policies/global_policies.yaml"
-echo "URL:        http://localhost:8002"
-echo "Docs:       http://localhost:8002/docs"
+echo "URL:        http://localhost:$BACKEND_PORT"
+echo "Docs:       http://localhost:$BACKEND_PORT/docs"
 echo "=================================================="
 
 "$VENV_PYTHON" -m uvicorn backend.app.main:app \
     --host 0.0.0.0 \
-    --port 8002 \
-    --reload &
+    --port "$BACKEND_PORT" \
+    --reload \
+    --reload-dir backend &
 BACKEND_PID=$!
 
 echo "Backend started (PID: $BACKEND_PID)"
@@ -82,8 +89,8 @@ sleep 2
 echo "=================================================="
 echo "🚀 Starting Pedkai NOC Dashboard (Frontend)"
 echo "=================================================="
-FRONTEND_URL="${FRONTEND_URL:-http://localhost:3002}"
-BACKEND_URL="${BACKEND_URL:-http://localhost:8002}"
+FRONTEND_URL="${FRONTEND_URL:-http://localhost:$FRONTEND_PORT}"
+BACKEND_URL="${BACKEND_URL:-http://localhost:$BACKEND_PORT}"
 echo "URL:       ${FRONTEND_URL}"
 echo "Backend:   ${BACKEND_URL}"
 echo "=================================================="
@@ -105,44 +112,84 @@ rm -rf "$SCRIPT_DIR/frontend/.next/dev/lock" 2>/dev/null || true
 
 # We run frontend in foreground so logs are visible and Ctrl+C stops everything cleanly
 cd "$SCRIPT_DIR/frontend"
-npm run dev &
+PORT="$FRONTEND_PORT" npm run dev &
 FRONTEND_PID=$!
 
 echo "Frontend started (PID: $FRONTEND_PID)"
 echo ""
 
 # Verification step
-sleep 5
 echo "--------------------------------------------------"
 echo "🔍 Verifying Service Connectivity..."
 echo "--------------------------------------------------"
 
-backend_status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8002/health || echo "fail")
-if [ "$backend_status" = "200" ]; then
-    echo "✅ Backend is UP (http://localhost:8002)"
-else
-    echo "❌ Backend is NOT responding (Code: $backend_status)"
+# Wait for backend to be ready
+MAX_RETRIES=10
+RETRIES=0
+BACKEND_UP=false
+
+while [ $RETRIES -lt $MAX_RETRIES ]; do
+    status_code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$BACKEND_PORT/health" || echo "000")
+    if [ "$status_code" = "200" ]; then
+        echo "✅ Backend is UP (http://localhost:$BACKEND_PORT)"
+        BACKEND_UP=true
+        break
+    fi
+    echo "⏳ Waiting for Backend... (Attempt $((RETRIES+1))/$MAX_RETRIES)"
+    sleep 2
+    RETRIES=$((RETRIES+1))
+done
+
+if [ "$BACKEND_UP" = "false" ]; then
+    echo "❌ Backend failed to start or is not responding (Code: $status_code)"
+    # We don't exit immediately, let's check frontend too
 fi
 
-frontend_status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3002/ || echo "fail")
-if [ "$frontend_status" = "200" ]; then
-    echo "✅ Frontend is UP (http://localhost:3002)"
-else
-    echo "❌ Frontend is NOT responding (Code: $frontend_status)"
+# Wait for frontend to be ready (Next.js can be slow on first run)
+MAX_FRONTEND_RETRIES=60
+RETRIES=0
+FRONTEND_UP=false
+
+while [ $RETRIES -lt $MAX_FRONTEND_RETRIES ]; do
+    # Use -L to follow redirects if any, -s for silent
+    status_code=$(curl -s -L -o /dev/null -w "%{http_code}" "http://127.0.0.1:$FRONTEND_PORT/" || echo "000")
+    if [ "$status_code" = "200" ]; then
+        echo "✅ Frontend is UP (http://localhost:$FRONTEND_PORT)"
+        FRONTEND_UP=true
+        break
+    fi
+    echo "⏳ Waiting for Frontend... (Attempt $((RETRIES+1))/$MAX_FRONTEND_RETRIES)"
+    sleep 2
+    RETRIES=$((RETRIES+1))
+done
+
+if [ "$FRONTEND_UP" = "false" ]; then
+    echo "❌ Frontend failed to start or is not responding (Code: $status_code)"
 fi
+
 echo "--------------------------------------------------"
 
-echo "Both services are running."
-echo " → Backend → http://localhost:8002 / docs: http://localhost:8002/docs"
-echo " → Frontend → http://localhost:3002"
-echo ""
-echo "Press Ctrl+C to stop both services..."
-echo ""
+if [ "$BACKEND_UP" = "true" ] && [ "$FRONTEND_UP" = "true" ]; then
+    echo "✨ All services are running correctly."
+    echo " → Backend: http://localhost:$BACKEND_PORT"
+    echo " → Docs:    http://localhost:$BACKEND_PORT/docs"
+    echo " → Frontend: http://localhost:$FRONTEND_PORT"
+    echo ""
+    echo "Press Ctrl+C to stop both services..."
+    echo ""
+else
+    echo "🔴 Startup failed. Some services are not responding correctly."
+    echo "Check the logs above for errors."
+    echo ""
+    echo "Cleaning up processes and exiting..."
+    kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+    exit 1
+fi
 
 # =============================================================================
 # Keep script alive + clean shutdown on Ctrl+C
 # =============================================================================
-trap 'echo ""; echo "Shutting down..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; wait; echo "All services stopped."; exit 0' INT TERM
+trap 'echo ""; echo "Shutting down Services..."; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; wait; echo "All services stopped."; exit 0' INT TERM
 
 # Wait forever (until Ctrl+C)
 wait

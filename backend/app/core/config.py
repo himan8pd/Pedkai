@@ -13,7 +13,15 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore", # Allow extra env vars without failing
     )
+    
+    # Ports and URLs (added for startup script synchronization)
+    pedkai_backend_port: int = 8000
+    pedkai_frontend_port: int = 3000
+    next_public_api_base_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:3000"
+    backend_url: str = "http://localhost:8000"
     
     # App
     app_name: str = "Pedkai"

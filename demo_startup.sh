@@ -7,7 +7,8 @@ export PEDKAI_POLICY_PATH="$(pwd)/backend/app/policies/global_policies.yaml"
 export SECRET_KEY="demo-secret-key"
 
 # start back end
-python3 -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+BACKEND_PORT="${PEDKAI_BACKEND_PORT:-8000}"
+python3 -m uvicorn backend.app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" --reload
 
 # start front end
 ./run_frontend.sh
