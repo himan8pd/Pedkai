@@ -36,7 +36,7 @@ export PEDKAI_POLICY_PATH="${PEDKAI_POLICY_PATH:-$SCRIPT_DIR/backend/app/policie
 export PEDKAI_POLICY_CHECKSUM="${PEDKAI_POLICY_CHECKSUM:-}"
 
 # =============================================================================
-# Kill any existing processes on ports 8000 and 3000
+# Kill any existing processes on ports 8002 and 3002
 # =============================================================================
 cleanup_port() {
     local port=$1
@@ -48,8 +48,8 @@ cleanup_port() {
     fi
 }
 
-cleanup_port 8000
-cleanup_port 3000
+cleanup_port 8002
+cleanup_port 3002
 
 # =============================================================================
 # Start backend in background
@@ -60,13 +60,13 @@ echo "=================================================="
 echo "Python:     $VENV_PYTHON"
 echo "Database:   ./pedkai_demo.db (Seeded)"
 echo "Policies:   backend/app/policies/global_policies.yaml"
-echo "URL:        http://localhost:8000"
-echo "Docs:       http://localhost:8000/docs"
+echo "URL:        http://localhost:8002"
+echo "Docs:       http://localhost:8002/docs"
 echo "=================================================="
 
 "$VENV_PYTHON" -m uvicorn backend.app.main:app \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port 8002 \
     --reload &
 BACKEND_PID=$!
 
@@ -82,8 +82,8 @@ sleep 2
 echo "=================================================="
 echo "🚀 Starting Pedkai NOC Dashboard (Frontend)"
 echo "=================================================="
-FRONTEND_URL="${FRONTEND_URL:-http://localhost:3000}"
-BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
+FRONTEND_URL="${FRONTEND_URL:-http://localhost:3002}"
+BACKEND_URL="${BACKEND_URL:-http://localhost:8002}"
 echo "URL:       ${FRONTEND_URL}"
 echo "Backend:   ${BACKEND_URL}"
 echo "=================================================="
@@ -117,24 +117,24 @@ echo "--------------------------------------------------"
 echo "🔍 Verifying Service Connectivity..."
 echo "--------------------------------------------------"
 
-backend_status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/health || echo "fail")
+backend_status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8002/health || echo "fail")
 if [ "$backend_status" = "200" ]; then
-    echo "✅ Backend is UP (http://localhost:8000)"
+    echo "✅ Backend is UP (http://localhost:8002)"
 else
     echo "❌ Backend is NOT responding (Code: $backend_status)"
 fi
 
-frontend_status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/ || echo "fail")
+frontend_status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3002/ || echo "fail")
 if [ "$frontend_status" = "200" ]; then
-    echo "✅ Frontend is UP (http://localhost:3000)"
+    echo "✅ Frontend is UP (http://localhost:3002)"
 else
     echo "❌ Frontend is NOT responding (Code: $frontend_status)"
 fi
 echo "--------------------------------------------------"
 
 echo "Both services are running."
-echo " → Backend → http://localhost:8000 / docs: http://localhost:8000/docs"
-echo " → Frontend → http://localhost:3000"
+echo " → Backend → http://localhost:8002 / docs: http://localhost:8002/docs"
+echo " → Frontend → http://localhost:3002"
 echo ""
 echo "Press Ctrl+C to stop both services..."
 echo ""

@@ -101,35 +101,35 @@ Since Context Graph is about capturing **decision traces** (structured records),
 │                           PEDKAI CONTROL PLANE                           │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Layer 5: Automation & Actuation                                         │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐        │
-│  │ Ticket API  │ │ Config API  │ │ Vendor APIs │ │ Human Loop  │        │
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘        │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐         │
+│  │ Ticket API  │ │ Config API  │ │ Vendor APIs │ │ Human Loop  │         │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘         │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Layer 4: Decision & Policy Engine (Pedkai's Moat)                       │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  ┌──────────────────────────────────────────────────────────────────┐    │
 │  │ Risk-aware recommendations │ Explainability │ Policy constraints │    │
-│  │ ─────────────────────────────────────────────────────────────── │    │
-│  │ Decision Trace Capture │ Pattern Matching │ Outcome Learning    │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
+│  │ ─────────────────────────────────────────────────────────────────│    │
+│  │ Decision Trace Capture │ Pattern Matching │ Outcome Learning     │    │
+│  └────────────────────────────────────────────────────────────────-─┘    │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Layer 3: Intelligence Engines                                           │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐           │
-│  │ Anomaly    │ │ Root Cause │ │ LLM        │ │ Decision   │           │
-│  │ Detection  │ │ Analysis   │ │ Reasoning  │ │ Similarity │           │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────┘           │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐             │
+│  │ Anomaly    │ │ Root Cause │ │ LLM        │ │ Decision   │             │
+│  │ Detection  │ │ Analysis   │ │ Reasoning  │ │ Similarity │             │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘             │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Layer 2: Context Graph (Decision Memory)                                │
-│  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ Decision Traces │ Evidence Snapshots │ Constraint History       │    │
-│  │ Outcome Records │ Learning Patterns  │ Exception Handling       │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-│  Storage: PostgreSQL + JSONB │ TimescaleDB │ pgvector                   │
+│  ┌─────────────────────────────────────────────────────────────────┐     │
+│  │ Decision Traces │ Evidence Snapshots │ Constraint History       │     │
+│  │ Outcome Records │ Learning Patterns  │ Exception Handling       │     │
+│  └─────────────────────────────────────────────────────────────────┘     │
+│  Storage: PostgreSQL + JSONB │ TimescaleDB │ pgvector                    │
 ├──────────────────────────────────────────────────────────────────────────┤
 │  Layer 1: Data & Signal Fabric                                           │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐           │
-│  │ Streaming  │ │ Event      │ │ Historical │ │ External   │           │
-│  │ Telemetry  │ │ Ingestion  │ │ Data Lake  │ │ Feeds      │           │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────┘           │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐             │
+│  │ Streaming  │ │ Event      │ │ Historical │ │ External   │             │
+│  │ Telemetry  │ │ Ingestion  │ │ Data Lake  │ │ Feeds      │             │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘             │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
