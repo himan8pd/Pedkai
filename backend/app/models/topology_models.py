@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime
+from sqlalchemy import Column, String, ForeignKey, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import text
 from backend.app.core.database import Base
@@ -25,7 +25,10 @@ class EntityRelationshipORM(Base):
     to_entity_id = Column(String(255), nullable=False, index=True)
     to_entity_type = Column(String(50), nullable=False)
 
+    # Multi-tenant isolation (Phase 15.3)
+    tenant_id = Column(String(50), nullable=False, index=True)
+
     # Metadata (e.g., "fiber", "microwave", "10Gbps")
     properties = Column(String, nullable=True) # JSON or string for simplicity
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now(), nullable=False)

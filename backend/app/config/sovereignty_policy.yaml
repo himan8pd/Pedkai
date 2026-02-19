@@ -1,0 +1,51 @@
+# Sovereignty Policy Configuration
+# Operator-editable YAML for AI data governance controls.
+# This file defines which AI endpoints are approved, geographic data residency rules,
+# content filtering rules, and audit requirements.
+#
+# Changes to this file require policy integrity checksum update (PEDKAI_POLICY_CHECKSUM env var).
+# See docs/data_architecture_adr.md for full governance context.
+
+ai_sovereignty:
+  # Approved AI endpoint allowlist — all other endpoints are blocked by default
+  approved_endpoints:
+    - name: "Google Gemini (EU)"
+      url: "https://generativelanguage.googleapis.com"
+      region: "EU"
+      data_classification: "internal"
+      approved: true
+    - name: "On-Premises vLLM"
+      url: "http://localhost:11434"
+      region: "on-prem"
+      data_classification: "confidential"
+      approved: true
+
+  # Geographic data residency rules
+  geographic_rules:
+    default_region: "EU"
+    allowed_regions:
+      - "EU"
+      - "UK"
+      - "on-prem"
+    blocked_regions:
+      - "US"  # Default: no data transfer to US endpoints without explicit approval
+    enforcement: "strict"  # "strict" | "warn" | "audit-only"
+
+  # Content filtering rules — what must be stripped before LLM egress
+  content_rules:
+    strip_pii: true
+    strip_imsi: true
+    strip_msisdn: true
+    strip_billing_data: true
+    strip_ip_addresses: true
+    allow_topology_metadata: true  # gNodeB names, cell IDs, site names are NOT PII
+    allow_kpi_aggregates: true     # Aggregated KPI values are NOT PII
+
+  # Audit requirements
+  audit:
+    log_all_prompts: true
+    log_prompt_hash: true       # SHA-256 hash of prompt, not the prompt itself
+    log_model_version: true
+    log_token_count: true
+    retention_days: 90          # Align with DPIA: LLM prompts retained 90 days
+    alert_on_blocked_egress: true

@@ -32,6 +32,12 @@ from backend.app.core.database import Base, get_db
 from backend.app.core.config import get_settings
 from backend.app.core.security import get_current_user, oauth2_scheme
 
+# Import all models to register them with Base.metadata (Fix for "No such table" in tests)
+from backend.app.models.incident_orm import IncidentORM
+from backend.app.models.decision_trace_orm import DecisionTraceORM, DecisionFeedbackORM
+from backend.app.models.topology_models import EntityRelationshipORM
+# Note: TMF642 and TMF628 are Pydantic only for now.
+
 # Use in-memory SQLite for testing
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -86,17 +92,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         finally:
             pass
 
-    async def override_get_user():
-        from backend.app.core.security import User, Role
-        return User(
-            username="testuser", 
-            role=Role.OPERATOR, 
-            scopes=["tmf642:alarm:write", "tmf642:alarm:read"]
-        )
-
-    async def override_oauth2_scheme():
-        return "dummy-token"
-
     async def override_get_metrics_db():
         async with TestingSessionLocal() as session:
             try:
@@ -108,8 +103,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     from backend.app.core.database import get_db, get_metrics_db
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_metrics_db] = override_get_metrics_db
-    app.dependency_overrides[get_current_user] = override_get_user
-    app.dependency_overrides[oauth2_scheme] = override_oauth2_scheme
+    
+    # Create AsyncClient
     
     # Create AsyncClient
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:

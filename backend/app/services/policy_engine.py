@@ -98,11 +98,27 @@ class PolicyEngine:
         """Retrieves a global operational parameter."""
         return self.parameters.get(key, default)
 
+    def is_emergency_service(self, context: Dict[str, Any]) -> bool:
+        """Check if the context relates to an emergency service entity."""
+        return (
+            context.get("entity_type") == "EMERGENCY_SERVICE"
+            or context.get("is_emergency_service") is True
+        )
+
     def evaluate(self, context: Dict[str, Any]) -> PolicyDecision:
         """
         Evaluates the current context against all active policies.
         Finding C-1: Uses simple_eval for safe condition checking.
         """
+        # H&S §2.13: Emergency service protection — hardcoded, cannot be overridden
+        if self.is_emergency_service(context):
+            return PolicyDecision(
+                allowed=True,
+                reason="EMERGENCY SERVICE — unconditional P1. This policy cannot be overridden.",
+                applied_policies=["EMERGENCY_SERVICE_P1_HARDCODE"],
+                required_actions=["UNCONDITIONAL_P1"]
+            )
+
         applied_policies = []
         required_actions = []
         

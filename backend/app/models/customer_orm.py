@@ -3,7 +3,7 @@ ORM Models for Phase 14: Customer Experience Intelligence.
 """
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, JSON, Text
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, JSON, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from backend.app.core.database import Base
 
@@ -15,6 +15,7 @@ class CustomerORM(Base):
     name = Column(String(255), nullable=True)
     churn_risk_score = Column(Float, default=0.0) # 0.0 to 1.0
     associated_site_id = Column(String(255), nullable=True, index=True) # Primary site the customer uses
+    consent_proactive_comms = Column(Boolean, default=False, nullable=False)
     tenant_id = Column(String(50), default="default", index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

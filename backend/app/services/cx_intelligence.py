@@ -61,24 +61,26 @@ class CXIntelligenceService:
         from backend.app.models.topology_models import EntityRelationshipORM
         
         # Recursive CTE to find all downstream entities (e.g., cells connected to a backhaul router)
+        tenant_id = getattr(trace, "tenant_id", "default") or "default"
         recursive_query = text("""
             WITH RECURSIVE downstream_impact AS (
-                -- Anchor: The originally impacted entity
-                SELECT to_entity_id FROM topology_relationships 
-                WHERE from_entity_id = :site_id
-                UNION
-                -- Recursive: Entities connected to the anchor
-                SELECT tr.to_entity_id FROM topology_relationships tr
+                SELECT to_entity_id, 1 AS depth
+                FROM topology_relationships
+                WHERE from_entity_id = :site_id AND tenant_id = :tid
+                UNION ALL
+                SELECT tr.to_entity_id, di.depth + 1
+                FROM topology_relationships tr
                 INNER JOIN downstream_impact di ON tr.from_entity_id = di.to_entity_id
+                WHERE di.depth < :max_depth AND tr.tenant_id = :tid
             )
-            SELECT to_entity_id FROM downstream_impact;
+            SELECT DISTINCT to_entity_id FROM downstream_impact LIMIT 1000
         """)
         
         impacted_sites = [site_id]
         
         try:
             # Execute recursive query to get downstream dependencies
-            res = await self.session.execute(recursive_query, {"site_id": site_id})
+            res = await self.session.execute(recursive_query, {"site_id": site_id, "tid": tenant_id, "max_depth": 5})
             downstream = res.scalars().all()
             impacted_sites.extend(downstream)
             logger.info(f"Graph Traversal: Anomaly at {site_id} propagates to {len(downstream)} downstream nodes: {downstream}")

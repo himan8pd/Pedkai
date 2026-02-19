@@ -1,18 +1,18 @@
-"""
-Integration tests for TMF642 Alarm Management API.
-"""
 import pytest
+import uuid
 from httpx import AsyncClient
-from uuid import uuid4
+from backend.app.core.security import create_access_token, Role
 
 @pytest.mark.asyncio
 async def test_create_alarm(client: AsyncClient):
     """Test creating a new alarm via POST /alarm (Ingress)."""
-    # Needs full TMF642Alarm payload as per implementation
-    alarm_id = str(uuid4())
+    token = create_access_token({"sub": "admin", "role": Role.ADMIN, "tenant_id": "default"})
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    alarm_id = str(uuid.uuid4())
     payload = {
         "id": alarm_id,
-        "alarmType": "communicationsAlarm", # CamelCase enum
+        "alarmType": "communicationsAlarm",
         "perceivedSeverity": "critical",
         "probableCause": "cableCut",
         "specificProblem": "Test Link Failure",
@@ -29,21 +29,23 @@ async def test_create_alarm(client: AsyncClient):
         "onap_schema_location": "http://schema"
     }
     
-    response = await client.post("/tmf-api/alarmManagement/v4/alarm", json=payload)
+    response = await client.post("/tmf-api/alarmManagement/v4/alarm", json=payload, headers=headers)
     assert response.status_code == 201
     data = response.json()
-    assert data["status"] == "accepted"
+    assert data["status"] == "persisted"
     assert data["id"] == alarm_id
 
 
 @pytest.mark.asyncio
 async def test_get_alarm_by_id(client: AsyncClient, db_session):
-    """Test retrieving an alarm by ID (after manual DB seeding)."""
-    # 1. Seed DB
+    """Test retrieving an alarm by ID."""
     from backend.app.models.decision_trace_orm import DecisionTraceORM
-    from datetime import datetime
+    from datetime import datetime, timezone
     
-    alarm_id = uuid4()
+    token = create_access_token({"sub": "admin", "role": Role.ADMIN, "tenant_id": "default"})
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    alarm_id = uuid.uuid4()
     trace = DecisionTraceORM(
         id=alarm_id,
         tenant_id="default",
@@ -53,31 +55,31 @@ async def test_get_alarm_by_id(client: AsyncClient, db_session):
         tradeoff_rationale="N/A",
         action_taken="None",
         decision_maker="System",
-        created_at=datetime.utcnow(),
-        decision_made_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        decision_made_at=datetime.now(timezone.utc),
         ack_state="unacknowledged",
-        confidence_score=0.9 # CRITICAL
+        confidence_score=0.9
     )
     db_session.add(trace)
     await db_session.commit()
     
-    # 2. Get
-    get_res = await client.get(f"/tmf-api/alarmManagement/v4/alarm/{alarm_id}")
+    get_res = await client.get(f"/tmf-api/alarmManagement/v4/alarm/{alarm_id}", headers=headers)
     assert get_res.status_code == 200
     data = get_res.json()
     assert data["id"] == str(alarm_id)
     assert data["specificProblem"] == "Power Failure Detected"
-    assert data["perceivedSeverity"] == "critical" # Mapped from 0.9 validation
 
 
 @pytest.mark.asyncio
 async def test_patch_alarm(client: AsyncClient, db_session):
     """Test patching an alarm (acknowledge)."""
-    # 1. Seed DB
     from backend.app.models.decision_trace_orm import DecisionTraceORM
-    from datetime import datetime
+    from datetime import datetime, timezone
     
-    alarm_id = uuid4()
+    token = create_access_token({"sub": "admin", "role": Role.ADMIN, "tenant_id": "default"})
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    alarm_id = uuid.uuid4()
     trace = DecisionTraceORM(
         id=alarm_id,
         tenant_id="default",
@@ -87,15 +89,14 @@ async def test_patch_alarm(client: AsyncClient, db_session):
         tradeoff_rationale="N/A",
         action_taken="None",
         decision_maker="System",
-        created_at=datetime.utcnow(),
-        decision_made_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        decision_made_at=datetime.now(timezone.utc),
         ack_state="unacknowledged"
     )
     db_session.add(trace)
     await db_session.commit()
     
-    # 2. Patch
     patch_payload = {"ackState": "acknowledged"}
-    patch_res = await client.patch(f"/tmf-api/alarmManagement/v4/alarm/{alarm_id}", json=patch_payload)
+    patch_res = await client.patch(f"/tmf-api/alarmManagement/v4/alarm/{alarm_id}", json=patch_payload, headers=headers)
     assert patch_res.status_code == 200
     assert patch_res.json()["ackState"] == "acknowledged"

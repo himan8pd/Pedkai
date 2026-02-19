@@ -60,9 +60,9 @@ class CapacityEngine:
             # Fallback for demo if no real data in test DB
             logger.warning("No hotspots found in KPI data. Using tactical regional candidates.")
             candidates = [
-                {"name": f"{request.region_name}-Sector-A", "lat": 18.52, "lon": 73.85, "cost": 45000, "pressure": 0.92},
-                {"name": f"{request.region_name}-Sector-B", "lat": 18.53, "lon": 73.86, "cost": 40000, "pressure": 0.89},
-                {"name": f"{request.region_name}-Sector-C", "lat": 18.54, "lon": 73.87, "cost": 55000, "pressure": 0.95},
+                {"name": f"{request.region_name}-Sector-A", "lat": 18.52, "lon": 73.85, "cost": 45000, "pressure": 0.92, "backhaul": "mw"},
+                {"name": f"{request.region_name}-Sector-B", "lat": 18.53, "lon": 73.86, "cost": 40000, "pressure": 0.89, "backhaul": "mw"},
+                {"name": f"{request.region_name}-Sector-C", "lat": 18.54, "lon": 73.87, "cost": 55000, "pressure": 0.95, "backhaul": "mw"},
             ]
         else:
             # Transform hotspots into candidates
@@ -130,7 +130,8 @@ class CapacityEngine:
                     "lat": lat,
                     "lon": lon,
                     "cost": round(final_cost, 2),
-                    "pressure": h.avg_value
+                    "pressure": h.avg_value,
+                    "backhaul": "fiber"
                 })
 
         # 2. Greedy selection based on budget

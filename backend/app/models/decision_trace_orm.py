@@ -10,7 +10,7 @@ from typing import Optional
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Float, Index, Integer, String, text, Text, JSON
+from sqlalchemy import Column, DateTime, Float, Index, Integer, String, text, Text, JSON, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from backend.app.core.database import Base
@@ -27,13 +27,18 @@ class DecisionTraceORM(Base):
     __tablename__ = "decision_traces"
     
     # ... (rest of the fields) ...
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()"))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id = Column(String(255), nullable=False, index=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now(), nullable=False)
     decision_made_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     trigger_type = Column(String(50), nullable=False, index=True)
     trigger_id = Column(String(255), nullable=True)
     trigger_description = Column(Text, nullable=False)
+    
+    # Entity reference (for TMF642 Alarms)
+    entity_id = Column(String(255), nullable=True, index=True)
+    entity_type = Column(String(50), nullable=True)
+    
     context = Column(JSON, nullable=False, default=dict)
     constraints = Column(JSON, nullable=False, default=list)
     options_considered = Column(JSON, nullable=False, default=list)
@@ -46,6 +51,11 @@ class DecisionTraceORM(Base):
     embedding = Column(Vector(settings.embedding_dimension), nullable=True)
     tags = Column(JSON, nullable=False, default=list)
     domain = Column(String(50), nullable=False, default="anops", index=True)
+    
+    # TMF642 Compatibility (Remediation Phase)
+    title = Column(String(500), nullable=True) # Alias/dedicated for trigger_description
+    severity = Column(String(50), nullable=True, default="minor") # perceivedSeverity
+    status = Column(String(50), nullable=True, default="raised") # raised | cleared
     
     # TMF642 Compliance Fields (Phase 3 - Revised)
     ack_state = Column(String(50), default="unacknowledged", nullable=False)  # unacknowledged | acknowledged
@@ -72,11 +82,11 @@ class DecisionFeedbackORM(Base):
     """
     __tablename__ = "decision_feedback"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()"))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     decision_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     operator_id = Column(String(255), nullable=False, index=True)
     score = Column(Integer, nullable=False) # 1 for upvote, -1 for downvote
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=text("now()"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now(), nullable=False)
     
     __table_args__ = (
         # Finding #4: One vote per operator per decision

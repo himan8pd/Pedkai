@@ -97,7 +97,40 @@ export default function NOCDashboard() {
     }
 
     fetchAlarms()
-    const interval = setInterval(fetchAlarms, 10000) // Polling
+    //  const interval = setInterval(fetchAlarms, 10000) // Polling
+    useEffect(() => {
+      if (!token) return;
+
+      // Initial fetch
+      fetchAlarms();
+
+      // SSE for real-time updates (replaces polling)
+      const eventSource = new EventSource(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stream/alarms`,
+        { withCredentials: false }
+      );
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === 'alarms_updated') {
+            fetchAlarms();  // Fetch fresh data when notified of changes
+          }
+        } catch (e) {
+          console.error('SSE parse error:', e);
+        }
+      };
+
+      eventSource.onerror = (err) => {
+        console.warn('SSE connection error, falling back to 30s polling:', err);
+        eventSource.close();
+        // Graceful degradation: fall back to slower polling if SSE fails
+        const fallback = setInterval(fetchAlarms, 30000);
+        return () => clearInterval(fallback);
+      };
+
+      return () => eventSource.close();
+    }, [token]);
     return () => clearInterval(interval)
   }, [token])
 
@@ -402,6 +435,9 @@ export default function NOCDashboard() {
                       <div className="grid grid-cols-2 gap-8 flex-1 content-start">
                         <div className="space-y-6">
                           <h3 className="text-cyan-400 text-xs font-black uppercase tracking-widest">Autonomous SITREP</h3>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            🤖 AI Generated — Advisory Only
+                          </span>
                           <div className="prose prose-invert max-w-none text-slate-300 bg-slate-900/50 p-6 rounded-xl border border-slate-800/50 leading-relaxed shadow-inner">
                             <p className="font-bold text-white mb-2">### EXECUTIVE SUMMARY</p>
                             <p>Critical anomaly detected on {selectedAlarm.alarmedObject?.id}. AI Analysis pending.</p>

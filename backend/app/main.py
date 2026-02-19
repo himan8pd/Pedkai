@@ -134,6 +134,42 @@ app.include_router(
     dependencies=[Depends(oauth2_scheme)]
 )
 
+# Topology API (WS1)
+from backend.app.api import topology
+app.include_router(
+    topology.router,
+    prefix=f"{settings.api_prefix}/topology",
+    tags=["Topology & Impact Analysis"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# Incident Lifecycle API (WS2)
+from backend.app.api import incidents
+app.include_router(
+    incidents.router,
+    prefix=f"{settings.api_prefix}/incidents",
+    tags=["Incident Lifecycle"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# Service Impact API (WS4)
+from backend.app.api import service_impact
+app.include_router(
+    service_impact.router,
+    prefix=f"{settings.api_prefix}/service-impact",
+    tags=["Service Impact & Alarm Correlation"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# Autonomous Shield API (WS5)
+from backend.app.api import autonomous
+app.include_router(
+    autonomous.router,
+    prefix=f"{settings.api_prefix}/autonomous",
+    tags=["Autonomous Shield"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
 
 @app.get("/")
 async def root():

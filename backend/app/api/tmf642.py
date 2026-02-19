@@ -68,8 +68,13 @@ async def list_alarms(
     db: AsyncSession = Depends(get_db),
     current_user=Security(get_current_user, scopes=[TMF642_READ])
 ):
-    """List alarms with TMF filters."""
-    result = await db.execute(select(DecisionTraceORM).limit(100))
+    """List alarms with TMF filters. Enforces tenant isolation."""
+    # Finding S-1 Fix: Mandatory tenant filtering
+    query = select(DecisionTraceORM).where(DecisionTraceORM.domain == "anops")
+    if current_user.tenant_id:
+        query = query.where(DecisionTraceORM.tenant_id == current_user.tenant_id)
+        
+    result = await db.execute(query.limit(100))
     results = result.scalars().all()
     return [map_orm_to_tmf(r) for r in results]
 
@@ -80,39 +85,54 @@ async def get_alarm(
     db: AsyncSession = Depends(get_db),
     current_user=Security(get_current_user, scopes=[TMF642_READ])
 ):
-    """Retrieve a single alarm by ID."""
-    result = await db.execute(select(DecisionTraceORM).filter(DecisionTraceORM.id == id))
+    """Retrieve a single alarm by ID. Enforces tenant isolation."""
+    query = select(DecisionTraceORM).filter(DecisionTraceORM.id == id)
+    if current_user.tenant_id:
+        query = query.where(DecisionTraceORM.tenant_id == current_user.tenant_id)
+        
+    result = await db.execute(query)
     orm = result.scalar_one_or_none()
     if not orm:
-        raise HTTPException(status_code=404, detail="Alarm not found")
+        raise HTTPException(status_code=404, detail="Alarm not found or access denied")
     return map_orm_to_tmf(orm)
 
 
 @router.post("/alarm", status_code=201)
 async def create_alarm(
     alarm: TMF642Alarm,
+    db: AsyncSession = Depends(get_db),
     current_user=Security(get_current_user, scopes=[TMF642_WRITE])
 ):
     """
     Ingress endpoint for legacy NMS tools (Strategic Review GAP 1).
-    Converts TMF payload to Pedkai event and publishes to Kafka.
+    Converts TMF payload to Pedkai DecisionTrace and persists to DB.
     """
-    # 1. Transform TMF JSON to internal signal format
-    pedkai_event = {
-        "event_id": alarm.id,
-        "entity_id": alarm.alarmedObject.id,
-        "event_type": alarm.alarmType.value,
-        "severity": alarm.perceivedSeverity.value,
-        "description": alarm.specificProblem,
-        "source": "TMF_INGRESS_API",
-        "raw_data": alarm.model_dump()
-    }
+    # 1. Map TMF to DecisionTraceORM (Actual Persistence Fix)
+    new_trace = DecisionTraceORM(
+        id=UUID(alarm.id) if alarm.id else uuid4(),
+        tenant_id=current_user.tenant_id or "default",
+        trigger_id=alarm.alarmedObject.id,
+        trigger_description=f"TMF642 Ingress: {alarm.specificProblem or 'No description'}",
+        trigger_type="EXTERNAL_ALARM",
+        entity_id=alarm.alarmedObject.id,
+        entity_type="NETWORK_ELEMENT",
+        decision_summary=alarm.specificProblem or "External alarm ingress via TMF642",
+        tradeoff_rationale="Legacy NMS synchronization",
+        action_taken="INGESTED",
+        decision_maker=f"tmf642_ingress:{current_user.username}",
+        severity=alarm.perceivedSeverity.value,
+        status="raised",
+        domain="anops",
+        created_at=alarm.eventTime or datetime.now(timezone.utc),
+    )
     
-    # 2. Publish to Kafka
-    # This enables the existing anomaly/RCA pipeline to process it
-    # await publish_event(Topics.ALARMS, pedkai_event)
+    db.add(new_trace)
+    await db.commit()
     
-    return {"status": "accepted", "id": alarm.id}
+    # 2. Publish to Kafka for downstream processing (Anomaly/RCA)
+    # await publish_event(Topics.ALARMS, alarm.model_dump())
+    
+    return {"status": "persisted", "id": str(new_trace.id)}
 
 
 @router.patch("/alarm/{id}", response_model=TMF642Alarm)

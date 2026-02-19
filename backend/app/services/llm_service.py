@@ -1,14 +1,14 @@
 """
 LLM Service - Intelligence and Explanation Layer.
 
-Uses Gemini to generate natural language explanations and recommendations
-for network incidents based on RCA and Decision Memory.
+Uses a cloud-agnostic LLMAdapter (llm_adapter.py) to generate natural language explanations
+and recommendations for network incidents based on RCA and Decision Memory.
 """
 
-from google import genai
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import json
 import random
+import hashlib
 
 from backend.app.core import config
 from backend.app.services.policy_engine import policy_engine
@@ -17,41 +17,39 @@ from backend.app.models.bss_orm import BillingAccountORM
 from backend.app.core.config import get_settings
 from backend.app.core.logging import get_logger
 from backend.app.core.resilience import llm_circuit_breaker
+from backend.app.services.pii_scrubber import PIIScrubber
+from backend.app.services.llm_adapter import get_adapter
 
 logger = get_logger(__name__)
 settings = get_settings()
 
-from abc import ABC, abstractmethod
-
-class LLMProvider(ABC):
-    """Abstract interface for LLM providers."""
-    @abstractmethod
-    async def generate(self, prompt: str) -> str:
-        pass
-
-class GeminiProvider(LLMProvider):
-    """Google Gemini implementation using the modern google-genai SDK."""
-    def __init__(self, api_key: str, model_name: str):
-        self.client = genai.Client(api_key=api_key)
-        self._model_name = model_name
-
-    async def generate(self, prompt: str) -> str:
-        response = await self.client.aio.models.generate_content(
-            model=self._model_name,
-            contents=prompt
-        )
-        return response.text
 
 class LLMService:
     """Service for complex reasoning and natural language explanation."""
     
     def __init__(self):
-        self._provider: Optional[LLMProvider] = None
-        if settings.gemini_api_key:
-            self._provider = GeminiProvider(settings.gemini_api_key, settings.gemini_model)
+        self._adapter = get_adapter()  # Uses PEDKAI_LLM_PROVIDER env var
+        self._pii_scrubber = PIIScrubber()
         
         # Finding #36: Configurable cost control (sampling rate)
         self.sampling_rate = settings.llm_sampling_rate
+
+    def _compute_confidence(
+        self,
+        llm_text: str,
+        decision_memory_hits: int,
+        causal_evidence_count: int,
+    ) -> float:
+        """
+        Compute a confidence score [0.0, 1.0] for an LLM output.
+        Based on: decision memory similarity hits + causal evidence count.
+        NOT based on LLM self-reported confidence (which is unreliable).
+        """
+        base = 0.3  # Minimum confidence for any LLM output
+        memory_bonus = min(decision_memory_hits * 0.1, 0.4)   # Up to +0.4 for memory hits
+        evidence_bonus = min(causal_evidence_count * 0.05, 0.3)  # Up to +0.3 for evidence
+        score = base + memory_bonus + evidence_bonus
+        return round(min(score, 0.95), 2)  # Cap at 0.95 — never claim certainty
 
     def _format_incident_context(self, context: Dict[str, Any]) -> str:
         """Helper to format RCA results for the prompt."""
@@ -101,22 +99,48 @@ class LLMService:
         incident_context: Dict[str, Any], 
         similar_decisions: List[Any],
         causal_evidence: Optional[List[Dict[str, Any]]] = None,
-        db_session: Optional[Any] = None
-    ) -> str:
+        db_session: Optional[Any] = None,
+        decision_memory_hits: int = 0,
+        causal_evidence_count: int = 0,
+    ) -> Dict[str, Any]:
         """
         Synthesizes RCA results and Decision Memory into an actionable SITREP.
+        Returns a dict with text, confidence, model_version, prompt_hash, ai_generated.
         Includes sampling-based cost control to prevent redundant LLM calls.
         """
-        if not self._provider:
-            return "LLM Provider not configured. Please set API keys."
+        return await self.generate_sitrep(
+            incident_context,
+            similar_decisions,
+            causal_evidence,
+            db_session,
+            decision_memory_hits,
+            causal_evidence_count
+        )
 
-        if random.random() > self.sampling_rate:
-            # We don't skip yet, we might bypass below
-            pass
-        else:
-            # If we are NOT in the sample, we can skip if not bypassed later
-            pass
-            
+    async def generate_sitrep(
+        self, 
+        incident_context: Dict[str, Any], 
+        similar_decisions: List[Any],
+        causal_evidence: Optional[List[Dict[str, Any]]] = None,
+        db_session: Optional[Any] = None,
+        decision_memory_hits: int = 0,
+        causal_evidence_count: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        Synthesizes RCA results and Decision Memory into an actionable SITREP.
+        Returns a dict with text, confidence, model_version, prompt_hash, ai_generated.
+        Includes sampling-based cost control to prevent redundant LLM calls.
+        """
+        if not self._adapter:
+            return {
+                "text": "LLM Adapter not configured. Please set API keys.",
+                "confidence": 0.0,
+                "model_version": "none",
+                "prompt_hash": "",
+                "ai_generated": True,
+                "scrub_manifest": [],
+            }
+
         # Refactor sampling logic to be determined AFTER BSS lookup
         should_bypass_sampling = False
 
@@ -138,8 +162,6 @@ class LLMService:
         import time
         start_time = time.time()
         
-        # Refactor sampling logic to be determined AFTER BSS lookup
-        should_bypass_sampling = False
         bss_resolved = False
         predicted_revenue_loss = 0.0
         cumulative_revenue_loss = 0.0
@@ -189,7 +211,8 @@ class LLMService:
         
         if not should_bypass_sampling and random.random() > self.sampling_rate:
             logger.info(f"Skipping LLM generation due to sampling ({self.sampling_rate}). Revenue ${predicted_revenue_loss} < ${exclusion_threshold}.")
-            return f"SITREP skipped (sampling active). Please check raw RCA data. [Policies checked: {', '.join(policy_decision.applied_policies)}]"
+            text = f"SITREP skipped (sampling active). Please check raw RCA data. [Policies checked: {', '.join(policy_decision.applied_policies)}]"
+            return {"text": text, "confidence": 0.0, "model_version": "skipped", "prompt_hash": "", "ai_generated": True, "scrub_manifest": []}
         
         policy_section = ""
         if not policy_decision.allowed:
@@ -200,7 +223,6 @@ class LLMService:
             policy_section += f"Mandates: {', '.join(policy_decision.required_actions)}"
         
         # Finding H-5: Deduplicate incident context in prompt
-        # RCA section should ideally contain distinct results, if not provided we use a placeholder summary
         rca_context = incident_context.get("rca_results", "Generic anomaly detection triggered (RCA pending graph traversal)")
 
         # 4. Construct Prompt with Policy Awareness
@@ -234,18 +256,51 @@ class LLMService:
         6. If revenue data was unavailable (UNKNOWN), explicitly state that.
         """
 
+        # B-2 FIX: Scrub PII before sending to external LLM
+        prompt, scrub_manifest = self._pii_scrubber.scrub(prompt)
+        if scrub_manifest:
+            logger.info(
+                f"PII scrubber removed {len(scrub_manifest)} items before LLM call. "
+                f"Prompt hash: {hashlib.sha256(prompt.encode()).hexdigest()[:16]}"
+            )
+
         try:
-            # Use configured provider (respects settings and API key)
-            if self._provider:
-                response = await self._provider.generate(prompt)
-                return response + policy_section
-            else:
-                return "LLM Provider Disconnected (Check API Key)" + policy_section
+            llm_resp = await self._adapter.generate(prompt)
+            # LLMResponse is a Pydantic model — access as attributes
+            llm_text = (llm_resp.text if hasattr(llm_resp, "text") else str(llm_resp)) + policy_section
+            model_version = llm_resp.model_version if hasattr(llm_resp, "model_version") else "unknown"
+            prompt_hash = llm_resp.prompt_hash if hasattr(llm_resp, "prompt_hash") else ""
+
+            # Task 3.2: Confidence scoring
+            confidence = self._compute_confidence(llm_text, decision_memory_hits, causal_evidence_count)
+            entity_id = incident_context.get("entity_id", "unknown")
+            if confidence < settings.llm_confidence_threshold:
+                llm_text = (
+                    f"[LOW CONFIDENCE — TEMPLATE FALLBACK]\n"
+                    f"Anomaly detected on entity {entity_id}. "
+                    f"Insufficient historical data for AI analysis. "
+                    f"Manual investigation recommended."
+                ) + policy_section
+
+            return {
+                "text": llm_text,
+                "confidence": confidence,
+                "model_version": model_version,
+                "prompt_hash": prompt_hash,
+                "ai_generated": True,
+                "scrub_manifest": scrub_manifest,
+            }
 
         except Exception as e:
-            # Circuit Breaker Logic
             logger.error(f"LLM Generation Failed: {e}")
-            return f"⚠️ AI SITREP Unavailable (Fallback): Anomaly detected in {incident_context}. Check logs.{policy_section}"
+            return {
+                "text": f"⚠️ AI SITREP Unavailable (Fallback): Check logs.{policy_section}",
+                "confidence": 0.0,
+                "model_version": "error",
+                "prompt_hash": "",
+                "ai_generated": True,
+                "scrub_manifest": scrub_manifest if 'scrub_manifest' in dir() else [],
+            }
 
 # Singleton instance
 _llm_service: Optional[LLMService] = None

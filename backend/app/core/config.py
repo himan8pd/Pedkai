@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     memory_search_min_similarity: float = 0.9  # Expansive by default for MVP
     memory_search_limit: int = 5
     memory_search_global_default: bool = True
+    llm_confidence_threshold: float = 0.5  # Below this, use template fallback
 
 
 @lru_cache
