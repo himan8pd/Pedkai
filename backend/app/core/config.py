@@ -77,6 +77,18 @@ class Settings(BaseSettings):
     memory_search_global_default: bool = True
     llm_confidence_threshold: float = 0.5  # Below this, use template fallback
 
+    # AI Maturity Ladder (Task 7.1 — Amendment #15)
+    # 1=Assisted (shadow), 2=Supervised (advisory, current target), 3=Autonomous (not in v1)
+    ai_maturity_level: int = 2
+
+    # Drift Detection Calibration (Task 7.2 — Amendment #24)
+    drift_threshold_pct: float = 15.0       # Configurable via DRIFT_THRESHOLD_PCT env var
+    drift_false_positive_window_days: int = 30  # Track FP rate over this window
+
+    # Customer Prioritisation (Task 7.3 — Amendment #21)
+    # Options: revenue | sla_tier | churn_risk | emergency_first
+    customer_prioritisation_strategy: str = "revenue"
+
 
 @lru_cache
 def get_settings() -> Settings:

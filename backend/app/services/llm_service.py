@@ -51,6 +51,29 @@ class LLMService:
         score = base + memory_bonus + evidence_bonus
         return round(min(score, 0.95), 2)  # Cap at 0.95 — never claim certainty
 
+    def _estimate_cost(self, prompt: str, response_text: str) -> dict:
+        """Estimate Gemini API cost per LLM call. Task 7.5 (Amendment #20).
+
+        Gemini Flash pricing (approximate, verify at cloud.google.com/vertex-ai/pricing):
+          $0.075 / 1M input tokens | $0.30 / 1M output tokens
+        Rough token estimate: 4 chars per token.
+        """
+        input_tokens = len(prompt) // 4
+        output_tokens = len(response_text) // 4
+        input_cost = (input_tokens / 1_000_000) * 0.075
+        output_cost = (output_tokens / 1_000_000) * 0.30
+        model_name = (
+            self._adapter.config.model_name
+            if hasattr(self._adapter, 'config') and self._adapter.config
+            else "unknown"
+        )
+        return {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "estimated_cost_usd": round(input_cost + output_cost, 6),
+            "model": model_name,
+        }
+
     def _format_incident_context(self, context: Dict[str, Any]) -> str:
         """Helper to format RCA results for the prompt."""
         entity_info = f"Entity: {context.get('entity_name')} ({context.get('entity_type')})"
@@ -282,6 +305,14 @@ class LLMService:
                     f"Manual investigation recommended."
                 ) + policy_section
 
+            # Task 7.5: Estimate and log per-call LLM cost (Amendment #20)
+            cost_estimate = self._estimate_cost(prompt, llm_text)
+            logger.info(
+                f"LLM cost estimate: ${cost_estimate['estimated_cost_usd']:.6f} USD "
+                f"({cost_estimate['input_tokens']} in + {cost_estimate['output_tokens']} out tokens) "
+                f"model={cost_estimate['model']}"
+            )
+
             return {
                 "text": llm_text,
                 "confidence": confidence,
@@ -289,6 +320,9 @@ class LLMService:
                 "prompt_hash": prompt_hash,
                 "ai_generated": True,
                 "scrub_manifest": scrub_manifest,
+                "llm_cost_usd": cost_estimate["estimated_cost_usd"],
+                "llm_input_tokens": cost_estimate["input_tokens"],
+                "llm_output_tokens": cost_estimate["output_tokens"],
             }
 
         except Exception as e:

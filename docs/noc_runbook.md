@@ -122,3 +122,38 @@ After Pedkai is restored:
 1. Review alarms that occurred during downtime in OSS
 2. Manually create incidents in Pedkai for any P1/P2 events
 3. Attach post-incident notes to maintain audit trail continuity
+
+---
+
+## 5. Emergency Service Protocol (H&S §2.13 — Unconditional)
+
+> **This protocol cannot be overridden by any operator action, policy rule, or configuration.**
+
+### 5.1 Trigger Condition
+Any alarm affecting a network entity where `entity_type = 'EMERGENCY_SERVICE'` in the topology database. This includes:
+- 999 / 112 call routing infrastructure
+- Emergency broadcast systems
+- Public safety network (PSN) gateways
+
+### 5.2 Automatic Response
+Upon detection of an emergency service entity in an alarm cluster:
+1. Incident is **unconditionally escalated to P1** — no severity override possible
+2. NOC Manager, On-call Engineer, and Shift Lead are **immediately notified** (PagerDuty + SMS)
+3. A dedicated Pedkai incident is created with flag `is_emergency_service: true`
+4. The 15-minute response SLA starts immediately upon alarm receipt (not upon acknowledgement)
+
+### 5.3 What Operators Must Not Do
+- ❌ Do NOT mark emergency service incidents as P2 or lower
+- ❌ Do NOT apply noise-wall suppression to emergency service entities  
+- ❌ Do NOT defer emergency service incidents to next business day
+
+### 5.4 Verification of Emergency Status
+Emergency service classification is determined by querying:
+```sql
+SELECT 1 FROM network_entities 
+WHERE id = :entity_id AND entity_type = 'EMERGENCY_SERVICE'
+```
+This is a hard database lookup — string matching on entity names is **not** used.
+
+### 5.5 Regulatory Context
+Emergency service availability is regulated under the Communications Act 2003 and Ofcom General Condition A3.2. Failure to maintain 999/112 connectivity may result in regulatory enforcement action.

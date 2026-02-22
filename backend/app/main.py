@@ -170,6 +170,10 @@ app.include_router(
     dependencies=[Depends(oauth2_scheme)]
 )
 
+# Real-time SSE push (Task 4.1 — replaces 10s polling)
+from backend.app.api import sse
+app.include_router(sse.router, prefix=f"{settings.api_prefix}", tags=["Real-time SSE"])
+
 
 @app.get("/")
 async def root():

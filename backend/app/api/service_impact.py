@@ -100,9 +100,11 @@ async def get_alarm_clusters(
     try:
         # Fetch actual alarms (stored in decision_traces for this version)
         tid = current_user.tenant_id or "default"
+        # Fetch actual alarms (stored in decision_traces as the system of record)
+        tid = current_user.tenant_id or "default"
         result = await db.execute(
             text("""
-                SELECT id, title, severity, status, entity_id, created_at
+                SELECT id, title, severity, status, entity_id, created_at, ack_state
                 FROM decision_traces
                 WHERE tenant_id = :tid
                 ORDER BY created_at DESC
@@ -111,6 +113,7 @@ async def get_alarm_clusters(
             {"tid": tid}
         )
         rows = result.fetchall()
+
     except Exception as e:
         logger.warning(f"Cluster query failed: {e}")
         rows = []

@@ -1,0 +1,184 @@
+GLOBAL RULES (apply to EVERY task — you MUST follow these exactly):
+
+1. Import paths: All Python imports use from backend.app.xxx import yyy. Project root is Pedkai/.
+2. Async: All DB operations use async/await with AsyncSession.
+3. SQLite compatibility: No PostgreSQL-specific types in test-facing code. Use String not UUID column types, JSON not JSONB.
+4. Minimal diffs: When modifying an existing file, make the smallest possible change. Show exact lines to add/replace. Never reformat surrounding code.
+5. No circular imports: Services → schemas/models only. Routers → services/schemas only. Nothing imports from routers.
+6. Test harness: All tests use fixtures from tests/conftest.py. Override get_current_user per-test for scope changes.
+7. Working directory: All cd commands use /Users/himanshu/Projects/Pedkai
+
+Now enter strict EXECUTE MODE for this single task:
+
+EXECUTE MODE: Process ONLY this exact task block.
+Output format (nothing else):
+1. Files changed (list)
+2. Exact diff or full new file content
+3. Commands you ran
+4. Verification output (PASS/FAIL + raw result)
+Then say "TASK COMPLETE — ready for next block".
+Do not explain, do not summarize, do not ask questions.
+
+## Layer 4 — Real-time Push (2 weeks, after Layer 2, parallel with Layer 3)
+
+---
+
+### Task 4.1 — Add SSE Endpoint for Real-time Alarm Push
+
+**Committee finding**: H-4 (CTO §2.3 mandate)
+**What**: Frontend polls every 10 seconds. Replace with Server-Sent Events (SSE) for real-time push. SSE is simpler than WebSockets for one-directional server→client push and requires no new infrastructure.
+
+**File to create**: `backend/app/api/sse.py`
+
+```python
+"""
+Server-Sent Events (SSE) endpoint for real-time alarm and incident push.
+Replaces the 10-second polling loop in the frontend.
+"""
+import asyncio
+import json
+import logging
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+
+from backend.app.core.database import get_db
+from backend.app.core.security import get_current_user, User
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: str):
+    """Generate SSE events for new alarms. Polls DB every 2s (server-side, not client-side)."""
+    last_seen_id = None
+    while True:
+        if await request.is_disconnected():
+            logger.info(f"SSE client disconnected for tenant {tenant_id}")
+            break
+        try:
+            query = text("""
+                SELECT id, specific_problem, perceived_severity, alarmed_object_id, event_time
+                FROM alarms
+                WHERE tenant_id = :tid
+                ORDER BY event_time DESC
+                LIMIT 20
+            """)
+            result = await db.execute(query, {"tid": tenant_id})
+            rows = result.fetchall()
+            if rows:
+                newest_id = str(rows[0][0])
+                if newest_id != last_seen_id:
+                    last_seen_id = newest_id
+                    payload = {
+                        "event": "alarms_updated",
+                        "tenant_id": tenant_id,
+                        "count": len(rows),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    yield f"data: {json.dumps(payload)}\n\n"
+        except Exception as e:
+            logger.error(f"SSE generator error: {e}")
+            yield f"data: {json.dumps({'event': 'error', 'message': str(e)})}\n\n"
+        await asyncio.sleep(2)  # Server polls every 2s — client stays connected
+
+
+@router.get("/stream/alarms")
+async def stream_alarms(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """SSE endpoint: streams alarm update notifications to connected clients."""
+    return StreamingResponse(
+        alarm_event_generator(request, db, current_user.tenant_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+```
+
+**Register in `backend/app/main.py`** — add after existing router registrations:
+```python
+from backend.app.api import sse
+app.include_router(sse.router, prefix=f"{settings.api_prefix}", tags=["Real-time SSE"])
+```
+
+**Verification**:
+```bash
+cd /Users/himanshu/Projects/Pedkai
+python -c "
+from backend.app.api.sse import router
+routes = [r.path for r in router.routes]
+assert any('stream' in str(r) for r in routes), f'FAIL: SSE route not found: {routes}'
+print('✅ SSE endpoint created')
+"
+```
+
+---
+
+### Task 4.2 — Wire Frontend to SSE Instead of Polling
+
+**Committee finding**: H-4 (continuation)
+**What**: Replace the `setInterval(fetchAlarms, 10000)` polling loop in `page.tsx` with an `EventSource` connection to the SSE endpoint.
+
+**File to modify**: `frontend/app/page.tsx`
+
+**Step 1** — Find and remove the polling interval (around line 100):
+```tsx
+const interval = setInterval(fetchAlarms, 10000)
+```
+
+**Step 2** — Replace with an SSE connection in the same `useEffect`:
+```tsx
+useEffect(() => {
+  if (!token) return;
+
+  // Initial fetch
+  fetchAlarms();
+
+  // SSE for real-time updates (replaces polling)
+  const eventSource = new EventSource(
+    `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stream/alarms`,
+    { withCredentials: false }
+  );
+
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.event === 'alarms_updated') {
+        fetchAlarms();  // Fetch fresh data when notified of changes
+      }
+    } catch (e) {
+      console.error('SSE parse error:', e);
+    }
+  };
+
+  eventSource.onerror = (err) => {
+    console.warn('SSE connection error, falling back to 30s polling:', err);
+    eventSource.close();
+    // Graceful degradation: fall back to slower polling if SSE fails
+    const fallback = setInterval(fetchAlarms, 30000);
+    return () => clearInterval(fallback);
+  };
+
+  return () => eventSource.close();
+}, [token]);
+```
+
+**Verification**:
+```bash
+cd /Users/himanshu/Projects/Pedkai
+python -c "
+with open('frontend/app/page.tsx') as f: src = f.read()
+assert 'EventSource' in src, 'FAIL: EventSource not added'
+assert 'setInterval(fetchAlarms, 10000)' not in src, 'FAIL: 10s polling still present'
+print('✅ Frontend uses SSE instead of polling')
+"
+```
+
+---

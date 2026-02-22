@@ -29,3 +29,52 @@ Pedkai requires a highly resilient data layer to handle high-velocity TMF628 KPI
 ### 5. Data Sovereignty
 - Data remains within the tenant's specified geographical region.
 - Egress is blocked by default; only anonymized metrics allowed to the central dashboard.
+
+---
+
+### 6. Topology Data Refresh Strategy
+
+Topology data (network entities and their relationships) is refreshed via the following mechanism:
+
+**Source**: OSS systems (Ericsson ENM, Nokia NetAct) publish topology change events to a Kafka topic: `topology.updates`
+
+**Processing**:
+1. Pedkai's topology consumer reads from `topology.updates`
+2. Each consumed event UPSERTs network entities and topology relationships
+3. `last_synced_at` is updated on every `topology_relationships` record touched by the sync
+4. Stale detection threshold: **7 days** (configurable via `TOPOLOGY_STALENESS_DAYS` env var)
+
+**Staleness alerting**:
+```sql
+SELECT COUNT(*) FROM topology_relationships
+WHERE tenant_id = :tid
+AND (last_synced_at IS NULL OR last_synced_at < NOW() - INTERVAL '7 days')
+```
+If count > 0, a NOC dashboard alert is raised: `"Topology data is stale — OSS sync may be degraded"`.
+
+**Why not `created_at`**: Topology relationships rarely change. Using `created_at < yesterday` generates false-positive staleness alerts. `last_synced_at` correctly reflects when the relationship was last confirmed by the OSS.
+
+---
+
+### 7. Graph Scalability
+
+**Current approach**: PostgreSQL recursive CTEs with depth limit of 5 hops and row limit of 1,000.
+
+- Supports: up to ~10,000 network entities per tenant
+- Limitation: CTE performance degrades beyond ~50,000 relationships
+
+**Migration path for larger networks**:
+
+| Scale | Recommended approach |
+|-------|---------------------|
+| < 10K entities | PostgreSQL recursive CTE (current) |
+| 10K – 100K entities | Apache AGE (PostgreSQL graph extension) — no schema migration required |
+| > 100K entities | Neo4j — requires ETL pipeline from PostgreSQL to Neo4j |
+
+When migrating to Neo4j:
+1. Deploy Neo4j alongside PostgreSQL
+2. Replicate `topology_relationships` to Neo4j via Kafka Connect
+3. Migrate `cx_intelligence.py` CTE queries to Cypher queries
+4. PostgreSQL remains the system of record; Neo4j is read-only replica for graph queries
+
+The decision to migrate should be triggered when recursive CTE queries exceed p95 > 200ms on a 30-day rolling average.

@@ -10,7 +10,6 @@ import {
   Database,
   Cpu,
   Network,
-  ChevronRight,
   Shield,
   Zap,
   Lock,
@@ -18,6 +17,9 @@ import {
   MapPin
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import StatCard from './components/StatCard'
+import AlarmCard from './components/AlarmCard'
+import SitrepPanel from './components/SitrepPanel'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -30,6 +32,8 @@ export default function NOCDashboard() {
   const [investmentPlan, setInvestmentPlan] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [token, setToken] = useState<string | null>(null)
+  // Task 5.1: Real scorecard data (replaces hardcoded MTTR/Uptime)
+  const [scorecard, setScorecard] = useState<{ avg_mttr: number | null, uptime_pct: number | null } | null>(null)
 
   // Auth State
   const [username, setUsername] = useState("operator")
@@ -74,65 +78,74 @@ export default function NOCDashboard() {
     }
   }
 
-  // Fetch alarms from real TMF642 API
-  useEffect(() => {
-    if (!token) return
-
-    async function fetchAlarms() {
-      try {
-        const response = await fetch(`${API_BASE_URL}/tmf-api/alarmManagement/v4/alarm`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        if (response.ok) {
-          const data = await response.json()
-          setAlarms(data)
-        } else if (response.status === 401) {
-          setToken(null) // Logout on 401
+  // Fetch alarms from real TMF642 API — defined at component scope so SSE handler can call it
+  const fetchAlarms = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/tmf-api/alarmManagement/v4/alarm`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      } catch (error) {
-        console.error("Failed to fetch alarms:", error)
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAlarms(data)
+      } else if (response.status === 401) {
+        setToken(null) // Logout on 401
       }
+    } catch (error) {
+      console.error("Failed to fetch alarms:", error)
     }
+  }
 
-    fetchAlarms()
-    //  const interval = setInterval(fetchAlarms, 10000) // Polling
-    useEffect(() => {
-      if (!token) return;
+  // Task 5.1: Fetch scorecard KPIs (MTTR + Uptime) from real API
+  const fetchScorecard = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/autonomous/scorecard`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setScorecard({ avg_mttr: data.avg_mttr_minutes, uptime_pct: data.uptime_pct });
+      }
+    } catch (e) { console.error('Scorecard fetch failed:', e); }
+  };
 
-      // Initial fetch
-      fetchAlarms();
+  // SSE for real-time alarm updates (Task 4.2 — replaces 10s polling)
+  useEffect(() => {
+    if (!token) return;
 
-      // SSE for real-time updates (replaces polling)
-      const eventSource = new EventSource(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stream/alarms`,
-        { withCredentials: false }
-      );
+    // Initial fetches on connect
+    fetchAlarms();
+    fetchScorecard();
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.event === 'alarms_updated') {
-            fetchAlarms();  // Fetch fresh data when notified of changes
-          }
-        } catch (e) {
-          console.error('SSE parse error:', e);
+    // Open SSE stream for real-time push notifications
+    const eventSource = new EventSource(
+      `${API_BASE_URL}/api/v1/stream/alarms`,
+      { withCredentials: false }
+    );
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'alarms_updated') {
+          fetchAlarms(); // Fetch fresh data when server signals a change
+          fetchScorecard(); // Also refresh scorecard
         }
-      };
+      } catch (e) {
+        console.error('SSE parse error:', e);
+      }
+    };
 
-      eventSource.onerror = (err) => {
-        console.warn('SSE connection error, falling back to 30s polling:', err);
-        eventSource.close();
-        // Graceful degradation: fall back to slower polling if SSE fails
-        const fallback = setInterval(fetchAlarms, 30000);
-        return () => clearInterval(fallback);
-      };
+    eventSource.onerror = (err) => {
+      console.warn('SSE connection error, closing stream:', err);
+      eventSource.close();
+    };
 
-      return () => eventSource.close();
-    }, [token]);
-    return () => clearInterval(interval)
-  }, [token])
+    return () => eventSource.close(); // Cleanup on unmount or token change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
 
   // Fetch capacity requests
   useEffect(() => {
@@ -358,8 +371,10 @@ export default function NOCDashboard() {
           </div>
           <div className="flex gap-4">
             <StatCard icon={<AlertCircle className="text-rose-500" />} label="Critical" value={alarms.filter((a: any) => a.perceivedSeverity === 'critical').length.toString()} />
-            <StatCard icon={<Clock className="text-cyan-400" />} label="MTTR" value="14m" />
-            <StatCard icon={<CheckCircle className="text-emerald-500" />} label="Uptime" value="99.98%" />
+            <StatCard icon={<Clock className="text-cyan-400" />} label="MTTR"
+              value={scorecard?.avg_mttr != null ? `${Math.round(scorecard.avg_mttr)}m` : '—'} />
+            <StatCard icon={<CheckCircle className="text-emerald-500" />} label="Uptime"
+              value={scorecard?.uptime_pct != null ? `${scorecard.uptime_pct.toFixed(2)}%` : '—'} />
           </div>
         </header>
 
@@ -392,67 +407,8 @@ export default function NOCDashboard() {
                 </div>
               </section>
 
-              {/* Situation Analysis / SITREP */}
-              <section className="flex-1 glass rounded-2xl border-slate-800 flex flex-col relative overflow-hidden">
-                <AnimatePresence mode="wait">
-                  {selectedAlarm ? (
-                    <motion.div
-                      key={selectedAlarm.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="p-8 flex flex-col h-full"
-                    >
-                      <div className="flex justify-between items-start mb-8">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={cn(
-                              "uppercase text-[10px] font-black px-2 py-0.5 rounded tracking-widest",
-                              selectedAlarm.perceivedSeverity === 'critical' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
-                            )}>
-                              {selectedAlarm.perceivedSeverity}
-                            </span>
-                            <span className="text-slate-500 text-xs">{selectedAlarm.id}</span>
-                            {selectedAlarm.ackState === 'acknowledged' && (
-                              <CheckCircle className="w-3 h-3 text-emerald-500" />
-                            )}
-                          </div>
-                          <h2 className="text-3xl font-bold text-white uppercase">{selectedAlarm.specificProblem}</h2>
-                          <p className="text-slate-400 mt-1 flex items-center gap-1.5">
-                            <Network className="w-4 h-4" /> {selectedAlarm.alarmedObject?.id || selectedAlarm.entity}
-                          </p>
-                        </div>
-                        {selectedAlarm.ackState !== 'acknowledged' && (
-                          <button
-                            onClick={() => handleAcknowledge(selectedAlarm.id)}
-                            className="px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold transition-all glow active:scale-95 shadow-lg shadow-cyan-900/20"
-                          >
-                            Acknowledge Alarm
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-8 flex-1 content-start">
-                        <div className="space-y-6">
-                          <h3 className="text-cyan-400 text-xs font-black uppercase tracking-widest">Autonomous SITREP</h3>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                            🤖 AI Generated — Advisory Only
-                          </span>
-                          <div className="prose prose-invert max-w-none text-slate-300 bg-slate-900/50 p-6 rounded-xl border border-slate-800/50 leading-relaxed shadow-inner">
-                            <p className="font-bold text-white mb-2">### EXECUTIVE SUMMARY</p>
-                            <p>Critical anomaly detected on {selectedAlarm.alarmedObject?.id}. AI Analysis pending.</p>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500 opacity-50">
-                      <Activity className="w-24 h-24 mb-4" />
-                      <p className="text-lg tracking-widest uppercase font-black">Select an incident to analyze</p>
-                    </div>
-                  )}
-                </AnimatePresence>
-              </section>
+              {/* Situation Analysis / SITREP — Task 5.2: extracted to SitrepPanel */}
+              <SitrepPanel selectedAlarm={selectedAlarm} onAcknowledge={handleAcknowledge} />
             </>
           ) : (
             <>
@@ -554,46 +510,4 @@ export default function NOCDashboard() {
   )
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
-  return (
-    <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10">
-      <div className="p-2 bg-slate-900 rounded-lg">{icon}</div>
-      <div>
-        <p className="text-[10px] uppercase font-bold text-slate-500 leading-tight">{label}</p>
-        <p className="text-lg font-black leading-tight">{value}</p>
-      </div>
-    </div>
-  )
-}
-
-function AlarmCard({ alarm, isSelected, onClick }: { alarm: any, isSelected: boolean, onClick: () => void }) {
-  // FIXED: TMF642 Field Mapping
-  const isCritical = alarm.perceivedSeverity === 'critical'
-
-  return (
-    <div
-      onClick={onClick}
-      className={cn(
-        "p-4 rounded-xl cursor-pointer transition-all duration-300 relative overflow-hidden group border",
-        isSelected
-          ? "bg-cyan-500/10 border-cyan-500/50 ring-1 ring-cyan-500/30"
-          : "bg-slate-900/40 border-slate-800 hover:border-slate-700 hover:bg-white/5"
-      )}
-    >
-      <div className="flex justify-between items-start mb-2">
-        <div className="flex items-center gap-2">
-          <div className={cn(
-            "w-2.5 h-2.5 rounded-full relative",
-            isCritical ? "bg-rose-500 pulse" : "bg-orange-500"
-          )} />
-          <span className="text-[11px] font-black text-slate-500 uppercase tracking-tighter truncate max-w-[80px]">{alarm.id}</span>
-        </div>
-        <span className="text-[10px] text-slate-500 font-medium">{new Date(alarm.eventTime).toLocaleTimeString()}</span>
-      </div>
-      <h4 className="font-bold text-white group-hover:text-cyan-400 transition-colors uppercase text-sm tracking-tight truncate">{alarm.specificProblem}</h4>
-      <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-        <Network className="w-3 h-3" /> {alarm.alarmedObject?.id || "Unknown Entity"}
-      </p>
-    </div>
-  )
-}
+// StatCard, AlarmCard, and SitrepPanel are now in frontend/app/components/ (Task 5.2)

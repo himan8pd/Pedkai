@@ -2,17 +2,25 @@ import logging, os
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from passlib.context import CryptContext
+import bcrypt
 from backend.app.models.user_orm import UserORM
 
 logger = logging.getLogger(__name__)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    """Hash a password using direct bcrypt for Python 3.14 compatibility."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(plain.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a password against a hash using direct bcrypt."""
+    try:
+        return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
+    except Exception as e:
+        logger.error(f"Password verification error: {e}")
+        return False
+
 
 async def get_user_by_username(db: AsyncSession, username: str) -> Optional[UserORM]:
     result = await db.execute(select(UserORM).where(UserORM.username == username))

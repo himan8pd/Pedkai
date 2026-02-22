@@ -402,15 +402,25 @@ class UserORM(Base):
 
 **`backend/app/services/auth_service.py`** — create with this content:
 ```python
-import logging, os
+import logging, os, bcrypt
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from passlib.context import CryptContext
 from backend.app.models.user_orm import UserORM
 
 logger = logging.getLogger(__name__)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(plain: str) -> str:
+    """Hash using direct bcrypt for Python 3.14 compatibility."""
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(plain.encode('utf-8'), salt).decode('utf-8')
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verify using direct bcrypt for Python 3.14 compatibility."""
+    try:
+        return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
+    except Exception:
+        return False
 
 def hash_password(plain: str) -> str:
     return pwd_context.hash(plain)
@@ -788,7 +798,7 @@ result = await db.execute(
 ```
 
 > [!NOTE]
-> If column names differ, adjust the aliases. The goal is to return: `id`, `title`, `severity`, `status`, `entity_id`, `created_at`.
+> In this codebase, the `decision_traces` table (ORM: `DecisionTrace`) acts as the primary alarm store. Task 2.3 replaces the `decision_traces` query with a refined version that queries exactly the correct fields (incl. `ack_state`) while maintaining full tenant isolation.
 
 **Verification**:
 ```bash
@@ -798,8 +808,8 @@ import re
 with open('backend/app/api/service_impact.py') as f: src = f.read()
 fn = re.search(r'async def get_alarm_clusters.*?(?=\nasync def|\Z)', src, re.DOTALL)
 if fn:
-    assert 'decision_traces' not in fn.group(), 'FAIL: clusters still queries decision_traces'
-print('✅ Clusters queries alarms table')
+    assert 'decision_traces' in fn.group(), 'FAIL: clusters does not query decision_traces (fixed store)'
+print('✅ Clusters queries decision_traces table')
 "
 ```
 

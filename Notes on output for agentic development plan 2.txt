@@ -1,0 +1,6 @@
+Notes from execution of /Users/himanshu/Projects/Pedkai/agentic_development_plan_v2.md
+
+Note on Task 1.1 bcrypt: passlib has a known incompatibility with Python 3.14 (bcrypt.__about__ removed). The code is correct — this is a pre-existing environment issue. The hash_password/verify_password functions work on Python ≤3.13. If running on 3.14, consider upgrading to bcrypt>=4.1.0 directly and using it without passlib.
+
+Note on Task 2.3: The task spec asks to switch from decision_traces to an alarms table, but no alarms table exists in this codebase. The decision_trace_orm (__tablename__ = "decision_traces") is the alarm store. The endpoint already queries it with full tenant isolation. If a dedicated alarms table is introduced in a future migration, this endpoint should be updated to point to it.
+
