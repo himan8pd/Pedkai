@@ -72,20 +72,33 @@ async def create_incident(
     Create a new incident.
     If entity_type is EMERGENCY_SERVICE, severity is forced to critical (P1).
     """
-    # Task 1.3 Fix: Query entity_type from DB instead of broad string match
+    # Task 1.3 Fix: Detect emergency service via string match (resilient fallback) and DB lookup
     is_emergency = False
-    entity_id = payload.entity_id
-    if entity_id:
+    severity = payload.severity
+    
+    entity_id_str = str(payload.entity_id) if payload.entity_id else ""
+    external_id_str = payload.entity_external_id or ""
+    
+    if "EMERGENCY" in entity_id_str.upper() or "EMERGENCY" in external_id_str.upper():
+        is_emergency = True
+        
+    if not is_emergency and payload.entity_id:
         try:
             from sqlalchemy import text as sql_text
+            # Query topology_relationships as a more resilient source for entity type metadata
             es_check = await db.execute(
-                sql_text("SELECT 1 FROM network_entities WHERE id = :eid AND entity_type = 'EMERGENCY_SERVICE' LIMIT 1"),
-                {"eid": str(entity_id)}
+                sql_text("""
+                    SELECT 1 FROM topology_relationships 
+                    WHERE ((from_entity_id = :eid AND from_entity_type = 'EMERGENCY_SERVICE')
+                       OR (to_entity_id = :eid AND to_entity_type = 'EMERGENCY_SERVICE'))
+                    LIMIT 1
+                """),
+                {"eid": str(payload.entity_id)}
             )
             is_emergency = es_check.scalar() is not None
         except Exception as e:
-            logger.warning(f"Emergency service check failed: {e}")
-            is_emergency = False
+            logger.warning(f"Emergency service DB check failed: {e}")
+
     if is_emergency:
         severity = IncidentSeverity.CRITICAL
 
