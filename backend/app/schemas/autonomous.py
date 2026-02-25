@@ -69,3 +69,23 @@ class ScorecardResponse(BaseModel):
     value_protected: ValueProtected
     baseline_status: Optional[str] = None
     baseline_note: Optional[str] = None
+    drift_calibration: Optional[Dict[str, Any]] = None
+
+
+class RevenueMetric(BaseModel):
+    """Revenue metric with estimate flag and confidence interval."""
+    value: Optional[float] = None
+    is_estimate: bool = True  # True when using mock BSS adapter
+    confidence_interval: str = "±15%"
+
+
+class ROIDashboardResponse(BaseModel):
+    """ROI Dashboard metrics for CFO/board visibility."""
+    period: str = "30d"
+    incidents_prevented: int
+    revenue_protected: RevenueMetric
+    mttr_reduction_pct: float
+    methodology_url: str = "/docs/value_methodology.md"
+    data_sources: Dict[str, str]  # {"bss": "mock"|"real", "kpi": "live"|"shadow"}
+    period_start: datetime
+    period_end: datetime

@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Security, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select
 
-from backend.app.core.database import get_db
+from backend.app.core.database import get_db, async_session_maker
 from backend.app.core.security import get_current_user, User, TMF642_READ
 from backend.app.schemas.service_impact import AlarmCluster, CustomerImpact, ServiceImpactSummary
 from backend.app.services.alarm_correlation import AlarmCorrelationService
@@ -96,7 +96,7 @@ async def get_alarm_clusters(
     current_user: User = Security(get_current_user, scopes=[TMF642_READ]),
 ):
     """Get alarm clusters with correlation metadata and noise reduction metrics."""
-    service = AlarmCorrelationService(db)
+    service = AlarmCorrelationService(async_session_maker)
     try:
         # Fetch actual alarms (stored in decision_traces for this version)
         tid = current_user.tenant_id or "default"

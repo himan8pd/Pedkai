@@ -88,7 +88,7 @@ from backend.app.services.llm_service import get_llm_service
 from backend.app.services.decision_repository import DecisionTraceRepository
 from backend.app.services.embedding_service import get_embedding_service
 from backend.app.models.decision_trace import SimilarDecisionQuery, DecisionContext
-from backend.app.core.database import get_db, get_metrics_db
+from backend.app.core.database import get_db, get_metrics_db, get_db_context, async_session_maker, get_metrics_db_context
 
 async def handle_metrics_event(event_data: dict[str, Any]):
     """
@@ -133,11 +133,11 @@ async def handle_metrics_event(event_data: dict[str, Any]):
         # Import CausalAnalyzer here to run Granger Causality tests
         from anops.causal_analysis import CausalAnalyzer
         
-        async for graph_session in get_db():
+        async with get_db_context() as graph_session:
             try:
                 # Service instantiation (efficiently reused logic)
                 rca_service = RootCauseAnalyzer(graph_session)
-                repo = DecisionTraceRepository(graph_session)
+                repo = DecisionTraceRepository(async_session_maker)
                 llm_service = get_llm_service() # Use Singleton!
                 embedding_service = get_embedding_service()
                 
@@ -147,7 +147,7 @@ async def handle_metrics_event(event_data: dict[str, Any]):
                 # ===== CAUSAL AI: Granger Causality (Phase 2 Hardened) =====
                 # We need a metrics session for causal analysis
                 causal_evidence = []
-                async for metrics_session_causal in get_metrics_db():
+                async with get_metrics_db_context() as metrics_session_causal:
                     causal_analyzer = CausalAnalyzer(metrics_session_causal)
                     
                     for anomalous_metric in anomalies_found:

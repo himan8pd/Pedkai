@@ -101,3 +101,33 @@ class LocalBSSAdapter(BSSAdapter):
 
     async def check_disputes(self, customer_ids: List[UUID]) -> List[UUID]:
         return await self._service.check_recent_disputes(customer_ids)
+
+
+class MockBSSAdapter(BSSAdapter):
+    """
+    Lightweight in-memory mock adapter for testing and CI where real BSS is unavailable.
+    """
+    def __init__(self):
+        # simple store for mocked accounts: customer_id -> monthly_fee
+        self._accounts: dict[str, float] = {}
+
+    async def get_billing_account(self, customer_id: UUID) -> Optional[BillingAccountInfo]:
+        fee = self._accounts.get(str(customer_id))
+        if fee is None:
+            return None
+        return BillingAccountInfo(customer_id=customer_id, monthly_fee=fee, currency="USD")
+
+    async def get_revenue_at_risk(self, customer_ids: List[UUID]) -> RevenueResult:
+        priced = [cid for cid in customer_ids if str(cid) in self._accounts]
+        unpriced = [cid for cid in customer_ids if str(cid) not in self._accounts]
+        total = sum(self._accounts.get(str(cid), 0.0) for cid in priced) if priced else None
+        return RevenueResult(
+            total_revenue_at_risk=total,
+            priced_customer_count=len(priced),
+            unpriced_customer_count=len(unpriced),
+            requires_manual_valuation=len(unpriced) > 0,
+        )
+
+    async def check_disputes(self, customer_ids: List[UUID]) -> List[UUID]:
+        # No disputes in mock by default
+        return []

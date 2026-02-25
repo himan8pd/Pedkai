@@ -21,7 +21,7 @@ from scripts.fix_env import load_env_manual
 load_env_manual()
 
 from sqlalchemy import select, text
-from backend.app.core.database import get_db_context, engine, Base
+from backend.app.core.database import get_db_context, engine, Base, async_session_maker
 from backend.app.models.decision_trace import (
     DecisionTraceCreate,
     DecisionContext,
@@ -62,7 +62,7 @@ async def verify_recursive_reasoning():
         await conn.run_sync(Base.metadata.create_all)
 
     async with get_db_context() as session:
-        repo = DecisionTraceRepository(session)
+        repo = DecisionTraceRepository(async_session_maker)
         emb_service = get_embedding_service()
         
         # 2. Seed a Reasoning Chain

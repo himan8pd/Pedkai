@@ -11,7 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.app.core.config import get_settings
-from backend.app.core.database import get_db
+from backend.app.core.database import get_db, async_session_maker
 from backend.app.models.decision_trace import (
     DecisionTrace,
     DecisionTraceCreate,
@@ -49,7 +49,7 @@ async def create_decision_trace(
     - The tradeoff made and why
     """
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         trace = await repo.create(decision)
         
         # Generate and store embedding for similarity search
@@ -105,7 +105,7 @@ async def list_decision_traces(
     and trigger type.
     """
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         return await repo.list_decisions(
             tenant_id=tenant_id,
             domain=domain,
@@ -140,7 +140,7 @@ async def search_decisions(
     Threshold is 0.0 by default to always return the most relevant matches.
     """
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         embedding_service = get_embedding_service()
         
         # In search mode, we just embed the query string directly 
@@ -174,7 +174,7 @@ async def update_decision_trace(
     Primarily used to record the outcome after the action was taken.
     """
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         trace = await repo.update(decision_id, update)
         if trace is None:
             raise HTTPException(status_code=404, detail="Decision trace not found")
@@ -201,7 +201,7 @@ async def get_decision_trace(
 ) -> DecisionTrace:
     """Get a decision trace by ID."""
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         trace = await repo.get_by_id(decision_id)
         if trace is None:
             raise HTTPException(status_code=404, detail="Decision trace not found")
@@ -226,7 +226,7 @@ async def find_similar_decisions(
     Uses pgvector for semantic similarity when database is configured.
     """
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         embedding_service = get_embedding_service()
         
         # Create text representation of current context
@@ -328,7 +328,7 @@ async def upvote_decision(
     Finding #4: Multi-operator aggregation prevents gaming.
     """
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         # Mocking operator_id as "operator_1" for now (finding #4)
         success = await repo.record_feedback(decision_id, operator_id="operator_1", score=1)
         if not success:
@@ -352,7 +352,7 @@ async def downvote_decision(
     Finding #4: Negative feedback penalizes this decision in future similarity searches.
     """
     if USE_DATABASE and db:
-        repo = DecisionTraceRepository(db)
+        repo = DecisionTraceRepository(async_session_maker)
         # Mocking operator_id as "operator_1" for now (finding #4)
         success = await repo.record_feedback(decision_id, operator_id="operator_1", score=-1)
         if not success:

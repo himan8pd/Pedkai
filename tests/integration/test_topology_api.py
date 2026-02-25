@@ -36,7 +36,7 @@ async def test_topology_health_staleness(client: AsyncClient, db_session):
     
     now = datetime.now(timezone.utc)
     # Old rel
-    rel_old = EntityRelationshipORM(id=uuid.uuid4(), from_entity_id="X", from_entity_type="N", to_entity_id="Y", to_entity_type="N", relationship_type="C", tenant_id="t1", created_at=now - timedelta(hours=25))
+    rel_old = EntityRelationshipORM(id=uuid.uuid4(), from_entity_id="X", from_entity_type="N", to_entity_id="Y", to_entity_type="N", relationship_type="C", tenant_id="t1", created_at=now - timedelta(days=8))
     # New rel
     rel_new = EntityRelationshipORM(id=uuid.uuid4(), from_entity_id="Y", from_entity_type="N", to_entity_id="Z", to_entity_type="N", relationship_type="C", tenant_id="t1", created_at=now)
     

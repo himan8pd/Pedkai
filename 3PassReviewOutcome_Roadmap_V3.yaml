@@ -1,0 +1,1485 @@
+# Pedkai Agentic Delivery Roadmap — V3
+#
+# Purpose: Machine-executable task list for less capable models (Gemini Flash, Qwen Coder).
+# Each task is atomic: one model, one session, one deliverable.
+# No task requires context from another task unless explicitly stated in `context_files`.
+#
+# Conventions:
+#   - All paths relative to project root: /Users/himanshu/Projects/Pedkai/
+#   - `verify` commands are run from project root
+#   - `context_files` = files the agent MUST read before starting
+#   - `outputs` = files the agent MUST create or modify
+#   - `done_when` = exact conditions a human reviewer checks
+#   - Tasks within a phase are sequential unless `parallel: true`
+
+roadmap:
+  name: Pedkai Platform Evolution
+  version: 3.0
+  horizon_weeks: 58
+  total_tasks: 46
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 0 — STRUCTURAL PREPARATION (Weeks 1–4)
+# Goal: Make the existing codebase event-ready without adding new features.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+phases:
+
+  - id: P0
+    name: Structural Preparation
+    weeks: "1-4"
+    task_count: 7
+
+    tasks:
+
+      # ── P0.1 ──────────────────────────────────────────────────────────────
+      - id: P0.1
+        title: Service Inventory and Dependency Map
+        type: documentation
+        description: >
+          Generate a complete inventory of every Python module in backend/app/services/
+          and backend/app/api/. For each module list: class names, public method signatures,
+          direct imports from other backend modules, and whether it holds process-level
+          state (singletons, module-level variables). Output as a markdown table.
+        context_files:
+          - backend/app/services/__init__.py
+          - backend/app/api/__init__.py
+        outputs:
+          - docs/service_inventory.md
+        done_when:
+          - "docs/service_inventory.md exists and lists all 20 service modules and 14 API modules"
+          - "rl_evaluator.py and drift_calibration.py are both listed"
+          - "policy_engine.py is flagged as having module-level singleton state"
+        effort_hours: 4
+        parallel: true
+
+      # ── P0.2 ──────────────────────────────────────────────────────────────
+      - id: P0.2
+        title: Structured Logging Upgrade
+        type: code
+        description: >
+          Replace all print() and logger.warning/info/error calls with structured
+          JSON logging using the existing backend/app/core/logging.py module.
+          Add a `trace_id` field to every log entry using a context variable.
+          Add `event_id` UUID to every API request via middleware.
+        context_files:
+          - backend/app/core/logging.py
+          - backend/app/core/observability.py
+          - backend/app/main.py
+        outputs:
+          - backend/app/core/logging.py (modified)
+          - backend/app/middleware/trace.py (new)
+          - backend/app/main.py (modified — add middleware)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -c "from backend.app.core.logging import get_logger; l=get_logger('test'); l.info('test')" 2>&1 | python -c "import sys,json; json.loads(sys.stdin.readline()); print('OK')"
+        done_when:
+          - "All log output is valid JSON"
+          - "Every API response header contains X-Trace-Id"
+        effort_hours: 6
+        parallel: true
+
+      # ── P0.3 ──────────────────────────────────────────────────────────────
+      - id: P0.3
+        title: Session Factory Refactor
+        type: code
+        description: >
+          Refactor all services that accept `session: AsyncSession` in __init__() to
+          instead accept a `session_factory: async_sessionmaker[AsyncSession]`.
+          Each method that uses self.session should call `async with self.session_factory() as session:`
+          instead. This decouples services from the HTTP request lifecycle.
+          Files to modify (exhaustive list):
+            - AlarmCorrelationService in backend/app/services/alarm_correlation.py
+            - DecisionTraceRepository in backend/app/services/decision_repository.py
+            - AutonomousShieldService in backend/app/services/autonomous_shield.py
+          Update all callers in backend/app/api/ that instantiate these services.
+        context_files:
+          - backend/app/core/database.py
+          - backend/app/services/alarm_correlation.py
+          - backend/app/services/decision_repository.py
+          - backend/app/services/autonomous_shield.py
+          - backend/app/api/service_impact.py
+          - backend/app/api/incidents.py
+          - backend/app/api/autonomous.py
+        outputs:
+          - backend/app/services/alarm_correlation.py (modified)
+          - backend/app/services/decision_repository.py (modified)
+          - backend/app/services/autonomous_shield.py (modified)
+          - backend/app/api/service_impact.py (modified)
+          - backend/app/api/incidents.py (modified)
+          - backend/app/api/autonomous.py (modified)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/ -x -q --tb=short 2>&1 | tail -5
+        done_when:
+          - "All existing tests pass"
+          - "No service class constructor takes AsyncSession directly"
+          - "grep -r 'def __init__.*AsyncSession)' backend/app/services/ returns 0 results"
+        effort_hours: 8
+
+      # ── P0.4 ──────────────────────────────────────────────────────────────
+      - id: P0.4
+        title: PolicyEngine Dependency Injection
+        type: code
+        description: >
+          Remove the module-level singleton `policy_engine = PolicyEngine()` from
+          backend/app/services/policy_engine.py line 166. Replace with a factory
+          function `get_policy_engine()` that returns a cached instance. Update all
+          importers to use `from backend.app.services.policy_engine import get_policy_engine`
+          instead of `from backend.app.services.policy_engine import policy_engine`.
+        context_files:
+          - backend/app/services/policy_engine.py
+        outputs:
+          - backend/app/services/policy_engine.py (modified)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -c "from backend.app.services.policy_engine import get_policy_engine; pe = get_policy_engine(); print(f'Loaded {len(pe.policies)} policies')"
+          grep -rn "import policy_engine" backend/app/ | grep -v "get_policy_engine" | grep -v "__pycache__"
+        done_when:
+          - "No module-level PolicyEngine() instantiation"
+          - "All importers use get_policy_engine()"
+          - "All existing tests pass"
+        effort_hours: 3
+
+      # ── P0.5 ──────────────────────────────────────────────────────────────
+      - id: P0.5
+        title: SSE Session Lifecycle Management
+        type: code
+        description: >
+          Modify backend/app/api/sse.py to add:
+          1. A 30-second heartbeat (send SSE comment `: heartbeat\n\n` every 30s)
+          2. A 5-minute inactivity timeout (close connection if no data sent for 5 min)
+          3. A configurable MAX_SSE_CONNECTIONS limit (default 100) with 503 rejection
+          4. Proper DB session cleanup on disconnect (use try/finally)
+          Add settings to backend/app/core/config.py:
+            sse_heartbeat_interval_seconds: int = 30
+            sse_max_idle_seconds: int = 300
+            sse_max_connections: int = 100
+        context_files:
+          - backend/app/api/sse.py
+          - backend/app/core/config.py
+        outputs:
+          - backend/app/api/sse.py (modified)
+          - backend/app/core/config.py (modified)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          grep -c "heartbeat" backend/app/api/sse.py
+          grep "sse_heartbeat_interval" backend/app/core/config.py
+        done_when:
+          - "SSE endpoint sends heartbeat comments every 30 seconds"
+          - "Connection closes after 5 minutes idle"
+          - "101st concurrent connection receives HTTP 503"
+        effort_hours: 4
+
+      # ── P0.6 ──────────────────────────────────────────────────────────────
+      - id: P0.6
+        title: GDPR Consent Enforcement Fix
+        type: bugfix
+        description: >
+          In backend/app/services/cx_intelligence.py, function trigger_proactive_care()
+          (lines 107-126) currently bypasses consent checks. Modify it to:
+          1. Query CustomerORM.consent_proactive_comms for the target customer
+          2. If consent is False or NULL, return a dict with {"blocked": true, "reason": "no_consent"}
+          3. If consent is True, proceed to call ProactiveCommsService.draft_communication()
+          Also add an integration test in tests/integration/test_consent_enforcement.py
+          that verifies a non-consenting customer is never sent a communication.
+        context_files:
+          - backend/app/services/cx_intelligence.py
+          - backend/app/services/proactive_comms.py
+          - backend/app/models/customer_orm.py
+        outputs:
+          - backend/app/services/cx_intelligence.py (modified)
+          - tests/integration/test_consent_enforcement.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_consent_enforcement.py -v 2>&1 | tail -10
+        done_when:
+          - "trigger_proactive_care() checks consent before dispatch"
+          - "Integration test passes: non-consenting customer blocked"
+        effort_hours: 3
+
+      # ── P0.7 ──────────────────────────────────────────────────────────────
+      - id: P0.7
+        title: Autonomy Positioning Decision Document
+        type: documentation
+        description: >
+          Create a product decision document that resolves the conflict between
+          demo narrative (autonomous execution) and code reality (advisory only).
+          Document three options:
+            A. Advisory-only (current code)
+            B. Advisory with opt-in auto-execution (requires Phase 4)
+            C. Autonomous-first (requires separate product)
+          Include risk assessment for each. Mark this as requiring Product Owner
+          and CTO sign-off. This document gates Phase 4 scope.
+        outputs:
+          - docs/ADR-001-autonomy-positioning.md
+        done_when:
+          - "Document exists with three options and risk assessments"
+          - "Sign-off section present (empty, for humans to fill)"
+        effort_hours: 3
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 1 — DATA AND SCHEMA FOUNDATIONS (Weeks 5–12)
+# Goal: Build the data plane. After this phase, data flows IN automatically.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: P1
+    name: Data and Schema Foundations
+    weeks: "5-12"
+    task_count: 9
+
+    tasks:
+
+      # ── P1.1 ──────────────────────────────────────────────────────────────
+      - id: P1.1
+        title: Create NetworkEntityORM Model
+        type: code
+        description: >
+          Create a new ORM model `NetworkEntityORM` in a new file. This replaces
+          the dropped `network_entities` table. Columns:
+            - id: UUID, primary key, default uuid4
+            - tenant_id: String, not null, indexed
+            - entity_type: String, not null (enum: SITE, GNODEB, CELL, SECTOR, ROUTER, SWITCH, EMERGENCY_SERVICE)
+            - name: String, not null
+            - external_id: String, nullable (vendor NMS identifier)
+            - geo_lat: Float, nullable
+            - geo_lon: Float, nullable
+            - revenue_weight: Float, nullable (monthly revenue flowing through this entity)
+            - sla_tier: String, nullable (GOLD, SILVER, BRONZE)
+            - embedding_provider: String, nullable (e.g. "gemini", "minilm")
+            - embedding_model: String, nullable (e.g. "text-embedding-004")
+            - last_seen_at: DateTime, nullable
+            - created_at: DateTime, default utcnow
+          Create an Alembic migration for this table.
+        context_files:
+          - backend/app/models/topology_models.py
+          - backend/app/core/database.py
+          - backend/alembic/versions/96488105820a_initial_migration.py
+        outputs:
+          - backend/app/models/network_entity_orm.py (new)
+          - backend/app/models/__init__.py (modified — add import)
+          - backend/alembic/versions/XXXXXX_add_network_entities.py (new migration)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -c "from backend.app.models.network_entity_orm import NetworkEntityORM; print(NetworkEntityORM.__tablename__)"
+        done_when:
+          - "NetworkEntityORM importable and has all specified columns"
+          - "embedding_provider and embedding_model columns present"
+          - "Alembic migration created"
+        effort_hours: 4
+
+      # ── P1.2 ──────────────────────────────────────────────────────────────
+      - id: P1.2
+        title: Fix incidents.py Dead Entity Query
+        type: bugfix
+        dependencies: [P1.1]
+        description: >
+          In backend/app/api/incidents.py line 82, the query
+          `SELECT 1 FROM network_entities WHERE id = :eid AND entity_type = 'EMERGENCY_SERVICE'`
+          references the old dropped table. Change it to query the new NetworkEntityORM
+          table created in P1.1. Use SQLAlchemy ORM query instead of raw SQL text.
+        context_files:
+          - backend/app/api/incidents.py
+          - backend/app/models/network_entity_orm.py
+        outputs:
+          - backend/app/api/incidents.py (modified)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_incident_lifecycle.py -v 2>&1 | tail -10
+        done_when:
+          - "No raw SQL referencing 'network_entities' in incidents.py"
+          - "Emergency service lookup uses NetworkEntityORM"
+          - "Existing incident tests pass"
+        effort_hours: 2
+
+      # ── P1.3 ──────────────────────────────────────────────────────────────
+      - id: P1.3
+        title: KPI Time-Series Table
+        type: code
+        description: >
+          Create `KpiSampleORM` model for storing time-series KPI data. Columns:
+            - id: UUID, primary key
+            - tenant_id: String, not null, indexed
+            - entity_id: UUID, foreign key to network_entities, indexed
+            - metric_name: String, not null (e.g. "prb_utilization", "dl_throughput", "bler")
+            - value: Float, not null
+            - timestamp: DateTime, not null, indexed
+            - source: String, nullable (e.g. "oss_webhook", "snmp", "manual")
+          Add composite index on (entity_id, metric_name, timestamp).
+          Create Alembic migration.
+        context_files:
+          - backend/app/models/network_entity_orm.py
+          - backend/app/core/database.py
+        outputs:
+          - backend/app/models/kpi_sample_orm.py (new)
+          - backend/alembic/versions/XXXXXX_add_kpi_samples.py (new migration)
+        done_when:
+          - "KpiSampleORM importable with all columns"
+          - "Composite index on (entity_id, metric_name, timestamp)"
+        effort_hours: 3
+
+      # ── P1.4 ──────────────────────────────────────────────────────────────
+      - id: P1.4
+        title: Fix O(n²) Alarm Correlation Algorithm
+        type: code
+        description: >
+          Replace the nested loop in AlarmCorrelationService.correlate_alarms()
+          (backend/app/services/alarm_correlation.py lines 39-115) with an O(n log n)
+          algorithm:
+          1. Group alarms by entity_id into a dict (O(n))
+          2. Within each entity group, sort by raised_at (O(k log k))
+          3. Merge adjacent alarms within TEMPORAL_WINDOW_MINUTES using a sliding window
+          4. Cross-entity merge: if two entity groups share alarm_type and temporal overlap, merge
+          Keep the same return format (list of cluster dicts).
+          Add a load test in tests/load/test_correlation_load.py that verifies
+          5000 alarms correlate in < 5 seconds.
+        context_files:
+          - backend/app/services/alarm_correlation.py
+        outputs:
+          - backend/app/services/alarm_correlation.py (modified)
+          - tests/load/test_correlation_load.py (new or modified)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/load/test_correlation_load.py -v 2>&1 | tail -10
+        done_when:
+          - "No nested for-loop iterating all alarms against all alarms"
+          - "5000 alarms processed in < 5 seconds"
+          - "Existing correlation tests still pass"
+        effort_hours: 8
+
+      # ── P1.5 ──────────────────────────────────────────────────────────────
+      - id: P1.5
+        title: Event Schema with Tenant Isolation
+        type: code
+        description: >
+          Create a canonical event schema module. Define Pydantic models:
+            - BaseEvent: event_id (UUID), tenant_id (str, required), timestamp (datetime),
+              event_type (str), trace_id (str, optional)
+            - AlarmIngestedEvent(BaseEvent): entity_id, entity_external_id, alarm_type,
+              severity, raised_at, source_system
+            - SleepingCellDetectedEvent(BaseEvent): entity_id, z_score, baseline_mean,
+              current_value, metric_name
+            - IncidentCreatedEvent(BaseEvent): incident_id, severity, entity_id
+          All events MUST have tenant_id as a required field with no default.
+        outputs:
+          - backend/app/events/__init__.py (new)
+          - backend/app/events/schemas.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -c "
+          from backend.app.events.schemas import AlarmIngestedEvent
+          try:
+              AlarmIngestedEvent(event_type='alarm', entity_id='x', alarm_type='y', severity='major', raised_at='2026-01-01T00:00:00Z', source_system='test')
+              print('FAIL: tenant_id should be required')
+          except Exception:
+              print('PASS: tenant_id correctly required')
+          "
+        done_when:
+          - "All event schemas require tenant_id with no default"
+          - "Instantiating without tenant_id raises ValidationError"
+        effort_hours: 4
+
+      # ── P1.6 ──────────────────────────────────────────────────────────────
+      - id: P1.6
+        title: Alarm Ingestion Webhook Endpoint
+        type: code
+        dependencies: [P1.5]
+        description: >
+          Create a new API router backend/app/api/alarm_ingestion.py with:
+            POST /api/v1/alarms/ingest
+          Accepts a JSON body matching AlarmIngestedEvent schema.
+          On receipt: validate, assign event_id, publish to an in-process asyncio.Queue
+          (the event bus will be upgraded to external broker in a later task).
+          Return 202 Accepted with the event_id.
+          Add authentication (require ALARM_WRITE scope).
+          Register the router in backend/app/main.py.
+        context_files:
+          - backend/app/events/schemas.py
+          - backend/app/main.py
+          - backend/app/core/security.py
+        outputs:
+          - backend/app/api/alarm_ingestion.py (new)
+          - backend/app/main.py (modified — register router)
+          - backend/app/events/bus.py (new — simple asyncio.Queue wrapper)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/ -k "ingest" -v 2>&1 | tail -10
+        done_when:
+          - "POST /api/v1/alarms/ingest returns 202"
+          - "Event published to internal queue"
+          - "Unauthenticated requests return 401"
+        effort_hours: 6
+
+      # ── P1.7 ──────────────────────────────────────────────────────────────
+      - id: P1.7
+        title: Background Worker Framework
+        type: code
+        dependencies: [P0.3, P1.6]
+        description: >
+          Create a background worker that consumes events from the asyncio.Queue
+          (from P1.6) and dispatches them to registered handlers.
+          Implementation:
+            - backend/app/workers/consumer.py: async loop that reads from queue
+            - backend/app/workers/handlers.py: handler registry (dict mapping event_type to handler function)
+            - Start the consumer as an asyncio.Task in backend/app/main.py on_startup
+          Initially register one handler: `alarm_ingested` → log the event.
+          This framework will be extended in Phase 2 to add real handlers.
+        context_files:
+          - backend/app/events/bus.py
+          - backend/app/main.py
+        outputs:
+          - backend/app/workers/__init__.py (new)
+          - backend/app/workers/consumer.py (new)
+          - backend/app/workers/handlers.py (new)
+          - backend/app/main.py (modified — start consumer on startup)
+        done_when:
+          - "Worker starts automatically on app startup"
+          - "Ingested alarm events are logged by the worker"
+          - "Worker does not block the API thread"
+        effort_hours: 6
+
+      # ── P1.8 ──────────────────────────────────────────────────────────────
+      - id: P1.8
+        title: Frontend Decomposition — Routing and Layout
+        type: code
+        description: >
+          Decompose frontend/app/page.tsx (22KB, 500+ lines) into routed pages:
+            - frontend/app/page.tsx → slim landing/redirect (< 50 lines)
+            - frontend/app/dashboard/page.tsx → alarm feed + stat cards
+            - frontend/app/incidents/page.tsx → incident lifecycle view
+            - frontend/app/topology/page.tsx → topology graph view
+            - frontend/app/scorecard/page.tsx → AI scorecard + SITREP panel
+          Move existing components to appropriate pages.
+          Add a sidebar or top-nav for navigation between pages.
+          Use Next.js App Router (already configured in layout.tsx).
+          No component file should exceed 200 lines.
+        context_files:
+          - frontend/app/page.tsx
+          - frontend/app/layout.tsx
+          - frontend/app/components/StatCard.tsx
+          - frontend/app/components/AlarmCard.tsx
+          - frontend/app/components/SitrepPanel.tsx
+        outputs:
+          - frontend/app/page.tsx (modified — slim redirect)
+          - frontend/app/dashboard/page.tsx (new)
+          - frontend/app/incidents/page.tsx (new)
+          - frontend/app/topology/page.tsx (new)
+          - frontend/app/scorecard/page.tsx (new)
+          - frontend/app/components/Navigation.tsx (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai/frontend
+          npx next build 2>&1 | tail -5
+          wc -l app/page.tsx app/dashboard/page.tsx app/incidents/page.tsx
+        done_when:
+          - "next build succeeds"
+          - "No single page.tsx exceeds 200 lines"
+          - "All 4 routes render without errors"
+        effort_hours: 12
+
+      # ── P1.9 ──────────────────────────────────────────────────────────────
+      - id: P1.9
+        title: Tenant Isolation Integration Test for Events
+        type: test
+        dependencies: [P1.5, P1.6, P1.7]
+        description: >
+          Write an integration test that:
+          1. Creates two tenants (tenant_A, tenant_B)
+          2. Ingests an alarm for tenant_A
+          3. Verifies the worker handler receives it with tenant_A's tenant_id
+          4. Verifies tenant_B's scoped queries never see tenant_A's alarm
+        outputs:
+          - tests/integration/test_event_tenant_isolation.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_event_tenant_isolation.py -v 2>&1 | tail -10
+        done_when:
+          - "Test passes: cross-tenant event leakage is impossible"
+        effort_hours: 4
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 2 — ORCHESTRATION AND INTELLIGENCE (Weeks 13–22)
+# Goal: Wire capabilities into automated pipelines. After this phase,
+#        alarms flow in → incidents come out → operators see SITREPs.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: P2
+    name: Orchestration and Intelligence
+    weeks: "13-22"
+    task_count: 9
+
+    tasks:
+
+      # ── P2.1 ──────────────────────────────────────────────────────────────
+      - id: P2.1
+        title: Alarm Correlation Handler
+        type: code
+        dependencies: [P1.4, P1.7]
+        description: >
+          Register a handler in backend/app/workers/handlers.py for event_type `alarm_ingested`.
+          Handler logic:
+          1. Buffer incoming alarms in a time-window (5 min sliding window, stored in-memory dict keyed by tenant_id)
+          2. When window closes (or buffer exceeds 100 alarms), call AlarmCorrelationService.correlate_alarms()
+          3. For each resulting cluster, emit an `AlarmClusterCreatedEvent` to the event bus
+          The handler must use the session_factory pattern (from P0.3).
+        context_files:
+          - backend/app/workers/handlers.py
+          - backend/app/services/alarm_correlation.py
+          - backend/app/events/schemas.py
+        outputs:
+          - backend/app/workers/handlers.py (modified)
+          - backend/app/events/schemas.py (modified — add AlarmClusterCreatedEvent)
+        done_when:
+          - "Ingested alarms are buffered and correlated automatically"
+          - "Clusters emitted as events"
+        effort_hours: 8
+
+      # ── P2.2 ──────────────────────────────────────────────────────────────
+      - id: P2.2
+        title: Incident Auto-Creation Handler
+        type: code
+        dependencies: [P2.1]
+        description: >
+          Register a handler for `alarm_cluster_created` events.
+          Handler logic:
+          1. Call get_impact_tree() to determine affected entities
+          2. Create an incident via the existing create_incident() logic (extracted from the API handler into a service function)
+          3. Trigger LLM SITREP generation as a background task (do not block)
+          4. Emit `IncidentCreatedEvent`
+        context_files:
+          - backend/app/api/incidents.py
+          - backend/app/api/topology.py
+          - backend/app/services/llm_service.py
+        outputs:
+          - backend/app/services/incident_service.py (new — extracted from API)
+          - backend/app/workers/handlers.py (modified)
+        done_when:
+          - "Alarm cluster → incident creation is fully automated"
+          - "SITREP generation runs in background, does not block"
+        effort_hours: 10
+
+      # ── P2.3 ──────────────────────────────────────────────────────────────
+      - id: P2.3
+        title: End-to-End Pipeline Integration Test
+        type: test
+        dependencies: [P2.2]
+        description: >
+          Write test that POSTs 10 raw alarms to /api/v1/alarms/ingest,
+          waits up to 30 seconds, then verifies:
+          1. At least 1 incident was auto-created
+          2. Incident has severity, entity_id, and RCA tree
+          3. SITREP field is populated (or pending if LLM key absent)
+          Zero manual API calls after the initial POST.
+        outputs:
+          - tests/integration/test_e2e_pipeline.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_e2e_pipeline.py -v --timeout=60 2>&1 | tail -15
+        done_when:
+          - "Raw alarm POST → auto-created incident within 30 seconds"
+        effort_hours: 6
+
+      # ── P2.4 ──────────────────────────────────────────────────────────────
+      - id: P2.4
+        title: Sleeping Cell Detector
+        type: code
+        dependencies: [P1.1, P1.3]
+        description: >
+          Create backend/app/services/sleeping_cell_detector.py with class SleepingCellDetector:
+            async def scan(self, tenant_id: str) -> List[SleepingCellDetectedEvent]:
+          Logic:
+          1. Query KpiSampleORM for all CELL/SECTOR entities
+          2. For each entity, compute 7-day baseline mean and std for "traffic_volume"
+          3. Compare latest sample to baseline: Z = (latest - mean) / std
+          4. If Z < -3.0, emit SleepingCellDetectedEvent
+          5. If entity has no samples in last 15 minutes, also flag (absence of signal)
+          Register as a scheduled task that runs every 5 minutes via asyncio.
+        context_files:
+          - backend/app/models/kpi_sample_orm.py
+          - backend/app/models/network_entity_orm.py
+          - backend/app/events/schemas.py
+        outputs:
+          - backend/app/services/sleeping_cell_detector.py (new)
+          - backend/app/workers/scheduled.py (new — asyncio scheduler)
+          - tests/integration/test_sleeping_cell.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_sleeping_cell.py -v 2>&1 | tail -10
+        done_when:
+          - "Detector identifies deliberately silenced test entities"
+          - "Z-score calculation is correct against seeded baseline"
+          - "Scheduled job runs every 5 minutes"
+        effort_hours: 10
+
+      # ── P2.5 ──────────────────────────────────────────────────────────────
+      - id: P2.5
+        title: RL Evaluator Integration into Incident Closure
+        type: code
+        description: >
+          Wire the existing RLEvaluatorService (backend/app/services/rl_evaluator.py)
+          into the incident closure flow. When close_incident() is called in
+          backend/app/api/incidents.py:
+          1. Retrieve the associated DecisionTrace
+          2. Call rl_evaluator.evaluate_decision_outcome(decision)
+          3. Call rl_evaluator.apply_feedback(decision_id, reward)
+          This creates the closed-loop learning that adjusts Decision Memory rankings.
+        context_files:
+          - backend/app/services/rl_evaluator.py
+          - backend/app/api/incidents.py
+          - backend/app/services/decision_repository.py
+        outputs:
+          - backend/app/api/incidents.py (modified — add RL call to close_incident)
+        done_when:
+          - "Closing an incident triggers RL evaluation"
+          - "Feedback score persisted in decision_traces_feedback"
+        effort_hours: 4
+
+      # ── P2.6 ──────────────────────────────────────────────────────────────
+      - id: P2.6
+        title: Drift Calibration Integration
+        type: code
+        description: >
+          Wire backend/app/services/drift_calibration.py into the autonomous
+          scorecard endpoint. In backend/app/api/autonomous.py, the /scorecard
+          endpoint should include the false-positive rate and threshold recommendation
+          from get_false_positive_rate(). Also connect the configurable threshold
+          (settings.drift_threshold_pct) to AutonomousShieldService.detect_drift()
+          so the DRIFT_THRESHOLD_PCT constant is replaced with the settings value.
+        context_files:
+          - backend/app/services/drift_calibration.py
+          - backend/app/api/autonomous.py
+          - backend/app/services/autonomous_shield.py
+          - backend/app/core/config.py
+        outputs:
+          - backend/app/api/autonomous.py (modified)
+          - backend/app/services/autonomous_shield.py (modified)
+        done_when:
+          - "/scorecard response includes false_positive_rate and recommendation"
+          - "Drift threshold reads from settings, not hardcoded constant"
+        effort_hours: 4
+
+      # ── P2.7 ──────────────────────────────────────────────────────────────
+      - id: P2.7
+        title: BSS Integration Contract and Mock Adapter
+        type: code
+        description: >
+          Define a formal BSS adapter interface and implement a mock. Create:
+          1. backend/app/services/bss_adapter_interface.py — abstract base class with:
+             async def get_revenue_at_risk(entity_id, tenant_id) -> BSSRevenueResponse
+             async def get_billing_account(customer_id, tenant_id) -> BillingAccount
+          2. backend/app/services/bss_mock_adapter.py — returns synthetic data with
+             every revenue field wrapped in {"value": float, "is_estimate": true, "source": "mock"}
+          3. Modify get_impacted_customers() in backend/app/api/service_impact.py to use
+             the adapter interface and propagate `is_estimate` flag in the API response.
+          Create docs/BSS_INTEGRATION_CONTRACT.md documenting the required BSS API.
+        context_files:
+          - backend/app/services/bss_service.py
+          - backend/app/services/bss_adapter.py
+          - backend/app/api/service_impact.py
+        outputs:
+          - backend/app/services/bss_adapter_interface.py (new)
+          - backend/app/services/bss_mock_adapter.py (new)
+          - backend/app/api/service_impact.py (modified)
+          - docs/BSS_INTEGRATION_CONTRACT.md (new)
+        done_when:
+          - "All revenue_at_risk values include is_estimate flag"
+          - "Mock adapter returns synthetic data clearly labelled"
+          - "Contract document exists"
+        effort_hours: 8
+
+      # ── P2.8 ──────────────────────────────────────────────────────────────
+      - id: P2.8
+        title: Operator Feedback API Endpoint
+        type: code
+        description: >
+          Create POST /api/v1/decisions/{decision_id}/feedback endpoint that accepts:
+            {"score": int (1-5), "comment": str (optional)}
+          Calls DecisionTraceRepository.record_feedback().
+          This is the data source for confidence calibration (P3.5) and
+          RL evaluator feedback. Returns the updated aggregate score.
+        context_files:
+          - backend/app/services/decision_repository.py
+          - backend/app/api/decisions.py
+        outputs:
+          - backend/app/api/decisions.py (modified or new)
+          - backend/app/main.py (modified — register router if new)
+        done_when:
+          - "POST feedback returns updated aggregate score"
+          - "Feedback persisted in junction table"
+        effort_hours: 4
+
+      # ── P2.9 ──────────────────────────────────────────────────────────────
+      - id: P2.9
+        title: Frontend — Dashboard SSE and Alarm Feed
+        type: code
+        dependencies: [P1.8]
+        description: >
+          Update frontend/app/dashboard/page.tsx to:
+          1. Connect to SSE endpoint /api/v1/stream/alarms
+          2. Render live alarm feed using AlarmCard component
+          3. Show stat cards with live metrics
+          4. Handle SSE heartbeats and reconnection on disconnect
+          No component should exceed 200 lines.
+        context_files:
+          - frontend/app/dashboard/page.tsx
+          - frontend/app/components/AlarmCard.tsx
+          - frontend/app/components/StatCard.tsx
+          - backend/app/api/sse.py
+        outputs:
+          - frontend/app/dashboard/page.tsx (modified)
+        done_when:
+          - "Live alarm feed renders in browser"
+          - "Auto-reconnects after SSE disconnect"
+        effort_hours: 6
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 3 — DIFFERENTIATION AND SOVEREIGNTY (Weeks 23–32)
+# Goal: Build the "only Pedkai can do this" capabilities.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: P3
+    name: Differentiation and Sovereignty
+    weeks: "23-32"
+    task_count: 7
+
+    tasks:
+
+      # ── P3.1 ──────────────────────────────────────────────────────────────
+      - id: P3.1
+        title: Domain Expert Causal Model Library
+        type: code
+        description: >
+          Create a library of expert-defined causal templates instead of Granger causality.
+          Create backend/app/services/causal_models.py with:
+            class CausalTemplate: cause_metric, effect_metric, entity_type_pair, confidence, description
+          Pre-populate with templates:
+            - fibre_cut → gnodeb_alarm → cell_unavailable → customer_impact
+            - prb_utilization_high → dl_throughput_drop → mos_degradation
+            - power_failure → bbu_offline → sleeping_cell
+            - backhaul_congestion → latency_increase → voip_quality_drop
+          Create a function match_causal_templates(cluster_entities, kpi_anomalies)
+          that returns matching templates. Feed results into LLMService.generate_sitrep()
+          via the existing causal_evidence parameter.
+        context_files:
+          - backend/app/services/llm_service.py
+        outputs:
+          - backend/app/services/causal_models.py (new)
+          - backend/app/data/causal_templates.yaml (new — template definitions)
+          - tests/unit/test_causal_models.py (new)
+        done_when:
+          - "At least 4 causal templates defined"
+          - "match_causal_templates returns correct template for known scenarios"
+          - "Matched templates feed into SITREP generation"
+        effort_hours: 8
+
+      # ── P3.2 ──────────────────────────────────────────────────────────────
+      - id: P3.2
+        title: Embedding Provider Isolation in DecisionTraceORM
+        type: code
+        description: >
+          Add columns to DecisionTraceORM:
+            - embedding_provider: String, nullable
+            - embedding_model: String, nullable
+          Modify DecisionTraceRepository.find_similar() to filter by embedding_provider
+          when performing similarity search. If a query uses provider "gemini" embeddings,
+          only "gemini"-embedded traces are searched. Cross-provider queries return empty
+          results with a warning, not errors.
+          Modify EmbeddingService to set these fields when generating embeddings.
+        context_files:
+          - backend/app/models/decision_trace_orm.py
+          - backend/app/services/decision_repository.py
+          - backend/app/services/embedding_service.py
+        outputs:
+          - backend/app/models/decision_trace_orm.py (modified)
+          - backend/app/services/decision_repository.py (modified)
+          - backend/app/services/embedding_service.py (modified)
+          - backend/alembic/versions/XXXXXX_add_embedding_provider.py (new migration)
+          - tests/integration/test_embedding_isolation.py (new)
+        done_when:
+          - "find_similar() filters by embedding_provider"
+          - "New decision traces include embedding_provider metadata"
+          - "Cross-provider search returns empty with warning"
+        effort_hours: 6
+
+      # ── P3.3 ──────────────────────────────────────────────────────────────
+      - id: P3.3
+        title: On-Prem Embedding Adapter (MiniLM)
+        type: code
+        description: >
+          Create backend/app/services/embedding_local.py that provides the same
+          interface as EmbeddingService but uses sentence-transformers/all-MiniLM-L6-v2.
+          Implementation:
+          1. Lazy-load the model on first call (avoid startup delay)
+          2. Generate 384-dim embeddings
+          3. Set embedding_provider="minilm" and embedding_model="all-MiniLM-L6-v2"
+          Modify backend/app/services/embedding_service.py to check settings:
+            if settings.gemini_api_key → use Gemini
+            else → use local MiniLM
+          Add sentence-transformers to requirements.txt (optional dependency group).
+        context_files:
+          - backend/app/services/embedding_service.py
+          - backend/app/core/config.py
+        outputs:
+          - backend/app/services/embedding_local.py (new)
+          - backend/app/services/embedding_service.py (modified — adapter routing)
+          - requirements.txt (modified — add sentence-transformers)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          GEMINI_API_KEY="" python -c "
+          from backend.app.services.embedding_service import get_embedding_service
+          import asyncio
+          svc = get_embedding_service()
+          vec = asyncio.run(svc.generate_embedding('test'))
+          print(f'Provider: minilm, Dims: {len(vec)}')
+          "
+        done_when:
+          - "Embeddings generated without any cloud API key"
+          - "Vector dimension is 384"
+          - "embedding_provider set to 'minilm'"
+        effort_hours: 6
+
+      # ── P3.4 ──────────────────────────────────────────────────────────────
+      - id: P3.4
+        title: Bulk Embedding Backfill Pipeline
+        type: code
+        dependencies: [P3.2, P3.3]
+        description: >
+          Create a management command backend/app/scripts/backfill_embeddings.py that:
+          1. Queries all DecisionTraceORM records with embedding IS NULL
+          2. For each, calls EmbeddingService.generate_embedding()
+          3. Sets embedding, embedding_provider, embedding_model
+          4. Commits in batches of 50
+          5. Is idempotent (skips already-embedded records)
+          6. Is resumable (can be interrupted and restarted)
+          7. Logs progress every 100 records
+        context_files:
+          - backend/app/services/decision_repository.py
+          - backend/app/services/embedding_service.py
+        outputs:
+          - backend/app/scripts/backfill_embeddings.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -m backend.app.scripts.backfill_embeddings --dry-run 2>&1 | tail -5
+        done_when:
+          - "Script runs without error in --dry-run mode"
+          - "Idempotent: running twice produces no duplicates"
+        effort_hours: 4
+
+      # ── P3.5 ──────────────────────────────────────────────────────────────
+      - id: P3.5
+        title: Confidence Calibration from Operator Feedback
+        type: code
+        dependencies: [P2.8]
+        description: >
+          Replace the heuristic confidence formula in LLMService._compute_confidence()
+          (backend/app/services/llm_service.py lines 37-52) with a calibrated lookup.
+          Implementation:
+          1. Query the last 50+ operator feedback scores from decision_traces_feedback
+          2. Bin by (decision_memory_hits, causal_evidence_count) → average operator score
+          3. Use the binned averages as confidence values
+          4. If fewer than 50 scores available, fall back to current heuristic
+          5. Log the calibration data to /docs/confidence_methodology.md
+        context_files:
+          - backend/app/services/llm_service.py
+          - backend/app/services/decision_repository.py
+        outputs:
+          - backend/app/services/llm_service.py (modified)
+          - docs/confidence_methodology.md (new)
+        done_when:
+          - "Confidence scoring uses operator feedback when ≥50 scores available"
+          - "Methodology document published"
+          - "Falls back to heuristic when insufficient data"
+        effort_hours: 6
+
+      # ── P3.6 ──────────────────────────────────────────────────────────────
+      - id: P3.6
+        title: SLA Breach Countdown Timer
+        type: code
+        dependencies: [P1.3, P1.1]
+        description: >
+          Add a function to AutonomousShieldService:
+            def predict_sla_breach(self, entity_id, metric_name, sla_threshold, current_trajectory) -> Optional[datetime]
+          Logic: linear extrapolation from drift trajectory to SLA threshold.
+          Expose via GET /api/v1/autonomous/sla-countdown?entity_id=X
+          Push updates via existing SSE endpoint.
+        context_files:
+          - backend/app/services/autonomous_shield.py
+          - backend/app/api/autonomous.py
+          - backend/app/api/sse.py
+        outputs:
+          - backend/app/services/autonomous_shield.py (modified)
+          - backend/app/api/autonomous.py (modified)
+        done_when:
+          - "SLA countdown endpoint returns predicted breach time"
+          - "Countdown pushed via SSE"
+        effort_hours: 6
+
+      # ── P3.7 ──────────────────────────────────────────────────────────────
+      - id: P3.7
+        title: Frontend — SITREP Panel with Confidence and Feedback
+        type: code
+        dependencies: [P2.8, P1.8]
+        description: >
+          Update frontend/app/scorecard/page.tsx to:
+          1. Display SITREP with confidence score and AI watermark
+          2. Show operator feedback widget (1-5 star rating + comment)
+          3. Submit feedback to POST /api/v1/decisions/{id}/feedback
+          4. Display "ESTIMATE" badge on all revenue figures
+        context_files:
+          - frontend/app/components/SitrepPanel.tsx
+        outputs:
+          - frontend/app/scorecard/page.tsx (modified)
+          - frontend/app/components/FeedbackWidget.tsx (new)
+        done_when:
+          - "SITREP displays confidence score"
+          - "Operator can submit 1-5 rating"
+          - "Revenue figures show ESTIMATE badge"
+        effort_hours: 6
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 4 — AUDITABILITY AND VALUE (Weeks 33–40)
+# Goal: Prove value. Prepare for autonomy (but do not implement it).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: P4
+    name: Auditability and Value
+    weeks: "33-40"
+    task_count: 6
+
+    tasks:
+
+      # ── P4.1 ──────────────────────────────────────────────────────────────
+      - id: P4.1
+        title: Value Methodology Document
+        type: documentation
+        description: >
+          Create /docs/value_methodology.md documenting exactly how
+          calculate_value_protected() computes its figures. Include:
+          1. Data sources (BSS mock vs real, with is_estimate flag)
+          2. Counterfactual methodology (Pedkai zones vs control zones)
+          3. Confidence intervals (±15% based on 30-day comparison)
+          4. Limitations and caveats
+          5. Sign-off section for product owner
+          This document is referenced by the existing code at
+          AutonomousShieldService.calculate_value_protected() (methodology_doc_url).
+        context_files:
+          - backend/app/services/autonomous_shield.py
+        outputs:
+          - docs/value_methodology.md (new)
+        done_when:
+          - "Document exists and covers all 5 sections"
+          - "Referenced URL in code resolves to this document"
+        effort_hours: 4
+
+      # ── P4.2 ──────────────────────────────────────────────────────────────
+      - id: P4.2
+        title: ROI Dashboard Backend
+        type: code
+        dependencies: [P2.7, P4.1]
+        description: >
+          Create GET /api/v1/autonomous/roi-dashboard that returns:
+          {
+            "period": "30d",
+            "incidents_prevented": int,
+            "revenue_protected": {"value": float, "is_estimate": true, "confidence_interval": "±15%"},
+            "mttr_reduction_pct": float,
+            "methodology_url": "/docs/value_methodology.md",
+            "data_sources": {"bss": "mock", "kpi": "live"}
+          }
+          All revenue figures must include is_estimate flag from BSS adapter.
+        context_files:
+          - backend/app/services/autonomous_shield.py
+          - backend/app/services/bss_mock_adapter.py
+          - backend/app/api/autonomous.py
+        outputs:
+          - backend/app/api/autonomous.py (modified)
+        done_when:
+          - "ROI endpoint returns all specified fields"
+          - "is_estimate flag is true when BSS mock adapter is in use"
+          - "methodology_url resolves"
+        effort_hours: 6
+
+      # ── P4.3 ──────────────────────────────────────────────────────────────
+      - id: P4.3
+        title: ROI Dashboard Frontend
+        type: code
+        dependencies: [P4.2, P1.8]
+        description: >
+          Create frontend/app/roi/page.tsx displaying:
+          1. Revenue protected with confidence intervals
+          2. ESTIMATE badge on all financial figures
+          3. MTTR reduction chart (line chart over 30 days)
+          4. Link to methodology document
+          Style consistently with existing dashboard aesthetic.
+        outputs:
+          - frontend/app/roi/page.tsx (new)
+        done_when:
+          - "ROI page renders with live data from backend"
+          - "ESTIMATE badge visible on all revenue figures"
+        effort_hours: 6
+
+      # ── P4.4 ──────────────────────────────────────────────────────────────
+      - id: P4.4
+        title: Governance and Audit Trail Enhancement
+        type: code
+        description: >
+          Ensure every automated action (incident creation, SITREP generation,
+          RL evaluation, proactive comms attempt) creates an entry in the
+          existing audit trail. Add to get_audit_trail() response:
+          1. action_type (human, automated, rl_system)
+          2. trace_id (from P0.2 tracing)
+          3. Export endpoint: GET /api/v1/incidents/{id}/audit-trail?format=csv
+          for regulatory filing.
+        context_files:
+          - backend/app/api/incidents.py
+        outputs:
+          - backend/app/api/incidents.py (modified)
+        done_when:
+          - "Audit trail includes action_type for every entry"
+          - "CSV export endpoint returns valid CSV"
+        effort_hours: 6
+
+      # ── P4.5 ──────────────────────────────────────────────────────────────
+      - id: P4.5
+        title: Autonomous Execution Architecture Decision Record
+        type: documentation
+        dependencies: [P0.7]
+        description: >
+          Based on the signed autonomy positioning document (P0.7), create an
+          architecture decision record for the autonomy implementation.
+          Include:
+          1. Chosen option (A, B, or C from P0.7)
+          2. Detailed architecture for the chosen option
+          3. Safety rails: blast-radius limits, confirmation windows, kill-switch
+          4. Netconf/YANG adapter requirements per vendor (scope and effort)
+          5. Digital Twin feasibility assessment (buy vs build)
+          6. Risk assessment and insurance requirements
+          7. Regulatory clearance checklist (OFCOM, ICO)
+          8. Estimated effort and cost for implementation
+          This document is a PLANNING artifact. No code is written.
+        outputs:
+          - docs/ADR-002-autonomous-execution-architecture.md (new)
+        done_when:
+          - "Document covers all 8 sections"
+          - "Effort estimate includes vendor-specific Netconf/YANG scope"
+          - "Sign-off section for CTO and Legal"
+        effort_hours: 8
+
+      # ── P4.6 ──────────────────────────────────────────────────────────────
+      - id: P4.6
+        title: Final Integration Test Suite
+        type: test
+        dependencies: [P2.3, P2.4, P3.1, P4.2]
+        description: >
+          Comprehensive end-to-end test that validates the full platform:
+          1. Seed entities and KPI baselines
+          2. Ingest 50 alarms → verify correlation and incident creation
+          3. Verify sleeping cell detection on silenced entity
+          4. Verify SITREP generated with causal template matches
+          5. Submit operator feedback → verify RL evaluation triggers
+          6. Query ROI dashboard → verify figures and is_estimate flags
+          7. Verify audit trail for all automated actions
+        outputs:
+          - tests/integration/test_full_platform.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_full_platform.py -v --timeout=120 2>&1 | tail -20
+        done_when:
+          - "All 7 verification steps pass"
+          - "No cross-tenant data leakage"
+          - "All revenue figures include is_estimate flag"
+        effort_hours: 10
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 5 — AUTONOMOUS EXECUTION (Weeks 23–40)
+# Goal: Implement safe, gated autonomous execution for specific low-risk actions.
+# Based on ADR-002 Option B (Opt-in Auto-Execution with Safety Rails).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+  - id: P5
+    name: Autonomous Execution
+    weeks: "23-40"
+    task_count: 8
+
+    tasks:
+
+      # ── P5.1 ──────────────────────────────────────────────────────────────
+      - id: P5.1
+        title: Policy Engine v2 Hardening
+        type: code
+        dependencies: [P0.4]
+        description: >
+          Enhance backend/app/services/policy_engine.py to support:
+          1. Policy versioning: track policy rules with timestamps
+          2. Audit trail: log every policy evaluation (decision, rule matched, confidence)
+          3. Explicit gates: add ALLOW/DENY/CONFIRM action types
+          4. Blast-radius constraints: policies can specify entity set size limits
+          5. Tenant-scoped policies: multi-tenant rules isolation
+          Add new endpoints:
+            - GET /api/v1/policies/{tenant_id} — list active policies
+            - POST /api/v1/policies/{tenant_id}/evaluate — pre-check action compliance
+          Policies stored in backend/app/models/policy_orm.py (new table).
+        context_files:
+          - backend/app/services/policy_engine.py
+          - backend/app/models/
+        outputs:
+          - backend/app/models/policy_orm.py (new)
+          - backend/app/services/policy_engine.py (modified)
+          - backend/app/api/policies.py (new)
+          - backend/app/schemas/policies.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_policy_engine_v2.py -v 2>&1 | tail -10
+        done_when:
+          - "Policies versioned with timestamps"
+          - "Audit trail captures every evaluation"
+          - "GET /api/v1/policies/{tenant_id} returns current rules"
+          - "POST /api/v1/policies/{tenant_id}/evaluate pre-checks actions"
+        effort_hours: 24
+
+      # ── P5.2 ──────────────────────────────────────────────────────────────
+      - id: P5.2
+        title: Digital Twin Mock Implementation
+        type: code
+        dependencies: [P3.4, P4.2]
+        description: >
+          Create backend/app/services/digital_twin.py with class DigitalTwinMock:
+          
+          Purpose: Predict network KPI changes before executing autonomous actions.
+          
+          Implementation:
+          1. Query Decision Memory for N past similar decisions
+          2. Extract historical outcomes (KPI delta, success/failure)
+          3. Compute confidence-weighted impact prediction via heuristic:
+             predicted_impact = avg(similarity_score * historical_impact) for top-3 matches
+          4. Return risk_score (0-100) and impact_ci (confidence interval)
+          
+          Endpoints:
+            - POST /api/v1/digital-twin/predict — estimates KPI impact before action
+              Input: {"action_type": "cell_failover", "entity_id": "...", "parameters": {...}}
+              Output: {"risk_score": 35, "impact_delta": 0.08, "confidence_interval": "0.05-0.11"}
+          
+          Fallback: Use fixed heuristic if Decision Memory has <50 samples.
+        context_files:
+          - backend/app/services/decision_repository.py
+          - backend/app/models/decision_trace_orm.py
+          - backend/app/schemas/autonomous.py
+        outputs:
+          - backend/app/services/digital_twin.py (new)
+          - backend/app/api/autonomous.py (modified — add predict endpoint)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -c "from backend.app.services.digital_twin import DigitalTwinMock; dt = DigitalTwinMock(None); print('DT Loaded')"
+        done_when:
+          - "POST /api/v1/digital-twin/predict returns risk_score and impact_ci"
+          - "Predictions use top-3 similar decisions from Decision Memory"
+          - "Fallback heuristic works when N<50"
+        effort_hours: 16
+
+      # ── P5.3 ──────────────────────────────────────────────────────────────
+      - id: P5.3
+        title: Safety Rails and Autonomous Action Framework
+        type: code
+        dependencies: [P5.1, P5.2, P0.2]
+        description: >
+          Create backend/app/services/autonomous_action_executor.py to gate autonomous execution:
+          
+          Pipeline for each action:
+          1. POLICY_GATE: Invoke PolicyEngine.evaluate() → must return ALLOW
+          2. BLAST_RADIUS_GATE: Check entity set size against tenant policy (max 100 default)
+          3. CONFIDENCE_GATE: Require Decision Memory similarity >= 0.75 and confidence >= 0.85
+          4. CONFIRMATION_WINDOW: Send async notification (do not block); wait 30 sec for override
+          5. EXECUTION: Call Netconf adapter to apply change (async task, timeout 30 sec)
+          6. VALIDATION: Poll KPIs for 5 min; if degradation > 10%, trigger AUTO_ROLLBACK
+          7. KILL_SWITCH: POST /api/v1/autonomous/kill-switch reverses last N actions in FIFO
+          
+          Database schema: ActionExecutionORM tracks each autonomous action (state machine).
+          
+          Endpoints:
+            - POST /api/v1/autonomous/actions — submit action for execution
+            - GET /api/v1/autonomous/actions/{id} — query action status
+            - POST /api/v1/autonomous/kill-switch — emergency stop (reverts last N)
+            - GET /api/v1/autonomous/status — overall autonomy system health
+        context_files:
+          - backend/app/services/policy_engine.py
+          - backend/app/services/digital_twin.py
+          - backend/app/models/
+          - backend/app/core/logging.py
+        outputs:
+          - backend/app/models/action_execution_orm.py (new)
+          - backend/app/services/autonomous_action_executor.py (new)
+          - backend/app/api/autonomous.py (modified)
+          - backend/app/schemas/autonomous.py (modified)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_safety_rails.py -v 2>&1 | tail -10
+        done_when:
+          - "Policy gate blocks non-compliant actions"
+          - "Confirmation window sends notifications (async, non-blocking)"
+          - "Kill-switch endpoint available and functional"
+          - "Auto-rollback triggers on >10% KPI degradation"
+        effort_hours: 32
+
+      # ── P5.4 ──────────────────────────────────────────────────────────────
+      - id: P5.4
+        title: Netconf/YANG Adapter PoC (Nokia + Cisco)
+        type: code
+        dependencies: [P5.3]
+        description: >
+          Implement Netconf/YANG adapters for two vendors as proof-of-concept.
+          
+          Create backend/app/services/netconf_adapter.py with:
+          1. NetconfSession class: establish session via Python ncclient library
+          2. Nokia AirScale YANG operations: cell_failover(), suspend_connections()
+          3. Cisco IOS-XE YANG operations: interface_failover(), qos_update()
+          4. Vendor detection via YANG model inspection
+          5. Dry-run mode (validate changes without applying)
+          
+          Mock implementation: Simulate device responses for testing (no real hardware needed).
+          
+          Endpoints:
+            - POST /api/v1/adapters/netconf/connect — authenticate to device
+            - POST /api/v1/adapters/netconf/validate — dry-run an operation
+            - POST /api/v1/adapters/netconf/execute — apply change
+          
+          Device auth: TLS certificates in backend/config/netconf_certs/
+        context_files:
+          - requirements.txt
+        outputs:
+          - backend/app/services/netconf_adapter.py (new)
+          - backend/app/api/adapters.py (new)
+          - backend/app/schemas/netconf.py (new)
+          - backend/config/netconf_certs/ (new, mock certs for testing)
+          - requirements.txt (modified — add ncclient)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -c "from backend.app.services.netconf_adapter import NetconfSession; print('Netconf loaded')"
+        done_when:
+          - "Netconf adapter can connect to mock Nokia device"
+          - "Netconf adapter can connect to mock Cisco device"
+          - "Cell failover operation validated via dry-run"
+          - "All operations logged with trace_id"
+        effort_hours: 40
+
+      # ── P5.5 ──────────────────────────────────────────────────────────────
+      - id: P5.5
+        title: Testing and Validation (Staging)
+        type: test
+        dependencies: [P5.4]
+        description: >
+          Comprehensive test suite for autonomous execution (>1000 scenarios):
+          
+          Test files:
+          1. test_policy_engine_v2.py — versioning, audit, rules evaluation
+          2. test_digital_twin.py — impact prediction, confidence calibration
+          3. test_safety_rails.py — all 7 gates, rollback logic
+          4. test_netconf_adapter.py — Nokia/Cisco operations, dry-run
+          5. test_action_state_machine.py — action lifecycle (pending, executing, completed, rolled_back)
+          6. test_blast_radius.py — entity set size limits enforced
+          7. test_cross_tenant_isolation.py — autonomous actions cannot leak between tenants
+          
+          Chaos Engineering:
+          - Simulate Netconf session drop during execution → trigger rollback
+          - Simulate policy rule conflict → action blocked
+          - Simulate KPI degradation after execution → auto-rollback
+          
+          Coverage goal: All code paths in autonomous_action_executor.py and policy_engine.py >= 85%
+        outputs:
+          - tests/integration/test_policy_engine_v2.py (new)
+          - tests/integration/test_digital_twin.py (new)
+          - tests/integration/test_safety_rails.py (new)
+          - tests/integration/test_netconf_adapter.py (new)
+          - tests/integration/test_action_state_machine.py (new)
+          - tests/integration/test_blast_radius.py (new)
+          - tests/integration/test_cross_tenant_isolation.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_*  -v --timeout=120 2>&1 | grep "passed\|failed"
+        done_when:
+          - "All 7 test files pass"
+          - ">1000 test scenarios covered"
+          - "Code coverage >= 85% for autonomous modules"
+          - "Chaos tests pass (session drops, policy conflicts, reversals)"
+        effort_hours: 24
+
+      # ── P5.6 ──────────────────────────────────────────────────────────────
+      - id: P5.6
+        title: Regulatory Documentation and OFCOM Engagement
+        type: documentation
+        dependencies: [P5.3, P5.4]
+        description: >
+          Create regulatory artifacts for UK telecom compliance:
+          
+          Documents:
+          1. Safety Whitepaper (docs/AUTONOMOUS_SAFETY_WHITEPAPER.md)
+             - Architecture of safety gates
+             - Risk analysis and mitigations
+             - Rollback procedures with examples
+             - Vendor device compatibility matrix
+          
+          2. OFCOM Pre-Notification (docs/OFCOM_PRE_NOTIFICATION.md)
+             - Service description: cell failover, connection throttling
+             - Safety gates and kill-switch
+             - Customer opt-in mechanism
+             - Incident response procedures
+          
+          3. ICO Data Protection (docs/ICO_DPIA.md)
+             - Data flows: incidents, decisions, audit trail
+             - Consent mechanisms
+             - Data retention policy for decision traces
+             - Third-party sharing (none)
+          
+          4. Autonomy Status Report (docs/AUTONOMY_STATUS_REPORT.md)
+             - Phase 5 progress metrics
+             - Staging test results
+             - Go/No-Go checklist for board approval
+        outputs:
+          - docs/AUTONOMOUS_SAFETY_WHITEPAPER.md (new)
+          - docs/OFCOM_PRE_NOTIFICATION.md (new)
+          - docs/ICO_DPIA.md (new)
+          - docs/AUTONOMY_STATUS_REPORT.md (new)
+        done_when:
+          - "Safety Whitepaper covers all 7 gates and rollback"
+          - "OFCOM pre-notification references vendor device list"
+          - "ICO DPIA addresses decision trace retention"
+          - "Status Report includes test coverage and staging results"
+        effort_hours: 16
+
+      # ── P5.7 ──────────────────────────────────────────────────────────────
+      - id: P5.7
+        title: Cell Failover Autonomous Action Implementation
+        type: code
+        dependencies: [P5.3, P5.4]
+        description: >
+          Implement first autonomous action type: Cell Failover within sector.
+          
+          Trigger: High latency incident with root cause "adjacent_cell_capacity"
+          
+          Logic:
+          1. Identify affected cell and adjacent healthy cells
+          2. Estimate traffic steering impact via Digital Twin
+          3. If confidence >= 0.85, invoke Safety Rails pipeline
+          4. If approved: query Netconf adapter for cell failover command
+          5. Apply change, monitor KPIs for 5 min
+          6. If success, record to Decision Memory; if failure, auto-rollback
+          
+          Code locations:
+          - backend/app/services/autonomous_actions/cell_failover.py (new)
+          - backend/app/services/autonomous_action_executor.py (modified — register handler)
+          - Update LLM prompts to suggest cell_failover as actionable SITREP
+          
+          Policies (default):
+          - Max blast-radius: 50 entities
+          - Confidence threshold: >= 0.85
+          - Confirmation window: 30 sec (settable by tenant)
+          - Rollback threshold: > 10% degradation
+        outputs:
+          - backend/app/services/autonomous_actions/__init__.py (new)
+          - backend/app/services/autonomous_actions/cell_failover.py (new)
+          - backend/app/services/autonomous_action_executor.py (modified)
+          - backend/app/models/action_execution_orm.py (if not done in P5.3)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          python -c "from backend.app.services.autonomous_actions.cell_failover import CellFailoverAction; print('Cell failover action loaded')"
+        done_when:
+          - "Cell failover action registered in executor"
+          - "LLM prompts suggest cell failover when appropriate"
+          - "Action passes through all 7 safety gates"
+          - "Netconf commands generated correctly per vendor"
+        effort_hours: 20
+
+      # ── P5.8 ──────────────────────────────────────────────────────────────
+      - id: P5.8
+        title: Autonomous Execution End-to-End Integration Test
+        type: test
+        dependencies: [P5.7]
+        description: >
+          Comprehensive end-to-end test simulating full autonomous execution:
+          
+          Scenario: High latency incident → Autonomous cell failover → Success
+          
+          Steps:
+          1. Seed network with 5 cells, 2 in high-load zone
+          2. Ingest alarms simulating high latency + adjacent capacity
+          3. Verify incident created with actionable SITREP
+          4. Trigger autonomous action: cell failover
+          5. Verify all 7 safety gates pass
+          6. Verify Netconf command generated (dry-run mode)
+          7. Simulate execution and 5-min KPI validation
+          8. Verify Decision Memory + RL feedback recorded
+          9. Verify audit trail captures action_type = "automated"
+          10. Query ROI dashboard (incident prevented)
+          
+          Rollback test scenario:
+          11. Repeat with post-execution KPI degradation > 10% → Auto-rollback triggered
+          12. Verify rollback command executed
+          13. Verify audit trail shows "AUTO_ROLLBACK"
+          14. Verify RL feedback score < 0 for failed action
+          
+          Cross-tenant: Verify other tenants' entities unaffected
+        outputs:
+          - tests/integration/test_autonomous_e2e.py (new)
+        verify: |
+          cd /Users/himanshu/Projects/Pedkai
+          pytest tests/integration/test_autonomous_e2e.py -v --timeout=180 2>&1 | tail -20
+        done_when:
+          - "End-to-end scenario passes (10 verification steps)"
+          - "Rollback scenario passes (4 additional steps)"
+          - "Cross-tenant isolation verified"
+          - "ROI metrics updated for autonomous incident prevention"
+        effort_hours: 12
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SUCCESS METRICS AND RISK CONTROLS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+success_metrics:
+  performance:
+    correlation_5000_alarms: "< 5 seconds"
+    api_p95_latency: "< 300ms"
+    sse_100_concurrent: "stable, no pool exhaustion"
+  intelligence:
+    sleeping_cell_detection: "validated true positive"
+    causal_template_coverage: ">= 4 templates"
+    confidence_calibration: "r > 0.6 against operator scores (when N >= 50)"
+  sovereignty:
+    offline_embeddings: "functional without cloud API key"
+    embedding_isolation: "cross-provider queries return empty"
+  compliance:
+    consent_enforcement: "non-consenting subjects blocked"
+    estimate_labelling: "all revenue figures flagged when BSS is mock"
+    audit_trail: "every automated action logged with trace_id"
+  governance:
+    autonomy_positioning: "signed product decision document"
+    value_methodology: "published and peer-reviewed"
+
+risk_controls:
+  - id: RC1
+    name: tenant_isolation
+    enforced_in: [P1.5, P1.9, P2.1, P5.3, P5.8]
+  - id: RC2
+    name: gdpr_compliance_first
+    enforced_in: [P0.6, P5.6]
+  - id: RC3
+    name: estimate_labelling
+    enforced_in: [P2.7, P4.2, P4.3]
+  - id: RC4
+    name: embedding_provider_isolation
+    enforced_in: [P3.2, P3.3, P3.4]
+  - id: RC5
+    name: load_testing_before_scale
+    enforced_in: [P1.4, P2.3, P5.5]
+  - id: RC6
+    name: autonomy_gated_by_decision
+    enforced_in: [P0.7, P4.5, P5.3, P5.7]
+  - id: RC7
+    name: audit_trail_completeness
+    enforced_in: [P4.4, P4.6, P5.3, P5.8]
+  - id: RC8
+    name: safety_rails_validation
+    enforced_in: [P5.3, P5.5, P5.8]

@@ -13,6 +13,8 @@ from backend.app.models.decision_trace import (
     KPISnapshot,
     SimilarDecisionQuery,
 )
+from backend.app.models.network_entity_orm import NetworkEntityORM
+from backend.app.models.kpi_sample_orm import KpiSampleORM
 
 __all__ = [
     "DecisionTrace",
@@ -26,4 +28,6 @@ __all__ = [
     "Option",
     "KPISnapshot",
     "SimilarDecisionQuery",
+    "NetworkEntityORM",
+    "KpiSampleORM",
 ]

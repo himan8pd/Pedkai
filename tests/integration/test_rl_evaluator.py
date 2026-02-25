@@ -4,6 +4,7 @@ from uuid import uuid4
 from backend.app.models.kpi_orm import KPIMetricORM
 from backend.app.models.decision_trace_orm import DecisionTraceORM
 from backend.app.services.rl_evaluator import get_rl_evaluator
+from backend.app.services.policy_engine import get_policy_engine
 from backend.app.models.decision_trace import DecisionTrace, DecisionContext, DecisionOutcome, DecisionOutcomeRecord
 
 @pytest.mark.asyncio
@@ -66,8 +67,8 @@ async def test_rl_evaluator_closed_loop_logic(db_session):
     assert reward >= 5
     
     # 5. TEST GOVERNANCE: Raise threshold in Policy Engine to 50%
-    from backend.app.services.policy_engine import policy_engine
-    policy_engine.parameters["rl_reward_improvement_threshold"] = 0.50
+    engine = get_policy_engine()
+    engine.parameters["rl_reward_improvement_threshold"] = 0.50
     
     # Re-evaluate: 44% is now BELOW the 50% threshold. Reward should be 0.
     reward_stricter = await evaluator._calculate_kpi_improvement_reward(trace)
@@ -75,4 +76,4 @@ async def test_rl_evaluator_closed_loop_logic(db_session):
     assert reward_stricter == 0
     
     # Cleanup: Reset threshold
-    policy_engine.parameters["rl_reward_improvement_threshold"] = 0.10
+    engine.parameters["rl_reward_improvement_threshold"] = 0.10

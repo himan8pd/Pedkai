@@ -158,9 +158,13 @@ class DecisionTrace(BaseModel):
     
     # For vector similarity search
     embedding: Optional[list[float]] = Field(
-        None,
-        description="Vector embedding for semantic search"
+        default=None,
+        description="Vector representation for similarity search"
     )
+    embedding_provider: Optional[str] = Field(None, description="The provider that generated the embedding")
+    embedding_model: Optional[str] = Field(None, description="The model that generated the embedding")
+    memory_hits: int = 0
+    causal_evidence_count: int = 0
     
     # Metadata
     tags: list[str] = Field(default_factory=list)
@@ -272,10 +276,14 @@ class DecisionTraceCreate(BaseModel):
     confidence_score: float = 0.0
     domain: str = "anops"
     tags: list[str] = Field(default_factory=list)
+    embedding_provider: Optional[str] = None
+    embedding_model: Optional[str] = None
     
     # Phase 15.3: Semantic Context Graph
     parent_id: Optional[UUID] = None
     derivation_type: Optional[str] = None
+    memory_hits: int = 0
+    causal_evidence_count: int = 0
 
 
 class DecisionTraceUpdate(BaseModel):
@@ -292,6 +300,7 @@ class SimilarDecisionQuery(BaseModel):
     current_context: DecisionContext
     domain: Optional[str] = None
     min_similarity: float = Field(default=0.7, ge=0.0, le=1.0)
+    embedding_provider: Optional[str] = None
     limit: int = Field(default=5, ge=1, le=20)
 
 

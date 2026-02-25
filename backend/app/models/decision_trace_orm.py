@@ -49,6 +49,10 @@ class DecisionTraceORM(Base):
     confidence_score = Column(Float, default=0.0)
     outcome = Column(JSON, nullable=True)
     embedding = Column(Vector(settings.embedding_dimension), nullable=True)
+    embedding_provider = Column(String(50), nullable=True)
+    embedding_model = Column(String(100), nullable=True)
+    memory_hits = Column(Integer, nullable=False, default=0)
+    causal_evidence_count = Column(Integer, nullable=False, default=0)
     tags = Column(JSON, nullable=False, default=list)
     domain = Column(String(50), nullable=False, default="anops", index=True)
     
@@ -85,7 +89,8 @@ class DecisionFeedbackORM(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     decision_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     operator_id = Column(String(255), nullable=False, index=True)
-    score = Column(Integer, nullable=False) # 1 for upvote, -1 for downvote
+    score = Column(Integer, nullable=False) # 1-5 star rating
+    comment = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now(), nullable=False)
     
     __table_args__ = (

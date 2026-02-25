@@ -1,0 +1,28 @@
+causal_templates:
+  - id: fiber_cut
+    description: "Physical fiber break impacting multiple gNodeBs"
+    cause_metric: "fiber_status"
+    effect_metric: "gnodeb_connectivity"
+    entity_type_pair: ["FIBER", "GNODEB"]
+    confidence: 0.95
+
+  - id: prb_utilization_congestion
+    description: "High PRB utilization leading to throughput drop"
+    cause_metric: "prb_utilization"
+    effect_metric: "dl_throughput"
+    entity_type_pair: ["CELL", "CELL"]
+    confidence: 0.90
+
+  - id: power_failure
+    description: "Mains power failure at site triggering BBU offline"
+    cause_metric: "mains_power"
+    effect_metric: "bbu_status"
+    entity_type_pair: ["SITE", "BBU"]
+    confidence: 0.98
+
+  - id: backhaul_congestion
+    description: "Transport network congestion increasing latency"
+    cause_metric: "transport_load"
+    effect_metric: "latency"
+    entity_type_pair: ["ROUTER", "GNODEB"]
+    confidence: 0.85

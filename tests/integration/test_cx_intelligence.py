@@ -11,7 +11,8 @@ async def test_cx_graph_traversal(db_session):
     """
     Verifies that CX Intelligence correctly traverses the topology graph.
     """
-    service = CXIntelligenceService(db_session)
+    from tests.conftest import TestingSessionLocal
+    service = CXIntelligenceService(TestingSessionLocal)
     
     # 1. Setup Topology (Root -> Router -> Cell)
     root_id = "CORE-ROUTER-99"

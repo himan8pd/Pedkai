@@ -3,25 +3,43 @@ CX Intelligence Service.
 Correlates network anomalies with customer churn risk for proactive care.
 """
 import logging
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from sqlalchemy import select, and_, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from contextlib import asynccontextmanager
 from backend.app.models.customer_orm import CustomerORM, ProactiveCareORM
 from backend.app.models.decision_trace_orm import DecisionTraceORM
 
 logger = logging.getLogger(__name__)
 
 class CXIntelligenceService:
-    def __init__(self, session):
-        self.session = session
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self.session_factory = session_factory
 
-    async def identify_impacted_customers(self, anomaly_id: UUID) -> List[CustomerORM]:
+    @asynccontextmanager
+    async def _get_session(self, session: Optional[AsyncSession] = None):
+        if session:
+            yield session
+        else:
+            async with self.session_factory() as new_session:
+                try:
+                    yield new_session
+                    await new_session.commit()
+                except Exception:
+                    await new_session.rollback()
+                    raise
+                finally:
+                    await new_session.close()
+
+    async def identify_impacted_customers(self, anomaly_id: UUID, session: Optional[AsyncSession] = None) -> List[CustomerORM]:
         """
         Finds customers associated with a site experiencing an anomaly who have a high churn risk.
         Finding H-3: Implements multi-site correlation via simulated graph traversal.
         """
         # 1. Fetch the anomaly (DecisionTrace) to get the impacted entity/site
-        trace = await self.session.get(DecisionTraceORM, anomaly_id)
+        async with self._get_session(session) as s:
+            trace = await s.get(DecisionTraceORM, anomaly_id)
         if not trace:
             logger.warning(f"Anomaly {anomaly_id} not found for CX correlation.")
             return []
@@ -45,7 +63,7 @@ class CXIntelligenceService:
                     ))
                     .limit(1)
                 )
-                res = await self.session.execute(inference_query)
+                res = await s.execute(inference_query)
                 inferred_node = res.scalar()
                 if inferred_node:
                     site_id = inferred_node
@@ -80,7 +98,7 @@ class CXIntelligenceService:
         
         try:
             # Execute recursive query to get downstream dependencies
-            res = await self.session.execute(recursive_query, {"site_id": site_id, "tid": tenant_id, "max_depth": 5})
+            res = await s.execute(recursive_query, {"site_id": site_id, "tid": tenant_id, "max_depth": 5})
             downstream = res.scalars().all()
             impacted_sites.extend(downstream)
             logger.info(f"Graph Traversal: Anomaly at {site_id} propagates to {len(downstream)} downstream nodes: {downstream}")
@@ -89,8 +107,9 @@ class CXIntelligenceService:
         
         # 2. Query for customers matching any impacted site with churn risk > threshold
         # Finding H-6 FIX: Use Policy Engine parameters
-        from backend.app.services.policy_engine import policy_engine
-        churn_threshold = policy_engine.get_parameter("cx_churn_risk_alert_threshold", 0.70)
+        from backend.app.services.policy_engine import get_policy_engine
+        engine = get_policy_engine()
+        churn_threshold = engine.get_parameter("cx_churn_risk_alert_threshold", 0.70)
         
         query = select(CustomerORM).where(
             and_(
@@ -98,28 +117,60 @@ class CXIntelligenceService:
                 CustomerORM.churn_risk_score > churn_threshold
             )
         )
-        result = await self.session.execute(query)
+        result = await s.execute(query)
         impacted = result.scalars().all()
         
         logger.info(f"Found {len(impacted)} high-risk customers impacted by anomaly at {site_id} (Checked {len(impacted_sites)} topological nodes)")
         return impacted
 
-    async def trigger_proactive_care(self, customer_ids: List[UUID], anomaly_id: UUID) -> List[ProactiveCareORM]:
+async def trigger_proactive_care(self, customer_ids: List[UUID], anomaly_id: UUID, session: Optional[AsyncSession] = None) -> dict:
         """
-        Mocks the sending of notifications to impacted customers.
+        Sends proactive care notifications to impacted customers.
+        
+        GDPR Compliance (P0.6): Checks consent_proactive_comms before sending.
+        - If customer has no consent: blocked, returns {"blocked": true, "reason": "no_consent"}
+        - If customer has consent: creates ProactiveCareORM record
+        
+        Returns: {"sent": [...ProactiveCareORM...], "blocked": [...customer_ids...]}
         """
         records = []
-        for cid in customer_ids:
-            record = ProactiveCareORM(
-                customer_id=cid,
-                anomaly_id=anomaly_id,
-                channel="simulation",
-                status="sent",
-                message_content="Proactive alert: We've detected an optimization event in your area. Coverage might be improved shortly."
-            )
-            records.append(record)
-            self.session.add(record)
+        blocked_customers = []
         
-        await self.session.commit()
-        logger.info(f"Triggered proactive care for {len(records)} customers linked to anomaly {anomaly_id}")
-        return records
+        async with self._get_session(session) as s:
+            # Fetch all requested customers and check consent
+            for cid in customer_ids:
+                customer = await s.get(CustomerORM, cid)
+                
+                if customer is None:
+                    logger.warning(f"Customer {cid} not found, skipping proactive care.")
+                    blocked_customers.append({"customer_id": str(cid), "reason": "not_found"})
+                    continue
+                
+                # P0.6 GDPR Consent Check
+                if not customer.consent_proactive_comms:
+                    logger.info(f"Proactive care blocked for customer {cid}: no consent")
+                    blocked_customers.append({"customer_id": str(cid), "reason": "no_consent"})
+                    continue
+                
+                # Create notification record for consenting customers
+                record = ProactiveCareORM(
+                    customer_id=cid,
+                    anomaly_id=anomaly_id,
+                    channel="simulation",
+                    status="sent",
+                    message_content="Proactive alert: We've detected an optimization event in your area. Coverage might be improved shortly."
+                )
+                records.append(record)
+                s.add(record)
+            
+            if records:
+                await s.flush()
+        
+        logger.info(f"Triggered proactive care for {len(records)} consenting customers, blocked {len(blocked_customers)} non-consenting customers (anomaly {anomaly_id})")
+        
+        return {
+            "sent": records,
+            "blocked": blocked_customers,
+            "sent_count": len(records),
+            "blocked_count": len(blocked_customers)
+        }

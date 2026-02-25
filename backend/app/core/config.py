@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     # Options: revenue | sla_tier | churn_risk | emergency_first
     customer_prioritisation_strategy: str = "revenue"
 
+    # SSE Configuration (Task P0.5)
+    sse_heartbeat_interval_seconds: int = 30
+    sse_max_idle_seconds: int = 300
+    sse_max_connections: int = 100
+
 
 @lru_cache
 def get_settings() -> Settings:

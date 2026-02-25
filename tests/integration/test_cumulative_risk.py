@@ -1,14 +1,14 @@
 import pytest
 import uuid
 from datetime import datetime, timezone, timedelta
-from backend.app.services.llm_service import LLMService
+from backend.app.services.llm_service import get_llm_service
 from backend.app.models.decision_trace_orm import DecisionTraceORM
-from backend.app.services.policy_engine import policy_engine
+from backend.app.services.policy_engine import get_policy_engine
 
 @pytest.mark.asyncio
 async def test_cumulative_risk_protection(db_session):
     """Finding M-7: Verify that 'Death by a Thousand Cuts' is blocked."""
-    llm_service = LLMService()
+    llm_service = get_llm_service()
     
     # 1. Seed 6 active decisions, each with $9,000 risk (Total: $54,000)
     # This should exceed POL-005's $50,000 limit.
@@ -38,9 +38,17 @@ async def test_cumulative_risk_protection(db_session):
     
     # 3. Generate SITREP (Mock LLM call to avoid 429/Token Quota)
     from unittest.mock import patch, AsyncMock
-    with patch("backend.app.services.llm_service.GeminiProvider.generate", new_callable=AsyncMock) as mock_gen:
-        mock_gen.return_value = "This is a dummy SITREP for policy testing."
-        sitrep = await llm_service.generate_explanation(context, [], db_session=db_session)
+    with patch("backend.app.services.llm_adapter.GeminiAdapter.generate", new_callable=AsyncMock) as mock_gen:
+        from backend.app.services.llm_adapter import LLMResponse
+        mock_gen.return_value = LLMResponse(
+            text="This is a dummy SITREP for policy testing.",
+            model_version="gemini-test",
+            prompt_hash="abc",
+            timestamp=datetime.now(timezone.utc),
+            provider="gemini"
+        )
+        sitrep_resp = await llm_service.generate_sitrep(context, [], session=db_session)
+        sitrep = sitrep_resp.get("text", "")
     
     # 4. Assert POLICY BLOCK
     # The policy engine should have blocked the real LLM call and returned a block message

@@ -8,7 +8,7 @@ from backend.app.core.security import create_access_token, Role
 @pytest.mark.asyncio
 async def test_alarm_correlation_endpoint(client: AsyncClient, db_session):
     """Verify Finding 5: Real grouping logic instead of 'batch of 5' demo logic."""
-    token = create_access_token({"sub": "admin", "role": Role.ADMIN})
+    token = create_access_token({"sub": "admin", "role": Role.ADMIN, "tenant_id": "t1"})
     headers = {"Authorization": f"Bearer {token}"}
     
     now = datetime.now(timezone.utc)

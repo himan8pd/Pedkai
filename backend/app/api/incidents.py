@@ -13,7 +13,7 @@ from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Security, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select, and_
 
 from backend.app.core.database import get_db
 from backend.app.core.security import (
@@ -25,6 +25,10 @@ from backend.app.schemas.incidents import (
     ApprovalRequest, AuditTrailEntry, ReasoningStep,
 )
 from backend.app.models.incident_orm import IncidentORM
+from backend.app.models.network_entity_orm import NetworkEntityORM
+from backend.app.services.decision_repository import DecisionTraceRepository
+from backend.app.services.rl_evaluator import get_rl_evaluator
+from backend.app.core.database import async_session_maker
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -72,7 +76,7 @@ async def create_incident(
     Create a new incident.
     If entity_type is EMERGENCY_SERVICE, severity is forced to critical (P1).
     """
-    # Task 1.3 Fix: Detect emergency service via string match (resilient fallback) and DB lookup
+    # P1.2 Fix: Detect emergency service via string match (resilient fallback) and DB lookup
     is_emergency = False
     severity = payload.severity
     
@@ -84,18 +88,17 @@ async def create_incident(
         
     if not is_emergency and payload.entity_id:
         try:
-            from sqlalchemy import text as sql_text
-            # Query topology_relationships as a more resilient source for entity type metadata
-            es_check = await db.execute(
-                sql_text("""
-                    SELECT 1 FROM topology_relationships 
-                    WHERE ((from_entity_id = :eid AND from_entity_type = 'EMERGENCY_SERVICE')
-                       OR (to_entity_id = :eid AND to_entity_type = 'EMERGENCY_SERVICE'))
-                    LIMIT 1
-                """),
-                {"eid": str(payload.entity_id)}
+            # P1.2: Use NetworkEntityORM instead of raw SQL
+            entity_result = await db.execute(
+                select(NetworkEntityORM).where(
+                    and_(
+                        NetworkEntityORM.id == payload.entity_id,
+                        NetworkEntityORM.entity_type == 'EMERGENCY_SERVICE'
+                    )
+                )
             )
-            is_emergency = es_check.scalar() is not None
+            entity = entity_result.scalars().first()
+            is_emergency = entity is not None
         except Exception as e:
             logger.warning(f"Emergency service DB check failed: {e}")
 
@@ -185,7 +188,7 @@ async def generate_sitrep(
     llm_response = await llm_service.generate_sitrep(
         incident_context=incident_context,
         similar_decisions=similar_decisions,
-        db_session=db
+        session=db
     )
     
     incident.llm_model_version = llm_response.get("model_version", "unknown")
@@ -302,6 +305,20 @@ async def close_incident(
     incident.closed_at = datetime.now(timezone.utc)
     incident.updated_at = datetime.now(timezone.utc)
     await db.flush()
+
+    # P2.5: Trigger RL evaluation and feedback application for associated decision trace
+    try:
+        if incident.decision_trace_id:
+            # Retrieve decision trace
+            repo = DecisionTraceRepository(async_session_maker)
+            decision = await repo.get_by_id(incident.decision_trace_id, session=db)
+            if decision:
+                rl = get_rl_evaluator(db_session=db)
+                reward = await rl.evaluate_decision_outcome(decision)
+                await rl.apply_feedback(decision.id, reward)
+    except Exception as e:
+        # Do not block incident close on RL errors; log and continue
+        logger.exception(f"RL Evaluator integration failed during close_incident: {e}")
     return _to_response(incident)
 
 
@@ -327,26 +344,181 @@ async def get_audit_trail(
     db: AsyncSession = Depends(get_db),
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
-    """Get the full audit trail for an incident."""
+    """Get the full audit trail for an incident.
+    
+    Enhanced with action_type and trace_id for compliance and auditability.
+    Each automated or human action is logged with:
+    - timestamp: When the action occurred
+    - action_type: human | automated | rl_system (for governance classification)
+    - trace_id: Distributed tracing ID linking to request logs
+    """
+    from backend.app.middleware.trace import correlation_id_ctx
+    
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
+    
+    # Get current trace_id from context (set by middleware)
+    try:
+        current_trace_id = correlation_id_ctx.get()
+    except LookupError:
+        current_trace_id = None
 
     trail = []
-    trail.append({"timestamp": incident.created_at.isoformat() if incident.created_at else None,
-                  "action": "CREATED", "actor": "system", "details": f"Incident created with severity {incident.severity}"})
+    
+    # PHASE 1: Automated Detection & Incident Creation
+    trail.append({
+        "timestamp": incident.created_at.isoformat() if incident.created_at else None,
+        "action": "ANOMALY_DETECTED",
+        "action_type": "automated",  # Automated anomaly detection
+        "actor": "pedkai-platform",
+        "details": f"Incident created with severity {incident.severity}",
+        "trace_id": incident.decision_trace_id or current_trace_id,
+    })
 
+    # PHASE 2: SITREP Generation & Approval (Human Gate 1)
     if incident.sitrep_approved_at:
-        trail.append({"timestamp": incident.sitrep_approved_at.isoformat(),
-                      "action": "SITREP_APPROVED", "actor": incident.sitrep_approved_by, "details": "Human Gate 1 passed"})
+        trail.append({
+            "timestamp": incident.sitrep_approved_at.isoformat(),
+            "action": "SITREP_APPROVED",
+            "action_type": "human",  # Human Gate 1 — engineer reviews SITREP
+            "actor": incident.sitrep_approved_by,
+            "details": "Engineer reviewed SITREP and approved the diagnosis",
+            "trace_id": current_trace_id,
+        })
 
+    # PHASE 3: Preventive Action Approval (Human Gate 2)
     if incident.action_approved_at:
-        trail.append({"timestamp": incident.action_approved_at.isoformat(),
-                      "action": "ACTION_APPROVED", "actor": incident.action_approved_by, "details": "Human Gate 2 passed"})
+        trail.append({
+            "timestamp": incident.action_approved_at.isoformat(),
+            "action": "ACTION_APPROVED",
+            "action_type": "human",  # Human Gate 2 — engineer approves action
+            "actor": incident.action_approved_by,
+            "details": "Engineer approved the preventive action request",
+            "trace_id": current_trace_id,
+        })
 
+    # PHASE 4: Closed-Loop RL Evaluation (if available)
+    # Note: RL feedback is captured in DecisionTraceORM, we log it here for visibility
+    if hasattr(incident, 'feedback_score') and incident.feedback_score is not None:
+        trail.append({
+            "timestamp": incident.updated_at.isoformat() if incident.updated_at else None,
+            "action": "RL_FEEDBACK_RECORDED",
+            "action_type": "rl_system",  # RL evaluation loop
+            "actor": "rl_evaluator",
+            "details": f"Operator feedback recorded: {incident.feedback_score:+d}",
+            "trace_id": current_trace_id,
+        })
+
+    # PHASE 5: Incident Closure (Human Gate 3)
     if incident.closed_at:
-        trail.append({"timestamp": incident.closed_at.isoformat(),
-                      "action": "CLOSED", "actor": incident.closed_by, "details": "Human Gate 3 passed"})
+        trail.append({
+            "timestamp": incident.closed_at.isoformat(),
+            "action": "CLOSED",
+            "action_type": "human",  # Human Gate 3 — final closure
+            "actor": incident.closed_by,
+            "details": "Engineer confirmed incident resolution",
+            "trace_id": current_trace_id,
+        })
 
     return {"incident_id": incident_id, "audit_trail": trail}
+
+
+@router.get("/{incident_id}/audit-trail/csv")
+async def get_audit_trail_csv(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Export audit trail as CSV for regulatory filing.
+    
+    Returns a properly formatted CSV file suitable for audit, compliance, and regulatory teams.
+    Includes action_type classification for governance purposes.
+    """
+    import csv
+    from io import StringIO
+    from fastapi.responses import StreamingResponse
+    
+    incident = await _get_or_404(db, incident_id, current_user.tenant_id)
+    
+    # Fetch audit trail (same logic as JSON endpoint)
+    from backend.app.middleware.trace import correlation_id_ctx
+    try:
+        current_trace_id = correlation_id_ctx.get()
+    except LookupError:
+        current_trace_id = None
+
+    trail = []
+    
+    # Build audit trail entries
+    trail.append({
+        "timestamp": incident.created_at.isoformat() if incident.created_at else None,
+        "action": "ANOMALY_DETECTED",
+        "action_type": "automated",
+        "actor": "pedkai-platform",
+        "details": f"Incident created with severity {incident.severity}",
+        "trace_id": incident.decision_trace_id or current_trace_id,
+    })
+
+    if incident.sitrep_approved_at:
+        trail.append({
+            "timestamp": incident.sitrep_approved_at.isoformat(),
+            "action": "SITREP_APPROVED",
+            "action_type": "human",
+            "actor": incident.sitrep_approved_by,
+            "details": "Engineer reviewed and approved SITREP",
+            "trace_id": current_trace_id,
+        })
+
+    if incident.action_approved_at:
+        trail.append({
+            "timestamp": incident.action_approved_at.isoformat(),
+            "action": "ACTION_APPROVED",
+            "action_type": "human",
+            "actor": incident.action_approved_by,
+            "details": "Engineer approved preventive action",
+            "trace_id": current_trace_id,
+        })
+
+    if hasattr(incident, 'feedback_score') and incident.feedback_score is not None:
+        trail.append({
+            "timestamp": incident.updated_at.isoformat() if incident.updated_at else None,
+            "action": "RL_FEEDBACK_RECORDED",
+            "action_type": "rl_system",
+            "actor": "rl_evaluator",
+            "details": f"Operator feedback: {incident.feedback_score:+d}",
+            "trace_id": current_trace_id,
+        })
+
+    if incident.closed_at:
+        trail.append({
+            "timestamp": incident.closed_at.isoformat(),
+            "action": "CLOSED",
+            "action_type": "human",
+            "actor": incident.closed_by,
+            "details": "Incident closed by engineer",
+            "trace_id": current_trace_id,
+        })
+
+    # Generate CSV with proper formatting
+    output = StringIO()
+    csv_writer = csv.DictWriter(
+        output,
+        fieldnames=["timestamp", "action", "action_type", "actor", "details", "trace_id"],
+        quoting=csv.QUOTE_MINIMAL,
+    )
+    
+    csv_writer.writeheader()
+    for row in trail:
+        csv_writer.writerow(row)
+    
+    csv_content = output.getvalue()
+    
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="incident-{incident_id}-audit-trail.csv"'
+        }
+    )
 
 
 async def _get_or_404(db: AsyncSession, incident_id: str, tenant_id: Optional[str] = None) -> IncidentORM:

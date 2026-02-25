@@ -36,6 +36,8 @@ from backend.app.core.security import get_current_user, oauth2_scheme
 from backend.app.models.incident_orm import IncidentORM
 from backend.app.models.decision_trace_orm import DecisionTraceORM, DecisionFeedbackORM
 from backend.app.models.topology_models import EntityRelationshipORM
+from backend.app.models.network_entity_orm import NetworkEntityORM
+from backend.app.models.kpi_sample_orm import KpiSampleORM
 # Note: TMF642 and TMF628 are Pydantic only for now.
 
 # Use in-memory SQLite for testing
@@ -52,6 +54,12 @@ TestingSessionLocal = async_sessionmaker(
     class_=AsyncSession, 
     expire_on_commit=False
 )
+
+
+@pytest.fixture(scope="session")
+def session_factory() -> async_sessionmaker[AsyncSession]:
+    """Returns the session factory for testing."""
+    return TestingSessionLocal
 
 
 @pytest.fixture(scope="session")
@@ -86,6 +94,10 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """
     Test client with database dependency overridden.
     """
+    # Initialize event bus for P1.6 tests
+    from backend.app.events.bus import initialize_event_bus
+    initialize_event_bus(maxsize=10000)
+    
     async def override_get_db():
         try:
             yield db_session

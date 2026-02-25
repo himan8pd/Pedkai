@@ -15,7 +15,8 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from contextlib import asynccontextmanager
 
 from backend.app.schemas.autonomous import (
     DriftPrediction,
@@ -23,6 +24,8 @@ from backend.app.schemas.autonomous import (
     ChangeRequestOutput,
     ValueProtected,
 )
+from backend.app.services.drift_calibration import DriftCalibrationService
+from backend.app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +42,28 @@ class AutonomousShieldService:
     All actions must be performed by human engineers via formal change requests.
     """
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self.session_factory = session_factory
+        self.settings = get_settings()
+        # settings.drift_threshold_pct is expressed as percent (eg 15.0)
+        # convert to fractional form for internal comparisons (0.15)
+        self.drift_threshold_pct = float(self.settings.drift_threshold_pct) / 100.0
+        self._calibrated_for_tenant: dict[str, float] = {}
+
+    @asynccontextmanager
+    async def _get_session(self, session: Optional[AsyncSession] = None):
+        if session:
+            yield session
+        else:
+            async with self.session_factory() as new_session:
+                try:
+                    yield new_session
+                    await new_session.commit()
+                except Exception:
+                    await new_session.rollback()
+                    raise
+                finally:
+                    await new_session.close()
 
     def detect_drift(
         self,
@@ -65,7 +88,7 @@ class AutonomousShieldService:
 
         # Predict breach time based on drift rate
         predicted_breach_time = None
-        if drift_magnitude > DRIFT_THRESHOLD_PCT and confidence > 0.3:
+        if drift_magnitude > self.drift_threshold_pct and confidence > 0.3:
             # Simple linear extrapolation: if 15% drift now, breach at 100% in ~6x the current window
             minutes_to_breach = max(15, int(60 / max(drift_magnitude, 0.01)))
             predicted_breach_time = datetime.now(timezone.utc) + timedelta(minutes=minutes_to_breach)
@@ -152,6 +175,36 @@ class AutonomousShieldService:
             ),
             created_at=datetime.now(timezone.utc),
         )
+
+    async def refresh_calibrated_threshold(self, tenant_id: str, session: Optional[AsyncSession] = None) -> float:
+        """
+        Consult the DriftCalibrationService for the tenant and update the in-memory threshold.
+
+        Returns the effective fractional threshold used after calibration.
+        """
+        try:
+            calib = DriftCalibrationService(self.session_factory)
+            result = await calib.get_false_positive_rate(tenant_id, session=session)
+            # The calibration service returns 'recommendation' text and 'current_threshold_pct'
+            rec = result.get("recommendation", "")
+            # Parse recommended threshold from the message if present (simple heuristic)
+            if "Recommend" in rec and "to" in rec:
+                # look for last percentage-like token
+                import re
+                m = re.search(r"to\s+([0-9]+\.?[0-9]*)%", rec)
+                if m:
+                    recommended_pct = float(m.group(1))
+                    self._calibrated_for_tenant[tenant_id] = recommended_pct / 100.0
+                    self.drift_threshold_pct = recommended_pct / 100.0
+                    logger.info(f"Calibrated drift threshold for tenant {tenant_id}: {recommended_pct}%")
+                    return self.drift_threshold_pct
+
+            # Otherwise keep configured value
+            self._calibrated_for_tenant[tenant_id] = float(self.settings.drift_threshold_pct) / 100.0
+            return self._calibrated_for_tenant[tenant_id]
+        except Exception as e:
+            logger.warning(f"Drift calibration unavailable for {tenant_id}: {e}")
+            return float(self.settings.drift_threshold_pct) / 100.0
 
     def calculate_value_protected(
         self, actions_taken: List[Dict[str, Any]]

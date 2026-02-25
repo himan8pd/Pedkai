@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Regex patterns for PII detection
 _PATTERNS = {
     "phone_uk": re.compile(
-        r"(\+44\s?[\d\s\-]{9,13}|0[1-9]\d{8,10})",
+        r"(\+44\s?[\d\s\-]{9,13}|0[1-9][\d\s\-]{8,12})",
         re.IGNORECASE,
     ),
     "phone_us": re.compile(

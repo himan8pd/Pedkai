@@ -14,8 +14,9 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy import select
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,23 @@ class ProactiveCommsService:
     This service never sends communications automatically.
     """
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self.session_factory = session_factory
+
+    @asynccontextmanager
+    async def _get_session(self, session: Optional[AsyncSession] = None):
+        if session:
+            yield session
+        else:
+            async with self.session_factory() as new_session:
+                try:
+                    yield new_session
+                    await new_session.commit()
+                except Exception:
+                    await new_session.rollback()
+                    raise
+                finally:
+                    await new_session.close()
 
     def should_notify_customer(
         self,
@@ -49,42 +65,37 @@ class ProactiveCommsService:
             return False
         return estimated_ttr_minutes > sla_threshold_minutes
 
-    async def check_consent(self, customer_id: UUID) -> bool:
+    async def check_consent(self, customer_id: UUID, session: Optional[AsyncSession] = None) -> bool:
         """
         Check if the customer has opted in to proactive communications.
-
-        Queries the CustomerORM consent_proactive_comms field.
-        Returns True as a safe default if the field is not present (opt-in by default).
         """
         try:
             from backend.app.models.customer_orm import CustomerORM
-            result = await self.session.execute(
-                select(CustomerORM).where(CustomerORM.id == customer_id)
-            )
-            customer = result.scalar_one_or_none()
-            if customer is None:
-                logger.warning(f"Customer {customer_id} not found for consent check")
-                return False
-            # Check for consent field — default True if not present
-            return getattr(customer, "consent_proactive_comms", False)  # GDPR: explicit opt-in required
+            async with self._get_session(session) as s:
+                result = await s.execute(
+                    select(CustomerORM).where(CustomerORM.id == customer_id)
+                )
+                customer = result.scalar_one_or_none()
+                if customer is None:
+                    logger.warning(f"Customer {customer_id} not found for consent check")
+                    return False
+                return getattr(customer, "consent_proactive_comms", False)
         except Exception as e:
             logger.warning(f"Could not check consent for customer {customer_id}: {e}")
-            return False  # Stricter default: assume no consent on error (Finding 12)
+            return False
 
     async def draft_communication(
         self,
         customer_id: UUID,
         incident_summary: str,
         channel: str = "email",
+        session: Optional[AsyncSession] = None,
     ) -> Dict[str, Any]:
         """
         Draft a communication for human review.
-
-        Returns a draft dict — this is NOT sent. A human must review and approve.
-        Status is always 'draft_pending_review'.
         """
         # Check consent before drafting
-        has_consent = await self.check_consent(customer_id)
+        has_consent = await self.check_consent(customer_id, session=session)
         if not has_consent:
             logger.info(f"Customer {customer_id} has not consented to proactive comms — skipping draft")
             return {

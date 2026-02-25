@@ -21,7 +21,7 @@ from scripts.fix_env import load_env_manual
 load_env_manual()
 
 from sqlalchemy import select, text
-from backend.app.core.database import get_db_context, engine, Base
+from backend.app.core.database import get_db_context, engine, Base, async_session_maker
 from backend.app.models.decision_trace import (
     DecisionTraceCreate,
     DecisionContext,
@@ -35,7 +35,7 @@ async def verify_rl_evaluator():
     print("--- Phase 15.4 Verification: Closed-Loop RL Evaluator ---")
     
     async with get_db_context() as session:
-        repo = DecisionTraceRepository(session)
+        repo = DecisionTraceRepository(async_session_maker)
         tenant = "test-tenant-rl"
         
         # 1. Test Case: Policy-Compliant Success

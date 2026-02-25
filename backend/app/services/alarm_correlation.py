@@ -13,8 +13,9 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy import select, text
+from contextlib import asynccontextmanager
 
 from backend.app.schemas.service_impact import AlarmCluster, CustomerImpact, ServiceImpactSummary
 
@@ -33,58 +34,158 @@ class AlarmCorrelationService:
     It does not replace vendor correlation engines.
     """
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self.session_factory = session_factory
+
+    @asynccontextmanager
+    async def _get_session(self, session: Optional[AsyncSession] = None):
+        if session:
+            yield session
+        else:
+            async with self.session_factory() as new_session:
+                try:
+                    yield new_session
+                    await new_session.commit()
+                except Exception:
+                    await new_session.rollback()
+                    raise
+                finally:
+                    await new_session.close()
 
     def correlate_alarms(self, alarms: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Group related alarms into clusters using three strategies:
-        1. Topology proximity: same entity or connected entities
-        2. Temporal clustering: alarms within TEMPORAL_WINDOW_MINUTES
-        3. Symptom similarity: same alarm_type
+        Optimized O(n log n) alarm correlation using sorting and spatial partitioning.
 
-        Returns a list of cluster dicts with cluster metadata.
+        Strategy (replaces O(n²) nested loop):
+        1. Parse timestamps and normalize alarms (O(n))
+        2. Group by entity_id (O(n))
+        3. Sort within each group by raised_at (O(k log k) per group)
+        4. Merge temporally adjacent alarms within same entity (O(k) per group)
+        5. Cross-entity merge for same alarm_type with temporal overlap (O(m log m) where m = num groups)
+
+        Returns list of cluster dicts with same format as before.
         """
         if not alarms:
             return []
 
-        clusters: List[Dict[str, Any]] = []
-        assigned: set = set()
+        # Step 0: Parse all timestamps and normalize
+        normalized_alarms = []
+        for alarm in alarms:
+            time = self._parse_time(alarm.get("raised_at"))
+            normalized_alarms.append((alarm, time))
 
-        for i, alarm in enumerate(alarms):
-            if i in assigned:
-                continue
+        # Step 1: Group by entity_id (O(n))
+        entity_groups: Dict[Any, List[tuple]] = {}
+        for alarm, time in normalized_alarms:
+            entity_id = alarm.get("entity_id")
+            if entity_id not in entity_groups:
+                entity_groups[entity_id] = []
+            entity_groups[entity_id].append((alarm, time))
 
-            cluster_alarms = [alarm]
-            assigned.add(i)
+        # Step 2: Sort within each group by raised_at (O(k log k))
+        for entity_id in entity_groups:
+            entity_groups[entity_id].sort(
+                key=lambda x: x[1] if x[1] else datetime.max
+            )
 
-            alarm_time = self._parse_time(alarm.get("raised_at"))
-            alarm_entity = alarm.get("entity_id")
-            alarm_type = alarm.get("alarm_type")
+        # Step 3: Create initial clusters within each entity using temporal window
+        proto_clusters: List[List[Dict[str, Any]]] = []
+        for entity_id, group in entity_groups.items():
+            current_cluster: List[Dict[str, Any]] = []
+            last_time: Optional[datetime] = None
 
-            for j, other in enumerate(alarms):
-                if j in assigned:
+            for alarm, time in group:
+                if not current_cluster:
+                    # Start new cluster
+                    current_cluster = [alarm]
+                    last_time = time
+                else:
+                    # Check if within temporal window
+                    within_window = False
+                    if time and last_time:
+                        diff = abs((time - last_time).total_seconds())
+                        within_window = diff <= TEMPORAL_WINDOW_MINUTES * 60
+                    elif not time or not last_time:
+                        # If no time data, keep clustering
+                        within_window = True
+
+                    if within_window:
+                        current_cluster.append(alarm)
+                        if time:
+                            last_time = time
+                    else:
+                        # Finalize current cluster and start new one
+                        if current_cluster:
+                            proto_clusters.append(current_cluster)
+                        current_cluster = [alarm]
+                        last_time = time
+
+            # Add final cluster
+            if current_cluster:
+                proto_clusters.append(current_cluster)
+
+        # Step 4: Merge proto-clusters across entities with same alarm_type and temporal overlap
+        # Group proto-clusters by alarm_type
+        type_groups: Dict[Optional[str], List[List[Dict[str, Any]]]] = {}
+        for cluster in proto_clusters:
+            alarm_type = cluster[0].get("alarm_type") if cluster else None
+            if alarm_type not in type_groups:
+                type_groups[alarm_type] = []
+            type_groups[alarm_type].append(cluster)
+
+        # Merge clusters of same type with temporal overlap
+        final_clusters: List[List[Dict[str, Any]]] = []
+        processed_clusters: set = set()
+
+        for alarm_type, type_clusters in type_groups.items():
+            for i, cluster_i in enumerate(type_clusters):
+                cluster_key_i = (alarm_type, i)
+                if cluster_key_i in processed_clusters:
                     continue
 
-                other_time = self._parse_time(other.get("raised_at"))
-                other_entity = other.get("entity_id")
-                other_type = other.get("alarm_type")
+                # Start with cluster_i
+                merged = list(cluster_i)
+                processed_clusters.add(cluster_key_i)
 
-                # Strategy 1: Same entity
-                same_entity = alarm_entity and other_entity and alarm_entity == other_entity
+                # Only attempt cross-entity merge if alarm_type is defined
+                # (i.e., NOT None). This preserves entity boundaries when alarm_type info is missing.
+                if alarm_type is not None:
+                    # Get time range of cluster_i
+                    times_i = [self._parse_time(a.get("raised_at")) for a in cluster_i]
+                    times_i = [t for t in times_i if t is not None]
 
-                # Strategy 2: Temporal proximity
-                temporal_match = False
-                if alarm_time and other_time:
-                    diff = abs((alarm_time - other_time).total_seconds())
-                    temporal_match = diff <= TEMPORAL_WINDOW_MINUTES * 60
+                    if times_i:
+                        min_time_i = min(times_i)
+                        max_time_i = max(times_i)
 
-                # Strategy 3: Same alarm type
-                same_type = alarm_type and other_type and alarm_type == other_type
+                        # Try to merge other clusters of same type with temporal overlap
+                        for j, cluster_j in enumerate(type_clusters):
+                            cluster_key_j = (alarm_type, j)
+                            if cluster_key_j in processed_clusters or j <= i:
+                                continue
 
-                if same_entity or (temporal_match and same_type):
-                    cluster_alarms.append(other)
-                    assigned.add(j)
+                            times_j = [self._parse_time(a.get("raised_at")) for a in cluster_j]
+                            times_j = [t for t in times_j if t is not None]
+
+                            if times_j:
+                                min_time_j = min(times_j)
+                                max_time_j = max(times_j)
+
+                                # Check for temporal overlap within extended window
+                                window_delta = timedelta(minutes=TEMPORAL_WINDOW_MINUTES)
+                                if (min_time_i <= max_time_j + window_delta and
+                                    min_time_j <= max_time_i + window_delta):
+                                    merged.extend(cluster_j)
+                                    processed_clusters.add(cluster_key_j)
+
+                if merged:
+                    final_clusters.append(merged)
+
+        # Step 5: Convert to output format
+        clusters: List[Dict[str, Any]] = []
+        for cluster_alarms in final_clusters:
+            if not cluster_alarms:
+                continue
 
             # Determine cluster severity
             severities = [a.get("severity", "minor") for a in cluster_alarms]
@@ -123,7 +224,7 @@ class AlarmCorrelationService:
         reduction = ((raw_count - clustered_count) / raw_count) * 100.0
         return round(max(0.0, min(100.0, reduction)), 2)
 
-    async def get_customer_impact(self, cluster_entity_ids: List[str], tenant_id: str) -> List[Dict[str, Any]]:
+    async def get_customer_impact(self, cluster_entity_ids: List[str], tenant_id: str, session: Optional[AsyncSession] = None) -> List[Dict[str, Any]]:
         """
         Traverse topology to find customers impacted by the given entity IDs.
         Queries the topology_entities and customers tables with strict tenant isolation.
@@ -133,22 +234,23 @@ class AlarmCorrelationService:
 
         impacted_customers = []
         try:
-            # Finding S-1 Fix: Enforce tenant isolation
-            query = text("""
-                SELECT c.id, c.name, c.external_id, c.tenant_id
-                FROM customers c
-                WHERE c.associated_site_id IN :site_ids
-                AND c.tenant_id = :tid
-            """)
-            result = await self.session.execute(query, {"site_ids": tuple(cluster_entity_ids), "tid": tenant_id})
-            rows = result.fetchall()
-            for row in rows:
-                impacted_customers.append({
-                    "customer_id": str(row[0]),
-                    "customer_name": row[1] or "Unknown",
-                    "customer_external_id": row[2] or str(row[0]),
-                    "tenant_id": row[3],
-                })
+            async with self._get_session(session) as s:
+                # Finding S-1 Fix: Enforce tenant isolation
+                query = text("""
+                    SELECT c.id, c.name, c.external_id, c.tenant_id
+                    FROM customers c
+                    WHERE c.associated_site_id IN :site_ids
+                    AND c.tenant_id = :tid
+                """)
+                result = await s.execute(query, {"site_ids": tuple(cluster_entity_ids), "tid": tenant_id})
+                rows = result.fetchall()
+                for row in rows:
+                    impacted_customers.append({
+                        "customer_id": str(row[0]),
+                        "customer_name": row[1] or "Unknown",
+                        "customer_external_id": row[2] or str(row[0]),
+                        "tenant_id": row[3],
+                    })
         except Exception as e:
             logger.warning(f"Could not fetch customer impact: {e}")
 

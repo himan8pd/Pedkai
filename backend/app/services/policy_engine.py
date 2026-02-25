@@ -5,6 +5,10 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 from pydantic import BaseModel
 from simpleeval import simple_eval
+from datetime import datetime
+import uuid
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -26,12 +30,22 @@ class PolicyDecision(BaseModel):
     applied_policies: List[str]
     required_actions: List[str]
 
+class ActionDecision(BaseModel):
+    """Decision from autonomous action policy evaluation (v2)"""
+    decision: str  # "allow", "deny", "confirm"
+    confidence: float
+    matched_rules: Dict[str, Dict[str, Any]]
+    reason: str
+    trace_id: Optional[str] = None
+    recommended_confirmation_window_sec: int = 30
+
 class PolicyEngine:
     """
     Pedkai Policy Engine - Enforces the "Telco Constitution".
     Finding C-1 FIX: Replaced insecure eval() with simpleeval.
     Finding M-2 FIX: Handled ALLOW action.
     Finding M-3 FIX: Uses absolute path logic.
+    P5.1 ENHANCEMENT: Added v2 support for autonomous action evaluation with versioning and audit trail.
     """
     def __init__(self, policy_path: Optional[str] = None):
         if policy_path:
@@ -162,5 +176,163 @@ class PolicyEngine:
             required_actions=required_actions if required_actions else ["MONITOR_ONLY"]
         )
 
-# Global Instance
-policy_engine = PolicyEngine()
+    # ══════════════════════════════════════════════════════════════════════════════════
+    # P5.1 ENHANCEMENT: v2 Autonomous Action Evaluation with Audit Trail
+    # ══════════════════════════════════════════════════════════════════════════════════
+
+    async def evaluate_autonomous_action(
+        self,
+        session: AsyncSession,
+        tenant_id: str,
+        action_type: str,
+        entity_id: str,
+        affected_entity_count: int,
+        action_parameters: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None,
+        confidence_score: Optional[float] = None,
+    ) -> ActionDecision:
+        """
+        P5.1: Evaluate if an autonomous action is permitted.
+        
+        Implements the Policy Gate in the safety rails pipeline.
+        Returns detailed decision with matched/failed rules for audit trail.
+        
+        Args:
+            session: Database session for storing audit trail
+            tenant_id: Tenant requesting the action
+            action_type: Type of action (cell_failover, connection_throttle, etc.)
+            entity_id: Primary entity being modified
+            affected_entity_count: Total entities that would be affected
+            action_parameters: Optional action-specific parameters
+            trace_id: Distributed trace ID for linking to requests
+            confidence_score: Similarity/confidence from Decision Memory (0.0-1.0)
+        
+        Returns:
+            ActionDecision with decision, confidence, matched rules, and reason
+        """
+        try:
+            # Fetch tenant's active policy from database
+            from backend.app.models.policy_orm import PolicyORM
+            
+            stmt = select(PolicyORM).where(
+                (PolicyORM.tenant_id == tenant_id) &
+                (PolicyORM.status == "active")
+            ).order_by(PolicyORM.updated_at.desc()).limit(1)
+            
+            result = await session.execute(stmt)
+            policy_orm = result.scalar_one_or_none()
+            
+            # Use defaults if no policy defined
+            if not policy_orm:
+                rules = {
+                    "allowed_actions": ["cell_failover", "connection_throttle", "alarm_silence"],
+                    "blast_radius_limit": 100,
+                    "confidence_threshold": 0.85,
+                    "min_success_rate": 0.90,
+                    "auto_rollback_threshold_pct": 10.0,
+                    "allowed_entity_types": ["CELL", "SECTOR"]
+                }
+                logger.info(f"No policy for tenant {tenant_id}, using defaults")
+            else:
+                rules = policy_orm.rules or {}
+            
+            # Evaluate each gate
+            matched_rules = {}
+            all_passed = True
+            
+            # Gate 1: Action type allowed?
+            allowed_actions = rules.get("allowed_actions", ["cell_failover"])
+            gate1_passed = action_type in allowed_actions
+            matched_rules["action_type_check"] = {
+                "passed": gate1_passed,
+                "action_type": action_type,
+                "allowed_actions": allowed_actions
+            }
+            all_passed = all_passed and gate1_passed
+            
+            # Gate 2: Blast radius within limit?
+            blast_radius_limit = rules.get("blast_radius_limit", 100)
+            gate2_passed = affected_entity_count <= blast_radius_limit
+            matched_rules["blast_radius_check"] = {
+                "passed": gate2_passed,
+                "entities_affected": affected_entity_count,
+                "limit": blast_radius_limit
+            }
+            all_passed = all_passed and gate2_passed
+            
+            # Gate 3: Confidence threshold met?
+            confidence_threshold = rules.get("confidence_threshold", 0.85)
+            confidence = confidence_score or 0.0
+            gate3_passed = confidence >= confidence_threshold
+            matched_rules["confidence_threshold_check"] = {
+                "passed": gate3_passed,
+                "required": confidence_threshold,
+                "actual": confidence
+            }
+            all_passed = all_passed and gate3_passed
+            
+            # Determine decision
+            decision = "allow" if all_passed else "deny"
+            final_confidence = confidence if all_passed else confidence * 0.5
+            reason = (
+                f"All gates passed: action approved"
+                if all_passed
+                else f"Policy gate(s) failed: {[k for k, v in matched_rules.items() if not v.get('passed')]}"
+            )
+            
+            # Store evaluation in audit trail
+            from backend.app.models.policy_orm import PolicyEvaluationORM
+            
+            evaluation = PolicyEvaluationORM(
+                id=str(uuid.uuid4()),
+                policy_id=policy_orm.id if policy_orm else "default",
+                tenant_id=tenant_id,
+                action_type=action_type,
+                action_parameters=action_parameters,
+                decision=decision,
+                confidence=final_confidence,
+                matched_rules=matched_rules,
+                trace_id=trace_id,
+                evaluated_by="autonomous-executor",
+                evaluated_at=datetime.utcnow()
+            )
+            session.add(evaluation)
+            await session.flush()
+            
+            logger.info(
+                f"Policy evaluation: tenant={tenant_id}, action={action_type}, "
+                f"decision={decision}, confidence={final_confidence:.2f}"
+            )
+            
+            return ActionDecision(
+                decision=decision,
+                confidence=final_confidence,
+                matched_rules=matched_rules,
+                reason=reason,
+                trace_id=trace_id,
+                recommended_confirmation_window_sec=rules.get("confirmation_window_sec", 30)
+            )
+        
+        except Exception as e:
+            logger.error(f"Error evaluating autonomous action: {e}", exc_info=True)
+            # Fail-safe: deny on error
+            return ActionDecision(
+                decision="deny",
+                confidence=0.0,
+                matched_rules={},
+                reason=f"Policy evaluation error: {str(e)}",
+                trace_id=trace_id
+            )
+
+# Global Cache for Singleton
+_policy_engine: Optional[PolicyEngine] = None
+
+def get_policy_engine() -> PolicyEngine:
+    """
+    Factory function to get a PolicyEngine instance.
+    Ensures a single instance is used across the application.
+    """
+    global _policy_engine
+    if _policy_engine is None:
+        _policy_engine = PolicyEngine()
+    return _policy_engine

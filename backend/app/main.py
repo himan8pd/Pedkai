@@ -18,6 +18,7 @@ from backend.app.core.config import get_settings
 from backend.app.core.logging import setup_logging, get_logger, correlation_id_ctx
 from backend.app.api import decisions, health, tmf642, tmf628, auth, capacity, cx_router
 from backend.app.core.security import oauth2_scheme
+from backend.app.middleware.trace import TracingMiddleware
 from fastapi import Depends
 
 settings = get_settings()
@@ -27,34 +28,7 @@ setup_logging(level=settings.log_level)
 logger = get_logger(__name__)
 
 
-class RequestContextMiddleware(BaseHTTPMiddleware):
-    """
-    Middleware to generate correlation IDs and log requests.
-    """
-    async def dispatch(self, request: Request, call_next):
-        correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
-        correlation_id_ctx.set(correlation_id)
-        
-        start_time = time.time()
-        response = await call_next(request)
-        process_time = time.time() - start_time
-        
-        # Log the request completion
-        logger.info(
-            f"{request.method} {request.url.path} - {response.status_code}",
-            extra={
-                "extra_data": {
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": response.status_code,
-                    "duration_ms": round(process_time * 1000, 2),
-                    "user_agent": request.headers.get("user-agent"),
-                }
-            }
-        )
-        
-        response.headers["X-Correlation-ID"] = correlation_id
-        return response
+# TracingMiddleware (imported above) handles correlation IDs and request logging
 
 
 @asynccontextmanager
@@ -62,9 +36,37 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
+    
+    # Initialize event bus (P1.6)
+    from backend.app.events.bus import initialize_event_bus
+    initialize_event_bus(maxsize=10000)
+    
+    # Start background event consumer (P1.7)
+    from backend.app.workers.consumer import start_event_consumer
+    consumer_task = await start_event_consumer()
+    
+    # Start autonomous action executor (P5.3)
+    from backend.app.services.autonomous_action_executor import AutonomousActionExecutor
+    executor = AutonomousActionExecutor(async_session_maker)
+    await executor.start()
+    
     yield
     # Shutdown
     logger.info(f"👋 Shutting down {settings.app_name}")
+    
+    # Cancel consumer task
+    if not consumer_task.done():
+        consumer_task.cancel()
+        try:
+            await consumer_task
+        except Exception:
+            pass
+    
+    # Stop autonomous executor
+    try:
+        await executor.stop()
+    except Exception:
+        pass
 
 
 from backend.app.core.observability import setup_tracing
@@ -80,7 +82,7 @@ app = FastAPI(
 setup_tracing(app)
 
 # Add Middleware
-app.add_middleware(RequestContextMiddleware)
+app.add_middleware(TracingMiddleware)
 
 # CORS middleware for frontend
 app.add_middleware(
@@ -170,9 +172,38 @@ app.include_router(
     dependencies=[Depends(oauth2_scheme)]
 )
 
+# Policies API (P5.1)
+from backend.app.api import policies
+app.include_router(
+    policies.router,
+    prefix=f"{settings.api_prefix}/policies",
+    tags=["Policies"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
 # Real-time SSE push (Task 4.1 — replaces 10s polling)
 from backend.app.api import sse
 app.include_router(sse.router, prefix=f"{settings.api_prefix}", tags=["Real-time SSE"])
+
+# Adapters (Netconf/YANG PoC) — P5.4
+from backend.app.api import adapters
+app.include_router(
+    adapters.router,
+    prefix=f"{settings.api_prefix}/adapters",
+    tags=["Adapters"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# Operator feedback API (P2.8)
+from backend.app.api import operator_feedback
+app.include_router(operator_feedback.router, prefix=f"{settings.api_prefix}", tags=["Operator Feedback"], dependencies=[Depends(oauth2_scheme)])
+
+# Alarm Ingestion Webhook (P1.6)
+from backend.app.api import alarm_ingestion
+app.include_router(
+    alarm_ingestion.router,
+    tags=["Alarm Ingestion"],
+)
 
 
 @app.get("/")

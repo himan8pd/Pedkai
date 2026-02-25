@@ -1,29 +1,12 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Activity,
-  AlertCircle,
-  CheckCircle,
-  Clock,
-  Database,
-  Cpu,
-  Network,
-  Shield,
-  Zap,
-  Lock,
-  TrendingUp,
-  MapPin
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
-import StatCard from './components/StatCard'
-import AlarmCard from './components/AlarmCard'
-import SitrepPanel from './components/SitrepPanel'
+import { redirect } from 'next/navigation'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+export default function Home() {
+  // Redirect to dashboard
+  redirect('/dashboard')
+}
 
-export default function NOCDashboard() {
   const [alarms, setAlarms] = useState<any[]>([])
   const [selectedAlarm, setSelectedAlarm] = useState<any>(null)
   const [activeView, setActiveView] = useState<'alarms' | 'capacity'>('alarms')

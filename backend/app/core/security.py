@@ -180,4 +180,7 @@ async def get_current_user(
                 headers={"WWW-Authenticate": authenticate_value},
             )
             
+    from backend.app.core.logging import tenant_id_ctx
+    tenant_id_ctx.set(tenant_id)
+            
     return User(username=username, role=role, scopes=token_data.scopes, tenant_id=tenant_id)

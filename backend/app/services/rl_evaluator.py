@@ -2,7 +2,7 @@ import logging
 from uuid import UUID
 from typing import Dict, Any, Optional
 from backend.app.models.decision_trace import DecisionTrace, DecisionOutcome
-from backend.app.services.policy_engine import policy_engine
+from backend.app.services.policy_engine import get_policy_engine
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -37,7 +37,8 @@ class RLEvaluatorService:
         
         # 2. Policy Adherence Check
         policy_context = self._construct_policy_context(decision)
-        policy_result = policy_engine.evaluate(policy_context)
+        engine = get_policy_engine()
+        policy_result = engine.evaluate(policy_context)
         
         if not policy_result.allowed:
             total_reward += self.PENALTY_POLICY_VIOLATION
@@ -130,8 +131,9 @@ class RLEvaluatorService:
             logger.info(f"RL Metric Check for {decision.id}: {target_metric} went from {baseline:.2f} to {post_value:.2f} (Delta: {delta_pct:.2%})")
 
             # 6. Assign Reward (Finding H-6 FIX: Use Policy Engine Parameters)
-            reward_threshold = policy_engine.get_parameter("rl_reward_improvement_threshold", 0.10)
-            penalty_threshold = policy_engine.get_parameter("rl_penalty_degradation_threshold", -0.05)
+            engine = get_policy_engine()
+            reward_threshold = engine.get_parameter("rl_reward_improvement_threshold", 0.10)
+            penalty_threshold = engine.get_parameter("rl_penalty_degradation_threshold", -0.05)
 
             if delta_pct > reward_threshold:
                 return int(self.REWARD_SUCCESS + (delta_pct * 10)) # Scaled reward

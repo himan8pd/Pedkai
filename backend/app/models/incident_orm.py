@@ -41,16 +41,16 @@ class IncidentORM(Base):
 
     # Human Gate 1: Sitrep approval
     sitrep_approved_by = Column(String(255), nullable=True)
-    sitrep_approved_at = Column(DateTime, nullable=True)
+    sitrep_approved_at = Column(DateTime(timezone=True), nullable=True)
 
     # Human Gate 2: Action approval
     action_approved_by = Column(String(255), nullable=True)
-    action_approved_at = Column(DateTime, nullable=True)
+    action_approved_at = Column(DateTime(timezone=True), nullable=True)
 
     # Human Gate 3: Close
     closed_by = Column(String(255), nullable=True)
-    closed_at = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Standard timestamps
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, nullable=True, onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(timezone.utc))

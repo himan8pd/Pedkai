@@ -1,0 +1,270 @@
+roadmap:
+  horizon_weeks: 40
+  version: 2.0
+  governance_model: phased_parallel
+  
+  phases:
+    - id: Phase_0
+      name: Structural_Foundations
+      weeks: "1-4"
+      parallel_execution: true
+      tasks:
+        - id: P0-T1
+          name: Service_Boundary_Extraction
+          description: Extract decision, inference, and orchestration services into independent stateless services.
+          files:
+            - backend/decision_service/*
+            - backend/inference_service/*
+            - backend/orchestration_service/*
+          acceptance_criteria:
+            - No cross-service internal imports
+            - Services boot independently
+            - Health endpoints exposed
+            - Contract tests pass
+
+        - id: P0-T2
+          name: Stateless_Session_and_SSE_Lifecycle_Management
+          description: Replace in-memory sessions with Redis-backed storage and implement SSE lifecycle controls.
+          files:
+            - backend/common/session_manager.py
+            - backend/api/sse.py
+          acceptance_criteria:
+            - No in-memory session dictionaries
+            - SSE heartbeat every 30 seconds
+            - SSE timeout after 5 minutes inactivity
+            - Configurable max concurrent SSE connections
+            - Load test supports 100 concurrent operators
+
+        - id: P0-T3
+          name: Async_Event_Bus
+          description: Introduce Kafka or NATS event bus for non-blocking alarm ingestion.
+          acceptance_criteria:
+            - Alarm ingestion is non-blocking
+            - Topic-based subscriptions implemented
+            - 10k event burst processed without loss
+
+        - id: P0-T4
+          name: Observability_First
+          description: Implement structured logging, distributed tracing, and metrics before further refactors.
+          acceptance_criteria:
+            - JSON structured logs across services
+            - Distributed tracing enabled
+            - Error and latency dashboards available
+
+        - id: P0-T5
+          name: Resolve_Autonomy_Positioning
+          description: Formal product decision resolving advisory vs autonomous positioning.
+          outputs:
+            - signed_product_decision_document
+            - updated_product_requirements_doc
+          acceptance_criteria:
+            - Decision signed by Product and CTO
+            - Phase_4 scope updated
+
+    - id: Phase_1
+      name: Data_and_Schema_Foundations
+      weeks: "5-12"
+      tasks:
+        - id: P1-T1
+          name: Entity_Metadata_Store
+          description: Canonical entity registry including SLA, tenant, and embedding provider metadata.
+          files:
+            - backend/models/entity.py
+            - migrations/*
+          acceptance_criteria:
+            - embedding_provider column present
+            - embedding_model column present
+            - Tenant-scoped queries enforced
+            - Backward compatible migration
+
+        - id: P1-T2
+          name: Time_Series_Storage
+          description: Introduce scalable time-series database for alarms and SLA metrics.
+          acceptance_criteria:
+            - 30-day range queries O(1)
+            - Read replica configured
+            - Query routing implemented
+
+        - id: P1-T3
+          name: Alarm_Deduplication
+          acceptance_criteria:
+            - 10k alarm flood processed < 30s
+            - Duplicate collapse > 80%
+
+        - id: P1-T4
+          name: Tenant_Isolation_Event_Layer
+          acceptance_criteria:
+            - Tenant boundary enforcement
+            - Cross-tenant access returns 403
+
+        - id: P1-T5
+          name: Data_Ingestion
+          acceptance_criteria:
+            - Batch and streaming supported
+            - Idempotent replay available
+
+        - id: P1-T6
+          name: Async_Processing
+          acceptance_criteria:
+            - No blocking I/O in request path
+            - Workers handle CPU-bound tasks
+
+        - id: P1-T7
+          name: Frontend_Modularisation
+          acceptance_criteria:
+            - Modular SITREP, Incident, Dashboard views
+            - Unit tests for each module
+            - End-to-end validation
+
+        - id: P1-T8
+          name: GDPR_Consent_Compliance
+          description: Enforce consent before proactive communication.
+          acceptance_criteria:
+            - Consent checks enforced
+            - Non-consenting subjects rejected
+            - Audit logs created
+
+    - id: Phase_2
+      name: Orchestration_and_Contracts
+      weeks: "13-22"
+      tasks:
+        - id: P2-T1
+          name: Incident_Orchestration
+          acceptance_criteria:
+            - Multi-step workflows
+            - State auditability
+
+        - id: P2-T2
+          name: Sleeping_Cell_Detection
+          acceptance_criteria:
+            - Detection within 2x SLA
+            - False positives < 10%
+
+        - id: P2-T3
+          name: Decision_Service_Hardening
+          acceptance_criteria:
+            - Persistent decision traces
+            - P95 latency < 500ms
+
+        - id: P2-T4
+          name: Inference_Service_Hardening
+          acceptance_criteria:
+            - Provider abstraction
+            - Retry with exponential backoff
+
+        - id: P2-T5
+          name: BSS_Contract_and_Mock
+          description: Define billing API and mock adapter with ESTIMATE labelling.
+          outputs:
+            - api_contract_document
+            - mock_bss_adapter.py
+            - procurement_tracking_ticket
+          acceptance_criteria:
+            - ROI uses adapter interface
+            - All revenue labelled ESTIMATE
+            - Procurement tracked
+
+    - id: Phase_3
+      name: Intelligence_and_Sovereignty
+      weeks: "23-32"
+      tasks:
+        - id: P3-T1
+          name: Causal_Inference
+          acceptance_criteria:
+            - Historical validation
+            - False causality < 15%
+
+        - id: P3-T2
+          name: Embedding_Provider_Isolation
+          acceptance_criteria:
+            - Provider-filtered similarity
+            - Cross-provider query error
+
+        - id: P3-T2b
+          name: OnPrem_Embedding
+          acceptance_criteria:
+            - Offline capable
+            - Config-switchable
+            - Consistent vector dimension
+
+        - id: P3-T3
+          name: Embedding_Backfill
+          dependencies:
+            - P3-T2
+            - P3-T2b
+          acceptance_criteria:
+            - Idempotent and resumable
+            - No duplicate vectors
+            - Execution logs stored
+
+        - id: P3-T4
+          name: SLA_Breach_Prediction
+          dependencies:
+            - P1-T1
+            - P1-T2
+          acceptance_criteria:
+            - 30-minute prediction
+            - Precision > 0.7
+
+        - id: P3-T5
+          name: Confidence_Calibration
+          acceptance_criteria:
+            - 50+ scored SITREPs
+            - Correlation r > 0.6
+            - Calibration stored
+
+    - id: Phase_4
+      name: Auditability_and_Value
+      weeks: "33-40"
+      tasks:
+        - id: P4-T1
+          name: ROI_Dashboard
+          dependencies:
+            - P2-T7
+          acceptance_criteria:
+            - Methodology document published
+            - Confidence intervals shown
+            - Revenue labelled ESTIMATE
+            - Confidence_score in API
+
+        - id: P4-T3
+          name: Governance_and_Audit
+          acceptance_criteria:
+            - Complete audit trail
+            - Regulatory export templates
+            - GDPR and telecom checklist
+
+        - id: P4-T4
+          name: Autonomous_Architecture
+          dependencies:
+            - P0-T5
+          outputs:
+            - architecture_decision_record
+            - risk_assessment
+            - regulatory_checklist
+            - insurance_requirements
+          acceptance_criteria:
+            - CTO approval
+            - Legal signoff
+            - Go/no-go gate
+
+success_metrics:
+  stability:
+    - 100 concurrent operators
+    - 10k alarm burst resilience
+  intelligence:
+    - causal precision > 0.75
+    - calibration r > 0.6
+  sovereignty:
+    - offline embeddings
+  compliance:
+    - consent enforced
+    - estimate labelling
+
+risk_controls:
+  - tenant_isolation
+  - embedding_provider_isolation
+  - gdpr_compliance_first
+  - estimate_labelling
+  - audit_trail_completeness
+  - sovereignty_ready

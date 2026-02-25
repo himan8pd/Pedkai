@@ -3,6 +3,9 @@ Network Entity ORM Models
 
 SQLAlchemy models for storing network entities and relationships
 in PostgreSQL with JSONB for flexible attributes.
+
+NOTE: NetworkEntityORM moved to backend.app.models.network_entity_orm
+This module re-exports for backward compatibility.
 """
 
 from datetime import datetime
@@ -13,50 +16,8 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from backend.app.core.database import Base
 
-
-class NetworkEntityORM(Base):
-    """SQLAlchemy model for network entities."""
-    
-    __tablename__ = "network_entities"
-    
-    id = Column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-        server_default=text("gen_random_uuid()"),
-    )
-    tenant_id = Column(String(255), nullable=False, index=True)
-    entity_type = Column(String(50), nullable=False, index=True)
-    name = Column(String(255), nullable=False)
-    external_id = Column(String(255), nullable=True, index=True)
-    
-    # Location
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
-    
-    # Status
-    operational_status = Column(String(50), default="active")
-    
-    # Timestamps
-    created_at = Column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        server_default=text("now()"),
-    )
-    updated_at = Column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-    )
-    
-    # Flexible attributes
-    attributes = Column(JSONB, nullable=False, default=dict)
-    
-    # Indexes
-    __table_args__ = (
-        Index("ix_network_entities_tenant_type", "tenant_id", "entity_type"),
-        Index("ix_network_entities_external", "tenant_id", "external_id"),
-    )
+# Import canonical NetworkEntityORM from backend.app.models
+from backend.app.models.network_entity_orm import NetworkEntityORM  # noqa: F401
 
 
 class EntityRelationshipORM(Base):

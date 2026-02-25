@@ -1,0 +1,331 @@
+```yaml
+roadmap:
+  name: Pedkai Engineering Refactor and Platform Evolution
+  version: 1.0
+  horizon_weeks: 40
+
+phases:
+
+  - phase: 0
+    name: Structural Refactor and Capability Audit
+    weeks: [1, 4]
+    goals:
+      - Enable event-driven architecture readiness
+      - Remove hidden state and request-bound dependencies
+      - Establish service inventory and observability baseline
+
+    tasks:
+
+      - id: P0-T1
+        title: Service Inventory and Dependency Mapping
+        description: >
+          Generate a complete service and module inventory including RL evaluator,
+          drift calibration, embedding, and orchestration-related components.
+        files:
+          - backend/app/services/**
+        outputs:
+          - service_dependency_graph
+          - ownership_matrix
+        acceptance_criteria:
+          - All services documented
+          - Dependency graph validated
+        priority: high
+        effort: medium
+
+      - id: P0-T2
+        title: Refactor DB Session Lifecycle
+        description: >
+          Replace AsyncSession constructor injection with session factory pattern.
+        files:
+          - backend/app/services/alarm_correlation.py
+          - backend/app/services/decision_repository.py
+          - backend/app/services/autonomous_shield.py
+          - backend/app/services/**
+        dependencies: [P0-T1]
+        acceptance_criteria:
+          - Services executable outside HTTP lifecycle
+          - No connection leakage in load test
+        metrics:
+          - pool_utilisation_stable_under_50_clients: true
+        priority: critical
+        effort: high
+
+      - id: P0-T3
+        title: Remove PolicyEngine Singleton
+        description: >
+          Replace module-level singleton with dependency injection and lifecycle
+          management during application startup.
+        files:
+          - backend/app/services/policy_engine.py
+        acceptance_criteria:
+          - No global state
+          - Policy reload supported
+        priority: high
+        effort: medium
+
+      - id: P0-T4
+        title: Observability and Tracing Baseline
+        description: >
+          Add structured logging, request tracing, and event correlation identifiers.
+        files:
+          - backend/**
+        outputs:
+          - trace_id
+          - event_id
+        acceptance_criteria:
+          - All major services emit traceable logs
+        priority: high
+        effort: medium
+
+
+  - phase: 1
+    name: Data and Event Foundations
+    weeks: [5, 12]
+    goals:
+      - Introduce event-driven ingestion
+      - Repair topology and entity model
+      - Enable scalable alarm processing
+
+    tasks:
+
+      - id: P1-T1
+        title: Restore Network Entity Store
+        description: >
+          Recreate metadata store for topology, SLA, and revenue weighting.
+        files:
+          - backend/app/models/topology_models.py
+          - backend/app/api/topology.py
+          - backend/app/api/incidents.py
+        acceptance_criteria:
+          - Entity metadata returned in topology
+          - Incident lookup functional
+        priority: critical
+        effort: high
+
+      - id: P1-T2
+        title: Time-Series KPI Storage
+        description: >
+          Implement partitioned KPI samples storage for anomaly and drift detection.
+        files:
+          - backend/app/models/kpi_samples.py
+        schema:
+          entity_id: uuid
+          metric_name: string
+          value: float
+          timestamp: datetime
+        acceptance_criteria:
+          - Data ingestion validated
+          - Historical baseline available
+        priority: critical
+        effort: high
+
+      - id: P1-T3
+        title: Replace O(n^2) Alarm Correlation
+        description: >
+          Implement entity-grouped and time-window clustering algorithm.
+        files:
+          - backend/app/services/alarm_correlation.py
+        load_test:
+          alarms: 5000
+          max_runtime_seconds: 5
+        acceptance_criteria:
+          - Linear or n log n behaviour
+        priority: critical
+        effort: high
+
+      - id: P1-T4
+        title: Event Schema and Tenant Isolation
+        description: >
+          Define canonical event schemas with strict tenant boundaries.
+        files:
+          - backend/app/events/schemas.py
+        schema_requirements:
+          tenant_id: mandatory
+        tests:
+          - tenant_isolation
+        priority: critical
+        effort: high
+
+      - id: P1-T5
+        title: Alarm Ingestion API and Stream
+        description: >
+          Implement webhook ingestion and event publishing.
+        dependencies: [P1-T4]
+        files:
+          - backend/app/api/alarm_ingestion.py
+        acceptance_criteria:
+          - Event emitted within 200ms
+        priority: critical
+        effort: high
+
+      - id: P1-T6
+        title: Async Background Workers
+        description: >
+          Move correlation, embeddings, and LLM to background tasks.
+        files:
+          - backend/app/services/**
+        acceptance_criteria:
+          - API latency under 300ms
+        priority: high
+        effort: high
+
+
+  - phase: 2
+    name: Automated Incident Intelligence
+    weeks: [13, 20]
+    goals:
+      - Autonomous detection pipeline
+      - Operator productivity
+      - Closed-loop learning
+
+    tasks:
+
+      - id: P2-T1
+        title: Event-Driven Incident Orchestration
+        description: >
+          Chain ingestion, correlation, RCA, SITREP, and notification.
+        acceptance_criteria:
+          - Incident auto-created within 30 seconds
+        priority: critical
+        effort: high
+
+      - id: P2-T2
+        title: Sleeping Cell Detector
+        description: >
+          Absence-of-signal Z-score detection on KPI baselines.
+        files:
+          - backend/app/services/sleeping_cell_detector.py
+        acceptance_criteria:
+          - Detection every 5 minutes
+        priority: high
+        effort: medium
+
+      - id: P2-T3
+        title: Reinforcement Loop Activation
+        description: >
+          Integrate RL evaluator into lifecycle closure.
+        files:
+          - backend/app/services/rl_evaluator.py
+          - backend/app/api/incidents.py
+        priority: high
+        effort: medium
+
+      - id: P2-T4
+        title: Drift Calibration Integration
+        description: >
+          Connect false-positive tracking to thresholds.
+        files:
+          - backend/app/services/drift_calibration.py
+        priority: medium
+        effort: medium
+
+      - id: P2-T5
+        title: Proactive Communications Compliance
+        description: >
+          Enforce consent in all communication triggers.
+        files:
+          - backend/app/services/proactive_comms.py
+          - backend/app/services/cx_intelligence.py
+        priority: high
+        effort: medium
+
+      - id: P2-T6
+        title: Frontend Modularisation
+        description: >
+          Decompose dashboard into routes and state layers.
+        files:
+          - frontend/app/page.tsx
+        acceptance_criteria:
+          - No component exceeds 200 lines
+        priority: medium
+        effort: high
+
+
+  - phase: 3
+    name: Differentiation and Trust
+    weeks: [21, 32]
+    goals:
+      - Explainability
+      - Sovereignty readiness
+      - Decision quality
+
+    tasks:
+
+      - id: P3-T1
+        title: Domain Expert Causal Models
+        description: >
+          Replace statistical causality with expert templates.
+        priority: high
+        effort: high
+
+      - id: P3-T2
+        title: Embedding Provider Isolation
+        description: >
+          Add provider metadata and filter similarity search.
+        files:
+          - backend/app/models/decision_trace_orm.py
+          - backend/app/services/decision_repository.py
+        priority: critical
+        effort: high
+
+      - id: P3-T3
+        title: Bulk Embedding Backfill
+        priority: medium
+        effort: medium
+
+      - id: P3-T4
+        title: SLA Breach Prediction
+        priority: medium
+        effort: high
+
+      - id: P3-T5
+        title: Confidence Calibration
+        priority: medium
+        effort: medium
+
+
+  - phase: 4
+    name: Value and Governance
+    weeks: [33, 40]
+    goals:
+      - Executive trust
+      - Measurable impact
+      - Future autonomy readiness
+
+    tasks:
+
+      - id: P4-T1
+        title: ROI Dashboard
+        priority: high
+        effort: medium
+
+      - id: P4-T2
+        title: Operator Feedback Loop
+        priority: high
+        effort: medium
+
+      - id: P4-T3
+        title: Governance and Audit Enhancements
+        priority: medium
+        effort: medium
+
+      - id: P4-T4
+        title: Autonomous Execution Architecture Blueprint
+        priority: medium
+        effort: high
+
+
+success_metrics:
+  correlation_scalability: "5000 alarms < 5 seconds"
+  tenant_isolation: "100 percent"
+  api_latency: "< 300ms"
+  decision_stability: "no cross-provider similarity"
+  anomaly_detection: "validated true positive"
+  operator_feedback_loop: "active"
+
+risk_controls:
+  - staged_autonomy
+  - explicit_estimation_labels
+  - isolation_and_audit
+  - load_testing_before_scale
+```

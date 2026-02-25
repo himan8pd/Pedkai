@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select, and_, desc
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, desc, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.models.decision_trace import (
     DecisionTrace,
@@ -21,80 +21,104 @@ from backend.app.models.decision_trace import (
     ReasoningChain,
 )
 from backend.app.models.decision_trace_orm import DecisionTraceORM
+from contextlib import asynccontextmanager
 
 
 class DecisionTraceRepository:
     """Repository for Decision Trace database operations."""
     
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self.session_factory = session_factory
     
-    async def create(self, decision: DecisionTraceCreate) -> DecisionTrace:
+    @asynccontextmanager
+    async def _get_session(self, session: Optional[AsyncSession] = None):
+        if session:
+            yield session
+        else:
+            async with self.session_factory() as new_session:
+                try:
+                    yield new_session
+                    await new_session.commit()
+                except Exception:
+                    await new_session.rollback()
+                    raise
+                finally:
+                    await new_session.close()
+
+    async def create(self, decision: DecisionTraceCreate, session: Optional[AsyncSession] = None) -> DecisionTrace:
         """Create a new decision trace in the database."""
-        orm_obj = DecisionTraceORM(
-            tenant_id=decision.tenant_id,
-            trigger_type=decision.trigger_type,
-            trigger_id=decision.trigger_id,
-            trigger_description=decision.trigger_description,
-            context=decision.context.model_dump(),
-            constraints=[c.model_dump() for c in decision.constraints],
-            options_considered=[o.model_dump() for o in decision.options_considered],
-            decision_summary=decision.decision_summary,
-            tradeoff_rationale=decision.tradeoff_rationale,
-            action_taken=decision.action_taken,
-            decision_maker=decision.decision_maker,
-            confidence_score=decision.confidence_score,
-            domain=decision.domain,
-            tags=decision.tags,
-            parent_id=decision.parent_id,
-            derivation_type=decision.derivation_type,
-        )
-        
-        self.session.add(orm_obj)
-        await self.session.flush()
-        await self.session.refresh(orm_obj)
-        
-        return self._orm_to_pydantic(orm_obj)
+        async with self._get_session(session) as s:
+            orm_obj = DecisionTraceORM(
+                tenant_id=decision.tenant_id,
+                trigger_type=decision.trigger_type,
+                trigger_id=decision.trigger_id,
+                trigger_description=decision.trigger_description,
+                context=decision.context.model_dump(),
+                constraints=[c.model_dump() for c in decision.constraints],
+                options_considered=[o.model_dump() for o in decision.options_considered],
+                decision_summary=decision.decision_summary,
+                tradeoff_rationale=decision.tradeoff_rationale,
+                action_taken=decision.action_taken,
+                decision_maker=decision.decision_maker,
+                confidence_score=decision.confidence_score,
+                domain=decision.domain,
+                tags=decision.tags,
+                parent_id=decision.parent_id,
+                derivation_type=decision.derivation_type,
+                embedding_provider=decision.embedding_provider,
+                embedding_model=decision.embedding_model,
+                memory_hits=decision.memory_hits,
+                causal_evidence_count=decision.causal_evidence_count,
+            )
+            
+            s.add(orm_obj)
+            await s.flush()
+            await s.refresh(orm_obj)
+            
+            return self._orm_to_pydantic(orm_obj)
     
-    async def get_by_id(self, decision_id: UUID) -> Optional[DecisionTrace]:
+    async def get_by_id(self, decision_id: UUID, session: Optional[AsyncSession] = None) -> Optional[DecisionTrace]:
         """Get a decision trace by its ID."""
-        result = await self.session.execute(
-            select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
-        )
-        orm_obj = result.scalar_one_or_none()
-        
-        if orm_obj is None:
-            return None
-        
-        return self._orm_to_pydantic(orm_obj)
+        async with self._get_session(session) as s:
+            result = await s.execute(
+                select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
+            )
+            orm_obj = result.scalar_one_or_none()
+            
+            if orm_obj is None:
+                return None
+            
+            return self._orm_to_pydantic(orm_obj)
     
     async def update(
         self,
         decision_id: UUID,
         update: DecisionTraceUpdate,
+        session: Optional[AsyncSession] = None,
     ) -> Optional[DecisionTrace]:
         """Update a decision trace."""
-        result = await self.session.execute(
-            select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
-        )
-        orm_obj = result.scalar_one_or_none()
-        
-        if orm_obj is None:
-            return None
-        
-        if update.outcome is not None:
-            orm_obj.outcome = update.outcome.model_dump()
-        if update.tags is not None:
-            orm_obj.tags = update.tags
-        if update.parent_id is not None:
-            orm_obj.parent_id = update.parent_id
-        if update.derivation_type is not None:
-            orm_obj.derivation_type = update.derivation_type
-        
-        await self.session.flush()
-        await self.session.refresh(orm_obj)
-        
-        return self._orm_to_pydantic(orm_obj)
+        async with self._get_session(session) as s:
+            result = await s.execute(
+                select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
+            )
+            orm_obj = result.scalar_one_or_none()
+            
+            if orm_obj is None:
+                return None
+            
+            if update.outcome is not None:
+                orm_obj.outcome = update.outcome.model_dump()
+            if update.tags is not None:
+                orm_obj.tags = update.tags
+            if update.parent_id is not None:
+                orm_obj.parent_id = update.parent_id
+            if update.derivation_type is not None:
+                orm_obj.derivation_type = update.derivation_type
+            
+            await s.flush()
+            await s.refresh(orm_obj)
+            
+            return self._orm_to_pydantic(orm_obj)
     
     async def list_decisions(
         self,
@@ -103,64 +127,70 @@ class DecisionTraceRepository:
         trigger_type: Optional[str] = None,
         limit: int = 20,
         offset: int = 0,
+        session: Optional[AsyncSession] = None,
     ) -> list[DecisionTrace]:
         """List decision traces with filtering."""
-        conditions = [DecisionTraceORM.tenant_id == tenant_id]
-        
-        if domain is not None:
-            conditions.append(DecisionTraceORM.domain == domain)
-        if trigger_type is not None:
-            conditions.append(DecisionTraceORM.trigger_type == trigger_type)
-        
-        result = await self.session.execute(
-            select(DecisionTraceORM)
-            .where(and_(*conditions))
-            .order_by(desc(DecisionTraceORM.created_at))
-            .limit(limit)
-            .offset(offset)
-        )
-        
-        orm_objects = result.scalars().all()
-        return [self._orm_to_pydantic(obj) for obj in orm_objects]
+        async with self._get_session(session) as s:
+            conditions = [DecisionTraceORM.tenant_id == tenant_id]
+            
+            if domain is not None:
+                conditions.append(DecisionTraceORM.domain == domain)
+            if trigger_type is not None:
+                conditions.append(DecisionTraceORM.trigger_type == trigger_type)
+            
+            result = await s.execute(
+                select(DecisionTraceORM)
+                .where(and_(*conditions))
+                .order_by(desc(DecisionTraceORM.created_at))
+                .limit(limit)
+                .offset(offset)
+            )
+            
+            orm_objects = result.scalars().all()
+            return [self._orm_to_pydantic(obj) for obj in orm_objects]
     
     async def find_similar(
         self,
         query: SimilarDecisionQuery,
         query_embedding: list[float],
+        session: Optional[AsyncSession] = None,
     ) -> list[tuple[DecisionTrace, float]]:
         """
         Find similar decisions using pgvector cosine similarity.
-        
-        Finding #5: Thresholding is now applied *before* the feedback boost
-        to ensure irrelevant decisions are not promoted.
         """
-        conditions = []
-        if query.tenant_id and query.tenant_id != "global":
-            conditions.append(DecisionTraceORM.tenant_id == query.tenant_id)
-        
-        if query.domain:
-            conditions.append(DecisionTraceORM.domain == query.domain)
-        
-        # Raw similarity calculation (1 - distance)
-        raw_similarity = (1 - DecisionTraceORM.embedding.cosine_distance(query_embedding))
-        
-        # Finding #5: We must query for both ORM and raw_similarity
-        result = await self.session.execute(
-            select(
-                DecisionTraceORM,
-                raw_similarity.label("raw_similarity")
-            )
-            .where(
-                and_(
-                    *conditions,
-                    DecisionTraceORM.embedding.isnot(None),
-                    raw_similarity >= query.min_similarity # Filter by threshold FIRST
+        async with self._get_session(session) as s:
+            conditions = []
+            if query.tenant_id and query.tenant_id != "global":
+                conditions.append(DecisionTraceORM.tenant_id == query.tenant_id)
+            
+            if query.domain:
+                conditions.append(DecisionTraceORM.domain == query.domain)
+            
+            if query.embedding_provider:
+                conditions.append(DecisionTraceORM.embedding_provider == query.embedding_provider)
+            else:
+                logger.warning("Similarity search requested without embedding_provider. Results may be inconsistent.")
+            
+            # Raw similarity calculation (1 - distance)
+            raw_similarity = (1 - DecisionTraceORM.embedding.cosine_distance(query_embedding))
+            
+            # Finding #5: We must query for both ORM and raw_similarity
+            result = await s.execute(
+                select(
+                    DecisionTraceORM,
+                    raw_similarity.label("raw_similarity")
                 )
+                .where(
+                    and_(
+                        *conditions,
+                        DecisionTraceORM.embedding.isnot(None),
+                        raw_similarity >= query.min_similarity # Filter by threshold FIRST
+                    )
+                )
+                .limit(query.limit * 2) # Fetch slightly more to account for re-ranking
             )
-            .limit(query.limit * 2) # Fetch slightly more to account for re-ranking
-        )
-        
-        rows = result.all()
+            
+            rows = result.all()
         
         # Apply feedback boost and re-rank in memory for precision
         scored_results = []
@@ -180,66 +210,113 @@ class DecisionTraceRepository:
         decision_id: UUID,
         operator_id: str,
         score: int,
-    ) -> bool:
-        """
-        Finding #4: Records feedback in the junction table and updates the cached aggregate.
-        """
+        comment: Optional[str] = None,
+        session: Optional[AsyncSession] = None,
+    ) -> int:
+        """Record operator feedback for a decision trace."""
         from backend.app.models.decision_trace_orm import DecisionFeedbackORM
-        from sqlalchemy.dialects.postgresql import insert
         from sqlalchemy import func
-        from datetime import timezone
         
-        # 1. Upsert feedback
-        stmt = insert(DecisionFeedbackORM).values(
-            decision_id=decision_id,
-            operator_id=operator_id,
-            score=score,
-            created_at=datetime.now(timezone.utc)
-        ).on_conflict_do_update(
-            index_elements=["decision_id", "operator_id"],
-            set_=dict(score=score)
-        )
-        await self.session.execute(stmt)
+        async with self._get_session(session) as s:
+            # 1. Create or update feedback
+            stmt = select(DecisionFeedbackORM).where(
+                and_(
+                    DecisionFeedbackORM.decision_id == decision_id,
+                    DecisionFeedbackORM.operator_id == operator_id
+                )
+            )
+            result = await s.execute(stmt)
+            feedback = result.scalar_one_or_none()
+            
+            if feedback:
+                feedback.score = score
+                feedback.comment = comment
+            else:
+                feedback = DecisionFeedbackORM(
+                    decision_id=decision_id,
+                    operator_id=operator_id,
+                    score=score,
+                    comment=comment
+                )
+                s.add(feedback)
+            
+            await s.flush()
+            
+            # 2. Update aggregate feedback score on DecisionTraceORM
+            # For now we'll keep it as a sum, or we could change to average later
+            sum_stmt = select(func.sum(DecisionFeedbackORM.score)).where(
+                DecisionFeedbackORM.decision_id == decision_id
+            )
+            sum_result = await s.execute(sum_stmt)
+            total_score = sum_result.scalar() or 0
+            
+            # 3. Update DecisionTraceORM cache
+            update_stmt = select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
+            trace_result = await s.execute(update_stmt)
+            trace_obj = trace_result.scalar_one_or_none()
         
-        # 2. Recalculate aggregate feedback_score
-        sum_stmt = select(func.sum(DecisionFeedbackORM.score)).where(
-            DecisionFeedbackORM.decision_id == decision_id
-        )
-        agg_result = await self.session.execute(sum_stmt)
-        total_score = agg_result.scalar() or 0
+            if trace_obj:
+                trace_obj.feedback_score = total_score
+            await s.flush()
+            return total_score
+            
+    async def get_calibration_stats(
+        self,
+        memory_hits: int,
+        causal_count: int,
+        session: Optional[AsyncSession] = None,
+    ) -> dict:
+        """Get historical calibration statistics for a specific confidence bin."""
+        # Bin to cap to match our heuristic ranges if needed, but here we use exact match
+        async with self._get_session(session) as s:
+            from sqlalchemy import func
+            stmt = select(
+                func.avg(DecisionFeedbackORM.score).label("avg_score"),
+                func.count(DecisionFeedbackORM.id).label("total_votes")
+            ).join(
+                DecisionTraceORM, DecisionTraceORM.id == DecisionFeedbackORM.decision_id
+            ).where(
+                and_(
+                    DecisionTraceORM.memory_hits == memory_hits,
+                    DecisionTraceORM.causal_evidence_count == causal_count
+                )
+            )
+            result = await s.execute(stmt)
+            stat = result.first()
+            
+            return {
+                "avg_score": float(stat.avg_score) if stat and stat.avg_score else None,
+                "total_votes": int(stat.total_votes) if stat else 0
+            }
         
-        # 3. Update DecisionTraceORM cache
-        update_stmt = select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
-        trace_result = await self.session.execute(update_stmt)
-        trace_obj = trace_result.scalar_one_or_none()
-        
-        if trace_obj:
-            trace_obj.feedback_score = total_score
-            await self.session.flush()
-            return True
-        
-        return False
-    
     async def set_embedding(
         self,
         decision_id: UUID,
         embedding: list[float],
+        embedding_provider: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        session: Optional[AsyncSession] = None,
     ) -> bool:
         """Set the embedding vector for a decision trace."""
-        result = await self.session.execute(
-            select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
-        )
-        orm_obj = result.scalar_one_or_none()
-        
-        if orm_obj is None:
-            return False
-        
-        orm_obj.embedding = embedding
-        await self.session.flush()
-        
-        return True
+        async with self._get_session(session) as s:
+            result = await s.execute(
+                select(DecisionTraceORM).where(DecisionTraceORM.id == decision_id)
+            )
+            orm_obj = result.scalar_one_or_none()
+            
+            if orm_obj is None:
+                return False
+            
+            orm_obj.embedding = embedding
+            if embedding_provider:
+                orm_obj.embedding_provider = embedding_provider
+            if embedding_model:
+                orm_obj.embedding_model = embedding_model
+            await s.flush()
+            
+            return True
 
-    async def get_reasoning_chain(self, decision_id: UUID) -> ReasoningChain:
+    async def get_reasoning_chain(self, decision_id: UUID, session: Optional[AsyncSession] = None) -> ReasoningChain:
         """
         Retrieves the full reasoning chain (lineage) of a decision using recursive CTE.
         Finding M-4 FIX: Removed N+1 re-queries. Returns chain from root to the given decision.
@@ -263,19 +340,20 @@ class DecisionTraceRepository:
             SELECT * FROM reasoning_chain;
         """)
         
-        result = await self.session.execute(sql, {"decision_id": decision_id})
-        rows = result.all()
-        
-        # Convert rows directly to models (Fixes N+1 issue)
-        decisions = [self._row_to_pydantic(row) for row in reversed(rows)]
-        
-        return ReasoningChain(
-            decisions=decisions,
-            root_id=decisions[0].id if decisions else decision_id,
-            length=len(decisions)
-        )
+        async with self._get_session(session) as s:
+            result = await s.execute(sql, {"decision_id": decision_id})
+            rows = result.all()
+            
+            # Convert rows directly to models (Fixes N+1 issue)
+            decisions = [self._row_to_pydantic(row) for row in reversed(rows)]
+            
+            return ReasoningChain(
+                decisions=decisions,
+                root_id=decisions[0].id if decisions else decision_id,
+                length=len(decisions)
+            )
 
-    async def get_descendants(self, decision_id: UUID) -> list[DecisionTrace]:
+    async def get_descendants(self, decision_id: UUID, session: Optional[AsyncSession] = None) -> list[DecisionTrace]:
         """
         Retrieves all descendant decisions (follow-ups) triggered by this decision.
         Finding M-4 FIX: Removed N+1 re-queries.
@@ -295,10 +373,11 @@ class DecisionTraceRepository:
             SELECT * FROM descendants;
         """)
         
-        result = await self.session.execute(sql, {"decision_id": decision_id})
-        rows = result.all()
-        
-        return [self._row_to_pydantic(row) for row in rows]
+        async with self._get_session(session) as s:
+            result = await s.execute(sql, {"decision_id": decision_id})
+            rows = result.all()
+            
+            return [self._row_to_pydantic(row) for row in rows]
 
     def _row_to_pydantic(self, row) -> DecisionTrace:
         """Helper to convert a raw SQL row to a Pydantic model."""
@@ -337,6 +416,10 @@ class DecisionTraceRepository:
                 if row.outcome else None
             ),
             embedding=list(row.embedding) if row.embedding is not None else None,
+            embedding_provider=row.embedding_provider,
+            embedding_model=row.embedding_model,
+            memory_hits=row.memory_hits,
+            causal_evidence_count=row.causal_evidence_count,
             tags=row.tags,
             domain=row.domain,
             parent_id=row.parent_id,
@@ -373,6 +456,10 @@ class DecisionTraceRepository:
                 if orm_obj.outcome else None
             ),
             embedding=list(orm_obj.embedding) if orm_obj.embedding is not None else None,
+            embedding_provider=orm_obj.embedding_provider,
+            embedding_model=orm_obj.embedding_model,
+            memory_hits=orm_obj.memory_hits,
+            causal_evidence_count=orm_obj.causal_evidence_count,
             tags=orm_obj.tags,
             domain=orm_obj.domain,
             parent_id=orm_obj.parent_id,

@@ -1,7 +1,8 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Activity, CheckCircle, Network } from 'lucide-react'
+import { Activity, CheckCircle, Network, ShieldCheck, Gauge } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import FeedbackWidget from './FeedbackWidget'
 
 interface SitrepPanelProps {
     selectedAlarm: any
@@ -53,14 +54,61 @@ export default function SitrepPanel({ selectedAlarm, onAcknowledge }: SitrepPane
 
                         <div className="grid grid-cols-2 gap-8 flex-1 content-start">
                             <div className="space-y-6">
-                                <h3 className="text-cyan-400 text-xs font-black uppercase tracking-widest">Autonomous SITREP</h3>
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-cyan-400 text-xs font-black uppercase tracking-widest">Autonomous SITREP</h3>
+                                    {selectedAlarm.confidence !== undefined && (
+                                        <div className="flex items-center gap-2">
+                                            <Gauge className={cn(
+                                                "w-4 h-4",
+                                                selectedAlarm.confidence >= 0.7 ? "text-emerald-400" : "text-rose-400"
+                                            )} />
+                                            <span className={cn(
+                                                "text-xs font-bold",
+                                                selectedAlarm.confidence >= 0.7 ? "text-emerald-400" : "text-rose-400"
+                                            )}>
+                                                {Math.round(selectedAlarm.confidence * 100)}% Confidence
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
                                 {/* AI-Generated watermark — Task 3.3 / Legal Counsel §2.14 mandate */}
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                    🤖 AI Generated — Advisory Only
-                                </span>
+                                <div className="flex items-center justify-between">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                        🤖 AI Generated — Advisory Only
+                                    </span>
+                                    {selectedAlarm.embedding_provider && (
+                                        <span className="text-[10px] text-slate-500 uppercase tracking-tighter">
+                                            Model: {selectedAlarm.embedding_provider} / {selectedAlarm.embedding_model}
+                                        </span>
+                                    )}
+                                </div>
+
                                 <div className="prose prose-invert max-w-none text-slate-300 bg-slate-900/50 p-6 rounded-xl border border-slate-800/50 leading-relaxed shadow-inner">
-                                    <p className="font-bold text-white mb-2">### EXECUTIVE SUMMARY</p>
-                                    <p>Critical anomaly detected on {selectedAlarm.alarmedObject?.id}. AI Analysis pending.</p>
+                                    {selectedAlarm.sitrep_text ? (
+                                        <div dangerouslySetInnerHTML={{ __html: selectedAlarm.sitrep_text.replace(/\n/g, '<br/>') }} />
+                                    ) : (
+                                        <p>Critical anomaly detected on {selectedAlarm.alarmedObject?.id}. AI Analysis pending.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                <h3 className="text-slate-500 text-xs font-black uppercase tracking-widest">Validation & Feedback</h3>
+                                <FeedbackWidget
+                                    decisionId={selectedAlarm.decisionId || selectedAlarm.id}
+                                    onFeedbackSubmitted={() => console.log('Feedback received')}
+                                />
+
+                                <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-6">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                                        <h4 className="text-white text-sm font-bold uppercase">Sovereignty Check</h4>
+                                    </div>
+                                    <p className="text-xs text-slate-400 leading-relaxed">
+                                        Data residency enforced. PII scrubbed before external egress.
+                                        Provider: {selectedAlarm.embedding_provider === 'gemini' ? 'Google Cloud (Sanitised)' : 'Local Enclave'}.
+                                    </p>
                                 </div>
                             </div>
                         </div>

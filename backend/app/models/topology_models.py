@@ -30,5 +30,6 @@ class EntityRelationshipORM(Base):
 
     # Metadata (e.g., "fiber", "microwave", "10Gbps")
     properties = Column(String, nullable=True) # JSON or string for simplicity
+    last_synced_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now(), nullable=False)
