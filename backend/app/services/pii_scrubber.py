@@ -12,10 +12,10 @@ Used by: WS2 (llm_service.py), WS8 (LLM adapter pipeline).
 """
 import re
 import hashlib
-import logging
 from typing import Dict, List, Tuple, Any, Optional
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Regex patterns for PII detection
 _PATTERNS = {

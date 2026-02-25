@@ -8,7 +8,6 @@ and business impact (revenue-at-risk, emergency service detection).
 
 Used by: WS4 (service_impact API router).
 """
-import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from uuid import UUID
@@ -18,8 +17,9 @@ from sqlalchemy import select, text
 from contextlib import asynccontextmanager
 
 from backend.app.schemas.service_impact import AlarmCluster, CustomerImpact, ServiceImpactSummary
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Temporal clustering window: alarms within this window are candidates for grouping
 TEMPORAL_WINDOW_MINUTES = 5

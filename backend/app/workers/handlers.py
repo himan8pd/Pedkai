@@ -87,9 +87,10 @@ async def _flush_tenant(tenant_id: str) -> None:
 
         # Publish cluster events
         for cluster in clusters:
+            import uuid as _uuid
             evt = AlarmClusterCreatedEvent(
                 tenant_id=tenant_id,
-                cluster_id=cluster.get("created_at") or None,
+                cluster_id=str(_uuid.uuid4()),
                 alarm_count=cluster.get("alarm_count", 0),
                 root_cause_entity_id=cluster.get("root_cause_entity_id"),
                 severity=cluster.get("severity", "minor"),

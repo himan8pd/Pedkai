@@ -29,6 +29,8 @@ class CustomerImpact(BaseModel):
     customer_name: str
     customer_external_id: str
     revenue_at_risk: Optional[float] = None
+    is_estimate: bool = True  # True when BSS data is from mock adapter
+    data_source: str = "mock"  # "mock" | "bss_local" | "bss_live"
     pricing_status: str = "priced"  # "priced" | "unpriced"
     requires_manual_valuation: bool = False
     sla_penalty_risk: Optional[float] = None
@@ -43,6 +45,8 @@ class ServiceImpactSummary(BaseModel):
     cluster_id: Optional[str | UUID] = None
     total_customers_impacted: int
     total_revenue_at_risk: Optional[float] = None
+    is_estimate: bool = True  # True when BSS data is from mock adapter
+    data_source: str = "mock"  # "mock" | "bss_local" | "bss_live"
     unpriced_customer_count: int = 0
     customers: List[CustomerImpact]
     emergency_service_affected: bool = False

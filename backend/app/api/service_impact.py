@@ -49,6 +49,11 @@ async def get_impacted_customers(
         logger.warning(f"Customer impact query failed: {e}")
         rows = []
 
+    # Determine BSS data source (mock vs real)
+    # TODO: Replace with dynamic detection when real BSS adapter is integrated
+    bss_data_source = "mock"
+    bss_is_estimate = True
+
     customers = []
     unpriced_count = 0
     for row in rows:
@@ -76,6 +81,8 @@ async def get_impacted_customers(
             customer_name=name or "Unknown",
             customer_external_id=ext_id or str(cid),
             revenue_at_risk=revenue_at_risk,
+            is_estimate=bss_is_estimate,
+            data_source=bss_data_source,
             pricing_status=pricing_status,
             requires_manual_valuation=(pricing_status == "unpriced"),
         ))
@@ -85,6 +92,8 @@ async def get_impacted_customers(
     return ServiceImpactSummary(
         total_customers_impacted=len(customers),
         total_revenue_at_risk=total_revenue,
+        is_estimate=bss_is_estimate,
+        data_source=bss_data_source,
         unpriced_customer_count=unpriced_count,
         customers=customers,
     )

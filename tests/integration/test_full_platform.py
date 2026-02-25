@@ -30,7 +30,7 @@ from backend.app.core.database import Base
 from backend.app.services.alarm_correlation import AlarmCorrelationService
 from backend.app.services.autonomous_shield import AutonomousShieldService
 from backend.app.services.rl_evaluator import RLEvaluatorService
-from backend.core.config import get_settings
+from backend.app.core.config import get_settings
 
 
 @pytest.fixture

@@ -1,11 +1,12 @@
-import logging, os
+import os
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import bcrypt
 from backend.app.models.user_orm import UserORM
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 def hash_password(plain: str) -> str:
     """Hash a password using direct bcrypt for Python 3.14 compatibility."""

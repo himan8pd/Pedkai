@@ -38,6 +38,12 @@ from backend.app.models.decision_trace_orm import DecisionTraceORM, DecisionFeed
 from backend.app.models.topology_models import EntityRelationshipORM
 from backend.app.models.network_entity_orm import NetworkEntityORM
 from backend.app.models.kpi_sample_orm import KpiSampleORM
+from backend.app.models.audit_orm import IncidentAuditEntryORM
+from backend.app.models.action_execution_orm import ActionExecutionORM
+from backend.app.models.tenant_orm import TenantORM
+from backend.app.models.customer_orm import CustomerORM
+from backend.app.models.policy_orm import PolicyORM, PolicyEvaluationORM, PolicyVersionORM
+from backend.app.models.bss_orm import BillingAccountORM, ServicePlanORM
 # Note: TMF642 and TMF628 are Pydantic only for now.
 
 # Use in-memory SQLite for testing
@@ -113,8 +119,26 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
                 await session.close()
 
     from backend.app.core.database import get_db, get_metrics_db
+    from backend.app.core.security import get_current_user, oauth2_scheme
+    
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_metrics_db] = override_get_metrics_db
+    
+    # Auth override
+    class MockUser:
+        id = "test-user-id"
+        username = "test-user"
+        tenant_id = "test-tenant"
+        role = "admin"
+        
+    async def override_get_current_user():
+        return MockUser()
+        
+    async def override_oauth2_scheme():
+        return "mock-token"
+        
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[oauth2_scheme] = override_oauth2_scheme
     
     # Create AsyncClient
     

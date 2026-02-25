@@ -94,6 +94,10 @@ class Settings(BaseSettings):
     sse_max_idle_seconds: int = 300
     sse_max_connections: int = 100
 
+    # Sleeping Cell Detector (Task P2.4)
+    sleeping_cell_enabled: bool = True
+    sleeping_cell_scan_interval_seconds: int = 300  # 5 minutes
+
 
 @lru_cache
 def get_settings() -> Settings:

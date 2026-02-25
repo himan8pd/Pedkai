@@ -27,6 +27,8 @@ class BillingAccountInfo(BaseModel):
 class RevenueResult(BaseModel):
     """Revenue-at-risk calculation result. Uses 'unpriced' flag instead of fallback ARPU."""
     total_revenue_at_risk: Optional[float] = None
+    is_estimate: bool = True  # True when BSS data is from mock adapter
+    source: str = "mock"  # "mock" | "bss_local" | "bss_live"
     priced_customer_count: int = 0
     unpriced_customer_count: int = 0
     requires_manual_valuation: bool = False
@@ -94,6 +96,8 @@ class LocalBSSAdapter(BSSAdapter):
         total = sum(float(rows[cid]) for cid in priced) if priced else None
         return RevenueResult(
             total_revenue_at_risk=total,
+            is_estimate=False,
+            source="bss_local",
             priced_customer_count=len(priced),
             unpriced_customer_count=len(unpriced),
             requires_manual_valuation=len(unpriced) > 0,
@@ -123,6 +127,8 @@ class MockBSSAdapter(BSSAdapter):
         total = sum(self._accounts.get(str(cid), 0.0) for cid in priced) if priced else None
         return RevenueResult(
             total_revenue_at_risk=total,
+            is_estimate=True,
+            source="mock",
             priced_customer_count=len(priced),
             unpriced_customer_count=len(unpriced),
             requires_manual_valuation=len(unpriced) > 0,

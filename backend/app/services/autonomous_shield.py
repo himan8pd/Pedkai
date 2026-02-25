@@ -9,7 +9,6 @@ All recommended actions require human review and a formal change request.
 
 Used by: WS5 (autonomous API router).
 """
-import logging
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
@@ -26,8 +25,9 @@ from backend.app.schemas.autonomous import (
 )
 from backend.app.services.drift_calibration import DriftCalibrationService
 from backend.app.core.config import get_settings
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Drift thresholds
 DRIFT_THRESHOLD_PCT = 0.15  # 15% deviation from baseline triggers detection

@@ -49,11 +49,43 @@ async def lifespan(app: FastAPI):
     from backend.app.services.autonomous_action_executor import AutonomousActionExecutor
     executor = AutonomousActionExecutor(async_session_maker)
     await executor.start()
+
+    # Start sleeping cell detector scheduler (P2.4)
+    sleeping_cell_task = None
+    if settings.sleeping_cell_enabled:
+        from backend.app.services.sleeping_cell_detector import SleepingCellDetector
+        from backend.app.workers.scheduled import start_scheduler
+        detector = SleepingCellDetector()
+
+        async def _scan_sleeping_cells():
+            """Run sleeping cell scan for the default tenant."""
+            try:
+                await detector.scan(settings.default_tenant_id)
+            except Exception as e:
+                logger.error(f"Sleeping cell scan error: {e}", exc_info=True)
+
+        sleeping_cell_task = start_scheduler(
+            settings.sleeping_cell_scan_interval_seconds,
+            _scan_sleeping_cells,
+        )
+        logger.info(
+            f"Sleeping cell scheduler started "
+            f"(interval={settings.sleeping_cell_scan_interval_seconds}s, "
+            f"tenant={settings.default_tenant_id})"
+        )
     
     yield
     # Shutdown
     logger.info(f"👋 Shutting down {settings.app_name}")
     
+    # Cancel sleeping cell scheduler
+    if sleeping_cell_task and not sleeping_cell_task.done():
+        sleeping_cell_task.cancel()
+        try:
+            await sleeping_cell_task
+        except Exception:
+            pass
+
     # Cancel consumer task
     if not consumer_task.done():
         consumer_task.cancel()

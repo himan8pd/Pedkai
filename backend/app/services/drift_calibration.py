@@ -4,7 +4,6 @@ Drift Detection Calibration Service — Task 7.2 (Amendment #24)
 Tracks the false positive rate of drift detections over a configurable window.
 Recommends threshold adjustment if FP rate exceeds 20%.
 """
-import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -12,8 +11,9 @@ from sqlalchemy import text
 from contextlib import asynccontextmanager
 
 from backend.app.core.config import get_settings
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 settings = get_settings()
 
 class DriftCalibrationService:

@@ -10,11 +10,11 @@ Supported strategies:
   churn_risk     — Sort by churn_risk_score descending
   emergency_first — Emergency service customers first, then by revenue
 """
-import logging
 from enum import Enum
 from typing import List
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PrioritisationStrategy(str, Enum):

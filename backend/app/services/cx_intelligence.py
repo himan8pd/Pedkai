@@ -2,7 +2,6 @@
 CX Intelligence Service.
 Correlates network anomalies with customer churn risk for proactive care.
 """
-import logging
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy import select, and_, text
@@ -10,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from contextlib import asynccontextmanager
 from backend.app.models.customer_orm import CustomerORM, ProactiveCareORM
 from backend.app.models.decision_trace_orm import DecisionTraceORM
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class CXIntelligenceService:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):

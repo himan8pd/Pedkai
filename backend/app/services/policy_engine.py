@@ -1,5 +1,4 @@
 import yaml
-import logging
 import os
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -9,9 +8,10 @@ from datetime import datetime
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from backend.app.core.logging import get_logger
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class Policy(BaseModel):
     id: str

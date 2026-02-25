@@ -43,7 +43,8 @@ async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: s
     logger.info(f"SSE connection opened: {connection_id} (total: {len(_active_connections)})")
     
     last_seen_id = None
-    last_activity_time = datetime.now(timezone.utc).timestamp()
+    last_data_time = datetime.now(timezone.utc).timestamp()  # Tracks real data events only
+    last_heartbeat_time = datetime.now(timezone.utc).timestamp()  # Tracks heartbeat sends
     heartbeat_interval = settings.sse_heartbeat_interval_seconds
     idle_timeout = settings.sse_max_idle_seconds
     poll_interval = 2  # Poll DB every 2s
@@ -55,17 +56,18 @@ async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: s
                 logger.info(f"SSE client disconnected: {connection_id}")
                 break
             
-            # Check idle timeout
             now = datetime.now(timezone.utc).timestamp()
-            if now - last_activity_time > idle_timeout:
+            
+            # Check idle timeout (based on last REAL data, not heartbeats)
+            if now - last_data_time > idle_timeout:
                 logger.info(f"SSE connection idle timeout ({idle_timeout}s): {connection_id}")
                 yield f": idle_timeout\n\n"
                 break
             
-            # Send heartbeat if no recent activity
-            if now - last_activity_time > heartbeat_interval:
+            # Send heartbeat at regular intervals (does NOT reset idle timer)
+            if now - last_heartbeat_time > heartbeat_interval:
                 yield f": heartbeat\n\n"
-                last_activity_time = now
+                last_heartbeat_time = now
                 await asyncio.sleep(0.1)
                 continue
             
@@ -85,7 +87,8 @@ async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: s
                     newest_id = str(rows[0][0])
                     if newest_id != last_seen_id:
                         last_seen_id = newest_id
-                        last_activity_time = now
+                        last_data_time = now  # Only real data resets the idle timer
+                        last_heartbeat_time = now  # Also reset heartbeat on data
                         payload = {
                             "event": "alarms_updated",
                             "tenant_id": tenant_id,
@@ -96,7 +99,6 @@ async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: s
             except Exception as e:
                 logger.error(f"SSE generator error: {e}")
                 yield f"data: {json.dumps({'event': 'error', 'message': str(e)})}\n\n"
-                last_activity_time = now
             
             await asyncio.sleep(poll_interval)
     finally:

@@ -4,11 +4,12 @@ Netconf/YANG Adapter PoC (P5.4)
 Provides a mock Netconf session and vendor-specific operations for Nokia and Cisco.
 This is a dry-run capable PoC; no real devices are required for testing.
 """
-import logging
+import asyncio
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -71,15 +72,14 @@ class NetconfSession:
         else:
             return {"valid": True, "message": "Generic dry-run OK"}
 
-    def execute(self, operation: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(self, operation: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute an operation on the device. For PoC, simulate success/failure.
         Returns a dict with success and details."""
         if not self.connected:
             raise RuntimeError("Not connected")
         logger.info(f"Executing operation {operation} on vendor={self.vendor} with params={parameters}")
-        # Simulate latency and outcome
-        import time
-        time.sleep(0.5)
+        # Simulate latency and outcome (non-blocking)
+        await asyncio.sleep(0.5)
         if operation == "cell_failover":
             # If missing parameter, fail
             if "target_cell" not in parameters:

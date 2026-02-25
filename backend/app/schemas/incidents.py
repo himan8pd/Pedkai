@@ -84,7 +84,9 @@ class ApprovalRequest(BaseModel):
 class AuditTrailEntry(BaseModel):
     timestamp: datetime
     action: str
+    action_type: str  # human | automated | rl_system
     actor: str
     details: Optional[str] = None
+    trace_id: Optional[str] = None
     llm_model_version: Optional[str] = None
     llm_prompt_hash: Optional[str] = None

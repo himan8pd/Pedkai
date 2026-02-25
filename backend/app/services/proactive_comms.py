@@ -8,7 +8,6 @@ Design principle: Pedkai recommends, humans decide. No automated customer contac
 
 Used by: WS4 (service_impact API), WS2 (incidents API).
 """
-import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
@@ -17,8 +16,9 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy import select
 from contextlib import asynccontextmanager
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ProactiveCommsService:

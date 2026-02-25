@@ -2,7 +2,6 @@
 AI-Driven Capacity Planning Engine.
 Optimizes cell site densification based on congestion vs. budget.
 """
-import logging
 import hashlib
 import json
 from contextlib import asynccontextmanager
@@ -13,8 +12,9 @@ from sqlalchemy import select, and_, desc, func
 
 from backend.app.models.investment_planning import DensificationRequestORM, InvestmentPlanORM
 from backend.app.models.kpi_orm import KPIMetricORM
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CapacityEngine:

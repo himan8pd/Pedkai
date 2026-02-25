@@ -26,9 +26,11 @@ from backend.app.schemas.incidents import (
 )
 from backend.app.models.incident_orm import IncidentORM
 from backend.app.models.network_entity_orm import NetworkEntityORM
+from backend.app.models.audit_orm import IncidentAuditEntryORM
 from backend.app.services.decision_repository import DecisionTraceRepository
 from backend.app.services.rl_evaluator import get_rl_evaluator
 from backend.app.core.database import async_session_maker
+from backend.app.middleware.trace import correlation_id_ctx
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -64,6 +66,41 @@ def _next_status(current: str) -> Optional[str]:
     except (ValueError, IndexError):
         pass
     return None
+
+
+async def _log_audit_event(
+    db: AsyncSession,
+    incident_id: str,
+    tenant_id: str,
+    action: str,
+    action_type: str,
+    actor: str,
+    details: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    llm_model_version: Optional[str] = None,
+    llm_prompt_hash: Optional[str] = None,
+) -> None:
+    """Helper to log persistent audit entries for regulatory compliance."""
+    # Get current trace_id from context if not provided
+    if not trace_id:
+        try:
+            trace_id = correlation_id_ctx.get()
+        except LookupError:
+            pass
+
+    entry = IncidentAuditEntryORM(
+        incident_id=incident_id,
+        tenant_id=tenant_id,
+        action=action,
+        action_type=action_type,
+        actor=actor,
+        details=details,
+        trace_id=trace_id,
+        llm_model_version=llm_model_version,
+        llm_prompt_hash=llm_prompt_hash,
+    )
+    db.add(entry)
+    await db.flush()
 
 
 @router.post("/", response_model=IncidentResponse, status_code=201)
@@ -117,6 +154,15 @@ async def create_incident(
     )
     db.add(incident)
     await db.flush()
+
+    # Log initial audit event
+    await _log_audit_event(
+        db, incident.id, incident.tenant_id,
+        action="ANOMALY_DETECTED",
+        action_type="automated",
+        actor="pedkai-platform",
+        details=f"Incident created with severity {incident.severity}",
+    )
 
     return _to_response(incident)
 
@@ -197,6 +243,18 @@ async def generate_sitrep(
     incident.status = IncidentStatus.SITREP_DRAFT.value
     
     incident.updated_at = datetime.now(timezone.utc)
+    
+    # Log audit event for SITREP generation
+    await _log_audit_event(
+        db, incident.id, incident.tenant_id,
+        action="SITREP_GENERATED",
+        action_type="automated",
+        actor="llm_service",
+        details="AI SITREP generated via Gemini Flash",
+        llm_model_version=incident.llm_model_version,
+        llm_prompt_hash=incident.llm_prompt_hash,
+    )
+
     await db.commit()
     await db.refresh(incident)
     
@@ -257,6 +315,16 @@ async def approve_sitrep(
     incident.sitrep_approved_at = datetime.now(timezone.utc)
     incident.updated_at = datetime.now(timezone.utc)
     await db.flush()
+
+    # Log audit event
+    await _log_audit_event(
+        db, incident.id, incident.tenant_id,
+        action="SITREP_APPROVED",
+        action_type="human",
+        actor=payload.approved_by,
+        details="Engineer reviewed and approved SITREP (Human Gate 1)",
+    )
+
     return _to_response(incident)
 
 
@@ -281,6 +349,16 @@ async def approve_action(
     incident.action_approved_at = datetime.now(timezone.utc)
     incident.updated_at = datetime.now(timezone.utc)
     await db.flush()
+
+    # Log audit event
+    await _log_audit_event(
+        db, incident.id, incident.tenant_id,
+        action="ACTION_APPROVED",
+        action_type="human",
+        actor=payload.approved_by,
+        details="Engineer approved resolution action (Human Gate 2)",
+    )
+
     return _to_response(incident)
 
 
@@ -305,6 +383,15 @@ async def close_incident(
     incident.closed_at = datetime.now(timezone.utc)
     incident.updated_at = datetime.now(timezone.utc)
     await db.flush()
+
+    # Log audit event
+    await _log_audit_event(
+        db, incident.id, incident.tenant_id,
+        action="CLOSED",
+        action_type="human",
+        actor=payload.approved_by,
+        details="Engineer confirmed resolution and closed incident (Human Gate 3)",
+    )
 
     # P2.5: Trigger RL evaluation and feedback application for associated decision trace
     try:
@@ -356,68 +443,63 @@ async def get_audit_trail(
     
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
     
-    # Get current trace_id from context (set by middleware)
-    try:
-        current_trace_id = correlation_id_ctx.get()
-    except LookupError:
-        current_trace_id = None
+    # Query persistent audit entries
+    stmt = (
+        select(IncidentAuditEntryORM)
+        .where(IncidentAuditEntryORM.incident_id == incident_id)
+        .order_by(IncidentAuditEntryORM.timestamp.asc())
+    )
+    result = await db.execute(stmt)
+    entries = result.scalars().all()
 
-    trail = []
+    trail = [
+        AuditTrailEntry(
+            timestamp=e.timestamp,
+            action=e.action,
+            action_type=e.action_type,
+            actor=e.actor,
+            details=e.details,
+            trace_id=e.trace_id,
+            llm_model_version=e.llm_model_version,
+            llm_prompt_hash=e.llm_prompt_hash,
+        )
+        for e in entries
+    ]
     
-    # PHASE 1: Automated Detection & Incident Creation
-    trail.append({
-        "timestamp": incident.created_at.isoformat() if incident.created_at else None,
-        "action": "ANOMALY_DETECTED",
-        "action_type": "automated",  # Automated anomaly detection
-        "actor": "pedkai-platform",
-        "details": f"Incident created with severity {incident.severity}",
-        "trace_id": incident.decision_trace_id or current_trace_id,
-    })
-
-    # PHASE 2: SITREP Generation & Approval (Human Gate 1)
-    if incident.sitrep_approved_at:
-        trail.append({
-            "timestamp": incident.sitrep_approved_at.isoformat(),
-            "action": "SITREP_APPROVED",
-            "action_type": "human",  # Human Gate 1 — engineer reviews SITREP
-            "actor": incident.sitrep_approved_by,
-            "details": "Engineer reviewed SITREP and approved the diagnosis",
-            "trace_id": current_trace_id,
-        })
-
-    # PHASE 3: Preventive Action Approval (Human Gate 2)
-    if incident.action_approved_at:
-        trail.append({
-            "timestamp": incident.action_approved_at.isoformat(),
-            "action": "ACTION_APPROVED",
-            "action_type": "human",  # Human Gate 2 — engineer approves action
-            "actor": incident.action_approved_by,
-            "details": "Engineer approved the preventive action request",
-            "trace_id": current_trace_id,
-        })
-
-    # PHASE 4: Closed-Loop RL Evaluation (if available)
-    # Note: RL feedback is captured in DecisionTraceORM, we log it here for visibility
-    if hasattr(incident, 'feedback_score') and incident.feedback_score is not None:
-        trail.append({
-            "timestamp": incident.updated_at.isoformat() if incident.updated_at else None,
-            "action": "RL_FEEDBACK_RECORDED",
-            "action_type": "rl_system",  # RL evaluation loop
-            "actor": "rl_evaluator",
-            "details": f"Operator feedback recorded: {incident.feedback_score:+d}",
-            "trace_id": current_trace_id,
-        })
-
-    # PHASE 5: Incident Closure (Human Gate 3)
-    if incident.closed_at:
-        trail.append({
-            "timestamp": incident.closed_at.isoformat(),
-            "action": "CLOSED",
-            "action_type": "human",  # Human Gate 3 — final closure
-            "actor": incident.closed_by,
-            "details": "Engineer confirmed incident resolution",
-            "trace_id": current_trace_id,
-        })
+    # Fallback for legacy incidents if no entries found (compute from dates)
+    if not trail:
+        trail.append(AuditTrailEntry(
+            timestamp=incident.created_at,
+            action="ANOMALY_DETECTED",
+            action_type="automated",
+            actor="pedkai-platform",
+            details=f"Incident created with severity {incident.severity}",
+            trace_id=incident.decision_trace_id
+        ))
+        if incident.sitrep_approved_at:
+            trail.append(AuditTrailEntry(
+                timestamp=incident.sitrep_approved_at,
+                action="SITREP_APPROVED",
+                action_type="human",
+                actor=incident.sitrep_approved_by or "unknown",
+                details="Engineer reviewed SITREP"
+            ))
+        if incident.action_approved_at:
+            trail.append(AuditTrailEntry(
+                timestamp=incident.action_approved_at,
+                action="ACTION_APPROVED",
+                action_type="human",
+                actor=incident.action_approved_by or "unknown",
+                details="Engineer approved action"
+            ))
+        if incident.closed_at:
+            trail.append(AuditTrailEntry(
+                timestamp=incident.closed_at,
+                action="CLOSED",
+                action_type="human",
+                actor=incident.closed_by or "unknown",
+                details="Incident closed"
+            ))
 
     return {"incident_id": incident_id, "audit_trail": trail}
 
@@ -439,64 +521,64 @@ async def get_audit_trail_csv(
     
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
     
-    # Fetch audit trail (same logic as JSON endpoint)
-    from backend.app.middleware.trace import correlation_id_ctx
-    try:
-        current_trace_id = correlation_id_ctx.get()
-    except LookupError:
-        current_trace_id = None
-
-    trail = []
+    # Query persistent audit entries (reuse logic from JSON endpoint)
+    stmt = (
+        select(IncidentAuditEntryORM)
+        .where(IncidentAuditEntryORM.incident_id == incident_id)
+        .order_by(IncidentAuditEntryORM.timestamp.asc())
+    )
+    result = await db.execute(stmt)
+    entries = result.scalars().all()
     
-    # Build audit trail entries
-    trail.append({
-        "timestamp": incident.created_at.isoformat() if incident.created_at else None,
-        "action": "ANOMALY_DETECTED",
-        "action_type": "automated",
-        "actor": "pedkai-platform",
-        "details": f"Incident created with severity {incident.severity}",
-        "trace_id": incident.decision_trace_id or current_trace_id,
-    })
+    trail = [
+        {
+            "timestamp": e.timestamp.isoformat(),
+            "action": e.action,
+            "action_type": e.action_type,
+            "actor": e.actor,
+            "details": e.details,
+            "trace_id": e.trace_id,
+        }
+        for e in entries
+    ]
 
-    if incident.sitrep_approved_at:
+    if not trail:
+        # Fallback for legacy
         trail.append({
-            "timestamp": incident.sitrep_approved_at.isoformat(),
-            "action": "SITREP_APPROVED",
-            "action_type": "human",
-            "actor": incident.sitrep_approved_by,
-            "details": "Engineer reviewed and approved SITREP",
-            "trace_id": current_trace_id,
+            "timestamp": incident.created_at.isoformat(),
+            "action": "ANOMALY_DETECTED",
+            "action_type": "automated",
+            "actor": "pedkai-platform",
+            "details": f"Incident created with severity {incident.severity}",
+            "trace_id": incident.decision_trace_id,
         })
-
-    if incident.action_approved_at:
-        trail.append({
-            "timestamp": incident.action_approved_at.isoformat(),
-            "action": "ACTION_APPROVED",
-            "action_type": "human",
-            "actor": incident.action_approved_by,
-            "details": "Engineer approved preventive action",
-            "trace_id": current_trace_id,
-        })
-
-    if hasattr(incident, 'feedback_score') and incident.feedback_score is not None:
-        trail.append({
-            "timestamp": incident.updated_at.isoformat() if incident.updated_at else None,
-            "action": "RL_FEEDBACK_RECORDED",
-            "action_type": "rl_system",
-            "actor": "rl_evaluator",
-            "details": f"Operator feedback: {incident.feedback_score:+d}",
-            "trace_id": current_trace_id,
-        })
-
-    if incident.closed_at:
-        trail.append({
-            "timestamp": incident.closed_at.isoformat(),
-            "action": "CLOSED",
-            "action_type": "human",
-            "actor": incident.closed_by,
-            "details": "Incident closed by engineer",
-            "trace_id": current_trace_id,
-        })
+        if incident.sitrep_approved_at:
+            trail.append({
+                "timestamp": incident.sitrep_approved_at.isoformat(),
+                "action": "SITREP_APPROVED",
+                "action_type": "human",
+                "actor": incident.sitrep_approved_by,
+                "details": "Engineer approved SITREP",
+                "trace_id": None,
+            })
+        if incident.action_approved_at:
+            trail.append({
+                "timestamp": incident.action_approved_at.isoformat(),
+                "action": "ACTION_APPROVED",
+                "action_type": "human",
+                "actor": incident.action_approved_by,
+                "details": "Engineer approved action",
+                "trace_id": None,
+            })
+        if incident.closed_at:
+            trail.append({
+                "timestamp": incident.closed_at.isoformat(),
+                "action": "CLOSED",
+                "action_type": "human",
+                "actor": incident.closed_by,
+                "details": "Incident closed",
+                "trace_id": None,
+            })
 
     # Generate CSV with proper formatting
     output = StringIO()

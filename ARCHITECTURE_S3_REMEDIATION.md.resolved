@@ -1,0 +1,288 @@
+# Pedkai — Formal Architecture & Implementation Review
+
+**Reviewer**: Principal Engineer (AI-Assisted)
+**Date**: 2026-02-25
+**Scope**: Full codebase vs [3PassReviewOutcome_Roadmap_V3.yaml](file:///Users/himanshu/Projects/Pedkai/3PassReviewOutcome_Roadmap_V3.yaml)
+**Verdict**: ⛔ **NOT READY FOR PRODUCTION SIGN-OFF**
+
+---
+
+## 1. Executive Summary
+
+The roadmap defines 46 tasks across 6 phases (P0–P5), progressing from structural remediation through orchestration, differentiation, auditability, and autonomous execution. The codebase demonstrates meaningful progress on **Phase 0–2 structural and orchestration tasks**, but contains **critical gaps in Phases 3–5** where implementations are either superficial (stub tests, placeholder docs) or entirely missing (BSS adapter interface, frontend decomposition, sleeping cell scheduler wiring).
+
+| Phase | Tasks | Fully Implemented | Partial / Shallow | Missing / Stub |
+|-------|-------|--------------------|--------------------|-----------------| 
+| P0 (Structural Prep) | 7 | 6 | 1 | 0 |
+| P1 (Data & Schema) | 9 | 6 | 2 | 1 |
+| P2 (Orchestration) | 9 | 5 | 3 | 1 |
+| P3 (Differentiation) | 7 | 3 | 3 | 1 |
+| P4 (Auditability) | 6 | 2 | 2 | 2 |
+| P5 (Autonomous Exec) | 8 | 0 | 5 | 3 |
+| **Total** | **46** | **22** | **16** | **8** |
+
+**Key concern**: The codebase was iterated by lower-capability models that prioritised "file exists" over "intent fulfilled." Many files pass an `import` check but fail a depth review.
+
+---
+
+## 2. Intent Reconstruction
+
+The roadmap's true intent, reverse-engineered across four dimensions:
+
+### Functional Intent
+- **Event-driven pipeline**: Raw alarms → correlation → incident auto-creation → SITREP → operator feedback → RL-adjusted rankings. A closed-loop intelligence system.
+- **Sleeping cell detection**: Proactive anomaly detection on KPI time-series using Z-score statistics. Runs on a 5-minute scheduler.
+- **Autonomous execution (Phase 5)**: Gated, auditable autonomous actions with 7 safety gates, Netconf integration, kill-switch, and auto-rollback.
+
+### Architectural Intent
+- **Session factory pattern**: Decouple all services from HTTP request lifecycle.
+- **Event bus + worker framework**: In-process asyncio.Queue evolving to an external broker.
+- **Embedding provider isolation**: Never mix Gemini and MiniLM vectors in similarity search.
+- **BSS adapter interface**: Abstract BSS integration behind an interface with `is_estimate` flags on every revenue figure.
+
+### Operational Intent
+- **Structured JSON logging** with `trace_id`, `event_id`, `correlation_id` on every log line.
+- **SSE lifecycle management** with heartbeat, idle timeout, and connection limits.
+- **Full audit trail** with action_type classification (human/automated/rl_system).
+- **Regulatory artifacts**: OFCOM, ICO DPIA, Safety Whitepaper as real documents, not stubs.
+
+### Strategic Intent
+- **Sovereignty**: On-prem embedding capability so the platform runs without cloud API keys.
+- **Value proof**: ROI dashboard with methodology documentation, all revenue marked `is_estimate`.
+- **Autonomy positioning**: ADR gate before any autonomous code is written.
+- **Differential capability**: "Only Pedkai can do this" via causal templates, decision memory, and RL feedback loops.
+
+---
+
+## 3. Gap Analysis
+
+### 3.1 — Critical Severity (Must-Fix Before Any Deployment)
+
+| # | Roadmap Task | Finding | Evidence |
+|---|-------------|---------|----------|
+| C-1 | **P1.8** Frontend Decomposition | [page.tsx](file:///Users/himanshu/Projects/Pedkai/frontend/app/page.tsx) is **still 496 lines / 22KB**. No decomposition into routed pages. The roadmap required `< 50 lines` landing page and 4 separate route pages. | `wc -l frontend/app/page.tsx` → 496 |
+| C-2 | **P2.7** BSS Adapter Interface | `bss_adapter_interface.py` **does not exist**. No abstract base class, no `is_estimate` flag anywhere in the services. The existing [bss_adapter.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/bss_adapter.py) and [bss_service.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/bss_service.py) have no interface contract. | [find](file:///Users/himanshu/Projects/Pedkai/backend/app/services/decision_repository.py#152-207) returns 0 results for `bss_adapter_interface*` |
+| C-3 | **P2.7** BSS Integration Contract | `docs/BSS_INTEGRATION_CONTRACT.md` **does not exist**. No documentation of the required BSS API. | [find](file:///Users/himanshu/Projects/Pedkai/backend/app/services/decision_repository.py#152-207) returns 0 results in `docs/BSS*` |
+| C-4 | **P2.7** `is_estimate` Revenue Flags | Zero occurrences of `is_estimate` in any service or API module. All revenue figures are presented as ground truth when they should be marked as estimates. This is a **compliance risk**. | `grep -r is_estimate backend/app/services/` → 0 |
+| C-5 | **P5.5** Phase 5 Test Suite | The roadmap requires **>1000 test scenarios** with chaos engineering. Actual coverage: [test_safety_rails.py](file:///Users/himanshu/Projects/Pedkai/tests/integration/test_safety_rails.py) = 19 lines (1 test), [test_action_state_machine.py](file:///Users/himanshu/Projects/Pedkai/tests/integration/test_action_state_machine.py) = 7 lines (1 test), [test_netconf_adapter.py](file:///Users/himanshu/Projects/Pedkai/tests/integration/test_netconf_adapter.py) = 17 lines (2 tests), [test_policy_engine_v2.py](file:///Users/himanshu/Projects/Pedkai/tests/integration/test_policy_engine_v2.py) = 23 lines (1 test). **Total: ~5 trivial tests vs 1000+ required.** | File sizes in `tests/integration/` |
+| C-6 | **P2.4** Sleeping Cell Scheduler | `SleepingCellDetector` exists but is **never started** in [main.py](file:///Users/himanshu/Projects/Pedkai/backend/app/main.py). The `scheduled.py` worker framework exists but nothing calls `start_scheduler()` with the detector. The feature is dead code. | `grep sleeping_cell main.py` → 0 |
+
+### 3.2 — High Severity (Blocks Production Readiness)
+
+| # | Roadmap Task | Finding | Evidence |
+|---|-------------|---------|----------|
+| H-1 | **P4.4** Audit Trail Enhancement | No `action_type` field (human/automated/rl_system) in audit trail. No CSV export endpoint (`GET /api/v1/incidents/{id}/audit-trail?format=csv`). | Missing from [incidents.py](file:///Users/himanshu/Projects/Pedkai/backend/app/api/incidents.py) |
+| H-2 | **P5.3** Safety Rails Pipeline | The executor has only **4 of 7 gates** implemented. Missing: BLAST_RADIUS_GATE (entity-count check is in policy engine, not in executor as a separate gate), VALIDATION gate (uses `pred.risk_score < 70` instead of polling KPIs for 5 min), KILL_SWITCH endpoint (no `/api/v1/autonomous/kill-switch`). | [autonomous_action_executor.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/autonomous_action_executor.py) lines 70-154 |
+| H-3 | **P5.2** Digital Twin | Similarity search uses `trigger_type == action_type` instead of actual embedding-based similarity. No Decision Memory similarity scoring (roadmap requires `top-3 similar decisions`). Uses recency-weighting as a placeholder. | [digital_twin.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/digital_twin.py) line 36 |
+| H-4 | **P3.5** Confidence Calibration | `_compute_confidence()` in [llm_service.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/llm_service.py) references calibration but needs verification that it genuinely queries the last 50+ feedback scores and bins by `(decision_memory_hits, causal_evidence_count)`. The calibration stats method exists in `DecisionTraceRepository` but integration flow is unclear. | Lines 57-99 |
+| H-5 | **P5.6** Regulatory Documents | All four regulatory docs are **stubs**: Safety Whitepaper (25 lines), OFCOM Pre-Notification (11 lines), ICO DPIA (18 lines), Autonomy Status Report (18 lines). The roadmap requires substantive documents covering architecture, risk analysis, vendor compatibility, data retention, consent mechanisms, and test results. | `docs/AUTONOMOUS_SAFETY_WHITEPAPER.md` etc. |
+| H-6 | **P4.6** Full Platform Integration Test | [test_full_platform.py](file:///Users/himanshu/Projects/Pedkai/tests/integration/test_full_platform.py) exists at 20KB but needs verification that all 7 verification steps from P4.6 are genuinely tested (seed→ingest→correlate→sleeping cell→SITREP→feedback→ROI→audit). File size suggests possible substance but given the pattern of shallow tests elsewhere, requires audit. | 20KB file |
+| H-7 | **P2.5** RL Evaluator in Closure | Unclear whether `close_incident()` in `incidents.py` actually calls `rl_evaluator.evaluate_decision_outcome()` and `apply_feedback()`. The roadmap mandates this closed-loop integration. | Needs verification in [incidents.py](file:///Users/himanshu/Projects/Pedkai/backend/app/api/incidents.py) |
+| H-8 | **P5.7** Cell Failover Action | [autonomous_actions/cell_failover.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/autonomous_actions/) directory has only 1 child, suggesting the implementation may be minimal. The action should identify affected cells, estimate traffic via Digital Twin, invoke all 7 safety gates, and generate Netconf commands. | Directory has 1 file |
+| H-9 | **P5.3** Confidence Gate | Executor hardcodes `confidence_score=0.9` as a placeholder instead of pulling from Decision Memory similarity. This bypasses the intent of the confidence gate. | [autonomous_action_executor.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/autonomous_action_executor.py) line 99 |
+
+### 3.3 — Medium Severity (Technical Debt)
+
+| # | Roadmap Task | Finding | Evidence |
+|---|-------------|---------|----------|
+| M-1 | **P0.2** Structured Logging | Logging module ✓, trace middleware ✓, JSON formatter ✓. However: many service modules still use `logging.getLogger(__name__)` instead of the structured `get_logger(__name__)`. Mixed logging patterns. | `grep -c getLogger backend/app/services/*.py` shows pattern |
+| M-2 | **P1.7** Background Worker | Worker framework exists and starts on app startup ✓. However, error handling in the consumer swallows exceptions with a `0.1s sleep`. No dead-letter queue, no retry policy, no poison-message handling. | [consumer.py](file:///Users/himanshu/Projects/Pedkai/backend/app/workers/consumer.py) line 48-51 |
+| M-3 | **P2.1** Alarm Correlation Handler | In `_flush_tenant()`, the `cluster_id` is set from `cluster.get("created_at")` which is semantically wrong — using a timestamp as an ID. Should be a UUID. | [handlers.py](file:///Users/himanshu/Projects/Pedkai/backend/app/workers/handlers.py) line 89 |
+| M-4 | **P3.1** Causal Models | Library exists with 4+ templates ✓, but `match_causal_templates()` only matches on `metric_name` and `entity_type`. No spatial or temporal correlation. The matching is a simple presence check, not a causal graph walk. | [causal_models.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/causal_models.py) |
+| M-5 | **P5.4** Netconf Adapter | Mock-only implementation ✓. However: `execute()` uses `time.sleep(0.5)` (synchronous!) in an async system. This will block the event loop. Should use `await asyncio.sleep()`. | [netconf_adapter.py](file:///Users/himanshu/Projects/Pedkai/backend/app/services/netconf_adapter.py) line 82 |
+| M-6 | **P3.2** Embedding Isolation | `DecisionTraceORM` has `embedding_provider` and `embedding_model` columns ✓. However, `find_similar()` in `DecisionTraceRepository` needs verification that it filters by `embedding_provider`. The cross-provider warning is unclear. | Needs code-level verification |
+| M-7 | **P0.5** SSE Lifecycle | Heartbeat ✓, idle timeout ✓, connection limit with 503 ✓. However, the SSE generator has a logic flaw: heartbeat is sent when `now - last_activity_time > heartbeat_interval`, but `last_activity_time` is reset on heartbeat send, creating a feedback loop. Idle timeout check (`> idle_timeout`) may never trigger because heartbeat keeps resetting `last_activity_time`. | [sse.py](file:///Users/himanshu/Projects/Pedkai/backend/app/api/sse.py) lines 60-70 |
+| M-8 | **P3.4** Bulk Embedding Backfill | `backend/app/scripts/` directory has only 1 file. Verify `backfill_embeddings.py` exists and is idempotent/resumable as specified. | Directory listing |
+| M-9 | **P2.9** Frontend SSE Integration | No evidence of SSE connection in `dashboard/page.tsx`. Frontend decomposition was not done (C-1), so SSE integration in the dashboard is likely missing. | Frontend analysis |
+| M-10 | **P4.2** ROI Dashboard Backend | Unclear if `GET /api/v1/autonomous/roi-dashboard` returns all specified fields including `is_estimate`, `confidence_interval`, and `methodology_url`. Given C-4 (no `is_estimate` anywhere), this is likely incomplete. | Needs API route verification |
+
+### 3.4 — Low Severity (Polish / Deferred)
+
+| # | Roadmap Task | Finding | Evidence |
+|---|-------------|---------|----------|
+| L-1 | **P0.1** Service Inventory | [service_inventory.md](file:///Users/himanshu/Projects/Pedkai/docs/service_inventory.md) exists ✓. Needs verification of completeness (20 service modules + 14 API modules). | 3.9KB file |
+| L-2 | **P0.7** Autonomy Positioning | [ADR-001](file:///Users/himanshu/Projects/Pedkai/docs/ADR-001-autonomy-positioning.md) exists ✓. | 2.5KB |
+| L-3 | **P4.5** ADR-002 Autonomous Architecture | [ADR-002](file:///Users/himanshu/Projects/Pedkai/docs/ADR-002-autonomous-execution-architecture.md) exists at 20KB ✓. Appears substantive. | 20KB |
+| L-4 | **P4.1** Value Methodology | [value_methodology.md](file:///Users/himanshu/Projects/Pedkai/docs/value_methodology.md) exists at 10.7KB ✓. Appears substantive. | 10.7KB |
+
+---
+
+## 4. Architectural Review
+
+### 4.1 System Design — Mixed
+
+**Strengths:**
+- Session factory pattern correctly applied to major services (AlarmCorrelation, DecisionTraceRepository, AutonomousShield)
+- PolicyEngine uses factory function `get_policy_engine()` (P0.4 ✓)
+- Event bus architecture with asyncio.Queue is sound for single-process deployment
+- Structured logging with JSON formatter and context vars is well-implemented
+
+**Weaknesses:**
+- **No dependency injection framework**: Services create their own dependencies (e.g., `DigitalTwinMock` instantiated inline in executor). This makes testing and substitution difficult.
+- **Module-level state**: `_pending_queue` in `autonomous_action_executor.py`, `_buffers` in `handlers.py`, `_active_connections` in `sse.py` — all process-level mutable state that won't survive scale-out.
+- **Circular import risk**: `handlers.py` imports from `incident_service.py` which imports from handlers — circular dependency managed only by deferred imports.
+
+### 4.2 Data Flow — Partially Implemented
+
+```mermaid
+graph LR
+    A["Alarm Ingestion<br/>POST /api/v1/alarms/ingest"] --> B["Event Bus<br/>asyncio.Queue"]
+    B --> C["Consumer<br/>consumer.py"]
+    C --> D["Alarm Handler<br/>handlers.py"]
+    D --> E["Buffer + Correlate"]
+    E --> F["AlarmClusterCreatedEvent"]
+    F --> G["Incident Handler"]
+    G --> H["create_incident_from_cluster"]
+    H --> I["IncidentCreatedEvent"]
+    
+    style J fill:#f66,stroke:#333
+    J["SleepingCellDetector<br/>❌ NOT WIRED"] -.-> B
+    
+    style K fill:#f66,stroke:#333
+    K["RL Evaluator<br/>⚠️ UNCLEAR"] -.-> L["Decision Memory"]
+```
+
+The alarm→correlation→incident pipeline is wired. The sleeping cell detector is dead code. The RL feedback loop closure is unverified.
+
+### 4.3 API Boundaries — Acceptable
+
+All routers use `Depends(oauth2_scheme)` for authentication. TMF642/628 endpoints correctly enforce auth. Alarm ingestion requires ALARM_WRITE scope. However:
+- No rate limiting middleware
+- No request size limits on alarm ingestion (could be DoS vector)
+- Kill-switch endpoint missing from autonomous API
+
+### 4.4 State Management — Risky
+
+| State | Location | Scale Risk |
+|-------|----------|-----------|
+| Event bus | `asyncio.Queue` (process memory) | ❌ Lost on restart |
+| Alarm buffers | `_buffers` dict in `handlers.py` | ❌ No persistence |
+| SSE connections | `_active_connections` set in `sse.py` | ❌ Process-local |
+| Action queue | `_pending_queue` in executor | ❌ Lost on restart |
+
+All in-process state is acceptable for PoC but the roadmap targets production at scale. No Redis/RabbitMQ/Kafka migration path is documented.
+
+### 4.5 Error Handling — Insufficient
+
+- Event consumer catches all exceptions and sleeps 0.1s. No circuit breaker, no retry with backoff, no dead-letter queue.
+- Autonomous executor catches `Exception` broadly and continues. Failed actions may be silently swallowed.
+- No structured error responses across API endpoints — exception details leak in some error paths.
+
+### 4.6 Testing Strategy — Critically Deficient for Phase 5
+
+| Test Category | Files | Total Assertions (estimated) | Roadmap Requirement |
+|---------------|-------|------------------------------|---------------------|
+| Phase 5 integration | 7 files | ~15 | >1000 scenarios |
+| Chaos engineering | 0 files | 0 | Session drops, conflicts, reversals |
+| Blast-radius tests | 0 files | 0 | Entity set limits enforced |
+| Cross-tenant autonomous | 0 files | 0 | Actions cannot leak |
+| Load tests | 2 files | ~10 | 5000 alarm correlation |
+| Unit tests | 4 files | ~20 | Coverage ≥ 85% |
+
+### 4.7 Extensibility — Mixed
+
+- **Good**: Handler registry pattern in `handlers.py` makes it easy to add new event types.
+- **Good**: Causal template library loaded from YAML file.
+- **Bad**: No plugin/adapter registry for BSS, Netconf, or embedding providers. Each is a hardcoded `if/else`.
+- **Bad**: Policy engine loads from a single YAML file with no DB-backed policy management despite P5.1 requiring it. `PolicyORM` exists but it's unclear if the engine reads from it.
+
+---
+
+## 5. Risk Assessment
+
+| Risk | Severity | Likelihood | Impact | Mitigation |
+|------|----------|------------|--------|------------|
+| Revenue figures presented without `is_estimate` flags | **Critical** | Certain | Regulatory non-compliance, customer misrepresentation | Implement BSS adapter interface with `is_estimate` on every revenue field |
+| Autonomous actions with hardcoded confidence (0.9) | **Critical** | Certain | False confidence → unsafe autonomous action | Pull confidence from Decision Memory similarity |
+| No kill-switch endpoint | **Critical** | High | No emergency stop for autonomous actions | Implement `POST /api/v1/autonomous/kill-switch` |
+| Frontend is a single 496-line file | **High** | Certain | Unmaintainable, blocks frontend team | Decompose per roadmap |
+| Sleeping cell detector never runs | **High** | Certain | False advertising of capability | Wire scheduler in `main.py` |
+| Synchronous `time.sleep()` in async context | **High** | Certain | Event loop blocked during Netconf operations | Replace with `asyncio.sleep()` |
+| Regulatory docs are stubs | **High** | Certain | Cannot engage OFCOM/ICO | Write substantive documents |
+| Phase 5 tests are trivial | **High** | Certain | Unknown regression risk, no confidence in safety gates | Write 1000+ test scenarios |
+
+---
+
+## 6. Concrete Remediation Plan
+
+### Sprint 1 (Critical — Week 1-2)
+
+| # | Action | Files | Effort |
+|---|--------|-------|--------|
+| R-1 | Create `bss_adapter_interface.py` with ABC, `is_estimate` field on all revenue responses. Create `bss_mock_adapter.py` implementing it. Update all revenue surfaces to propagate the flag. | `services/bss_adapter_interface.py` (new), `services/bss_mock_adapter.py` (new), `api/service_impact.py`, `api/autonomous.py` | 8h |
+| R-2 | Create `docs/BSS_INTEGRATION_CONTRACT.md` | `docs/` | 4h |
+| R-3 | Wire `SleepingCellDetector` into `main.py` via `start_scheduler(300, detector.scan, tenant_id)` with configurable tenant list | `main.py`, `core/config.py` | 2h |
+| R-4 | Implement kill-switch endpoint: `POST /api/v1/autonomous/kill-switch` that reverses last N actions | `api/autonomous.py`, `services/autonomous_action_executor.py` | 6h |
+| R-5 | Replace hardcoded `confidence_score=0.9` with actual Decision Memory similarity lookup | `services/autonomous_action_executor.py` | 4h |
+| R-6 | Replace `time.sleep()` with `asyncio.sleep()` in netconf_adapter.py | `services/netconf_adapter.py` | 0.5h |
+
+### Sprint 2 (High — Week 3-4)
+
+| # | Action | Files | Effort |
+|---|--------|-------|--------|
+| R-7 | Frontend decomposition: split `page.tsx` into dashboard/incidents/topology/scorecard pages with routing | `frontend/app/page.tsx` → 5 files | 12h |
+| R-8 | Implement VALIDATION gate: poll KPIs for 5 min post-execution, auto-rollback on >10% degradation | `services/autonomous_action_executor.py` | 8h |
+| R-9 | Implement BLAST_RADIUS_GATE as explicit check in executor (separate from policy engine) | `services/autonomous_action_executor.py` | 4h |
+| R-10 | Fix SSE heartbeat/idle timeout logic: separate `last_data_time` from `last_heartbeat_time` | `api/sse.py` | 2h |
+| R-11 | Fix `cluster_id` assignment in handlers.py (use UUID, not `created_at`) | `workers/handlers.py` line 89 | 0.5h |
+| R-12 | Write substantive regulatory docs (Safety Whitepaper, OFCOM, ICO DPIA, Status Report) | `docs/` (4 files) | 16h |
+
+### Sprint 3 (High — Week 5-6)
+
+| # | Action | Files | Effort |
+|---|--------|-------|--------|
+| R-13 | Write Phase 5 test suite: policy versioning, audit, all 7 gates, rollback, Netconf, state machine, blast-radius, cross-tenant isolation, chaos engineering | `tests/integration/` (7+ files) | 24h |
+| R-14 | Implement Digital Twin similarity search using actual embedding-based Decision Memory lookup | `services/digital_twin.py` | 8h |
+| R-15 | Verify and fix RL evaluator integration in `close_incident()` | `api/incidents.py` | 4h |
+| R-16 | Add audit trail `action_type` field and CSV export endpoint | `api/incidents.py` | 6h |
+| R-17 | Standardise all services to use `get_logger()` instead of `logging.getLogger()` | All service files | 2h |
+
+---
+
+## 7. Recommended Refactoring Roadmap
+
+### Priority Order (strict sequence)
+
+```mermaid
+gantt
+    title Remediation Roadmap
+    dateFormat X
+    axisFormat %s
+
+    section Critical (Week 1-2)
+    BSS Adapter Interface + is_estimate    :crit, 0, 8
+    Kill-switch endpoint                   :crit, 0, 6
+    Wire Sleeping Cell Scheduler           :crit, 0, 2
+    Fix confidence_score hardcode          :crit, 0, 4
+    Fix time.sleep in netconf              :crit, 0, 1
+
+    section High (Week 3-4)
+    Frontend Decomposition                 :8, 20
+    Safety Gates (Validation + Blast)      :8, 20
+    Regulatory Docs (substantive)          :8, 24
+    SSE Logic Fix                          :8, 10
+    
+    section High (Week 5-6)
+    Phase 5 Test Suite                     :20, 44
+    Digital Twin Similarity                :20, 28
+    RL Evaluator Integration               :20, 24
+    Audit Trail Enhancement                :20, 26
+```
+
+### Architecture Improvements Needed
+
+1. **Introduce a DI container** (e.g., `dependency-injector` or FastAPI's native `Depends`) for all service construction. Current inline instantiation of `DigitalTwinMock`, `CellFailoverAction`, etc. in the executor creates hidden coupling.
+
+2. **Persist event bus state**: Add Redis-backed queue as a configuration option. The current asyncio.Queue loses all events on process restart.
+
+3. **Add dead-letter queue**: Events that fail handling 3 times should be moved to a dead-letter store for manual review, not silently dropped.
+
+4. **Create adapter registry**: BSS, Netconf, and embedding providers should all follow the same pattern: abstract interface → concrete adapter → factory with config-driven selection.
+
+5. **Separate concerns in executor**: The `_worker_loop()` is a 85-line monolith. Extract each gate into a named function: `_check_policy()`, `_check_blast_radius()`, `_check_confidence()`, `_await_confirmation()`, `_execute()`, `_validate_kpis()`, `_rollback()`.
+
+6. **Add structured API error responses**: Create a standard error schema with `error_code`, `message`, `trace_id`, and `details` dict. Currently errors are ad-hoc.
+
+---
+
+> **Sign-off recommendation**: Address all 6 Critical and 9 High findings before any staging deployment. The codebase has good bones (event architecture, session factory, structured logging, policy engine) but Phase 5 autonomous execution is at PoC maturity, not production maturity. The absence of `is_estimate` flags is a compliance blocker.

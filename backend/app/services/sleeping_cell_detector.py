@@ -1,6 +1,5 @@
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-import logging
 import math
 
 from sqlalchemy import select, func
@@ -10,8 +9,9 @@ from backend.app.core.database import async_session_maker
 from backend.app.models.kpi_sample_orm import KpiSampleORM
 from backend.app.events.schemas import SleepingCellDetectedEvent
 from backend.app.events.bus import publish_event
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SleepingCellDetector:

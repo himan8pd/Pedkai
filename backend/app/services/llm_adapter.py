@@ -45,8 +45,8 @@ class LLMAdapter(ABC):
         self.config = config
 
     @abstractmethod
-    async def generate(self, prompt: str, **kwargs) -> LLMResponse:
-        """Send a prompt to the LLM and return a standardised response."""
+    async def embed(self, text: str) -> list[float]:
+        """Generate an embedding vector for the given text."""
         ...
 
     def compute_prompt_hash(self, prompt: str) -> str:
@@ -60,6 +60,17 @@ class LLMAdapter(ABC):
 
 class GeminiAdapter(LLMAdapter):
     """Google Gemini implementation."""
+
+    async def embed(self, text: str) -> list[float]:
+        from google import genai
+        client = genai.Client(api_key=self.config.api_key)
+        # Use default embedding model if not specified in config
+        model = "text-embedding-004" if "gemini" in self.config.model_name else "text-embedding-004"
+        result = await client.aio.models.embed_content(
+            model=model,
+            contents=text,
+        )
+        return result.embeddings[0].values
 
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:
         from google import genai
@@ -79,6 +90,21 @@ class GeminiAdapter(LLMAdapter):
 
 class OnPremAdapter(LLMAdapter):
     """Adapter for on-premises LLM (vLLM, Ollama, TGI)."""
+
+    async def embed(self, text: str) -> list[float]:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self.config.endpoint_url}/v1/embeddings",
+                json={
+                    "model": self.config.model_name,
+                    "input": text,
+                },
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        return data.get("data", [{}])[0].get("embedding", [])
 
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:
         import httpx

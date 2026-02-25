@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 import uuid
-import logging
 from typing import Optional
 from uuid import UUID
 from backend.app.services.bss_adapter import MockBSSAdapter, BSSAdapter
@@ -9,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models.incident_orm import IncidentORM
 from backend.app.schemas.incidents import IncidentCreate, IncidentSeverity, IncidentStatus
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def create_incident_from_cluster(payload: IncidentCreate, session: AsyncSession, tenant_id: Optional[str] = None, bss_adapter: Optional[BSSAdapter] = None) -> IncidentORM:

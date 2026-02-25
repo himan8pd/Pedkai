@@ -7,10 +7,11 @@ def test_netconf_mock_connect():
     assert ok
     assert s.vendor == "nokia"
 
-def test_netconf_validate_and_execute():
+@pytest.mark.asyncio
+async def test_netconf_validate_and_execute():
     s = NetconfSession(host="nokia-mock-host")
     s.connect(use_mock=True)
     v = s.validate("cell_failover", {"target_cell": "cell-2"})
     assert v.get("valid") is True
-    r = s.execute("cell_failover", {"target_cell": "cell-2"})
+    r = await s.execute("cell_failover", {"target_cell": "cell-2"})
     assert r.get("success") is True

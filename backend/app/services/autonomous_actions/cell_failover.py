@@ -4,11 +4,11 @@ Cell Failover Action (P5.7)
 Identifies target cell and invokes Netconf adapter via executor pipeline.
 """
 from typing import Dict, Any, Optional, List
-import logging
 from backend.app.services.netconf_adapter import NetconfSession
 from backend.app.services.digital_twin import DigitalTwinMock
+from backend.app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CellFailoverAction:

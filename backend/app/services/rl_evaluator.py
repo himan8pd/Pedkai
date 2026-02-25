@@ -1,11 +1,11 @@
-import logging
 from uuid import UUID
 from typing import Dict, Any, Optional
 from backend.app.models.decision_trace import DecisionTrace, DecisionOutcome
 from backend.app.services.policy_engine import get_policy_engine
+from backend.app.core.logging import get_logger
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class RLEvaluatorService:
     """
