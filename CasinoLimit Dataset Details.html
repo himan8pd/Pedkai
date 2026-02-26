@@ -1,0 +1,1150 @@
+https://fkie-cad.github.io/COMIDDS/content/datasets/casinolimit/
+
+
+<!DOCTYPE html>
+<html lang="en">
+<!-- Beautiful Jekyll 6.0.1 | Copyright Dean Attali 2023 -->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  
+
+  
+
+  <title>CasinoLimit</title>
+
+  
+  
+  <meta name="author" content="Fraunhofer FKIE, Philipp Bönninghausen">
+  
+
+  <meta name="description" content="- [Overview](#overview) - [Environment](#environment) - [Activity](#activity) - [Contained Data](#contained-data) - [Papers](#papers) - [Links](#links) - [Data Examples](#data-examples) | | | | ------------------------ | ----------------------------------------------- | | **Network Data Source** | NetFlows | | **Network Data Labeled** | Yes | | **Host Data Source** | Syslog, auditd | | **Host Data Labeled**...">
+
+  
+
+  
+  <meta name="keywords" content="datasets,collection,cybersecurity,IDS">
+  
+
+  
+  <link rel="alternate" type="application/rss+xml" title="COMIDDS" href="/COMIDDS/feed.xml">
+  
+
+  
+
+  
+
+  
+
+  
+
+
+  
+    
+      
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+
+
+    
+      
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css">
+
+
+    
+      
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic">
+
+
+    
+      
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800">
+
+
+    
+  
+
+  
+    
+      <link rel="stylesheet" href="/COMIDDS/assets/css/bootstrap-social.css">
+    
+      <link rel="stylesheet" href="/COMIDDS/assets/css/beautifuljekyll.css">
+    
+  
+
+  
+
+  
+  
+  
+
+  
+
+  
+  <meta property="og:site_name" content="COMIDDS">
+  <meta property="og:title" content="CasinoLimit">
+  <meta property="og:description" content="- [Overview](#overview) - [Environment](#environment) - [Activity](#activity) - [Contained Data](#contained-data) - [Papers](#papers) - [Links](#links) - [Data Examples](#data-examples) | | | | ------------------------ | ----------------------------------------------- | | **Network Data Source** | NetFlows | | **Network Data Labeled** | Yes | | **Host Data Source** | Syslog, auditd | | **Host Data Labeled**...">
+
+  
+  <meta property="og:image" content="/COMIDDS/assets/img/avatar-icon.png">
+  
+
+  
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="/COMIDDS/content/datasets/casinolimit/">
+  <link rel="canonical" href="/COMIDDS/content/datasets/casinolimit/">
+  
+
+  
+  <meta name="twitter:card" content="summary">
+  
+  <meta name="twitter:site" content="@">
+  <meta name="twitter:creator" content="@">
+
+  <meta property="twitter:title" content="CasinoLimit">
+  <meta property="twitter:description" content="- [Overview](#overview) - [Environment](#environment) - [Activity](#activity) - [Contained Data](#contained-data) - [Papers](#papers) - [Links](#links) - [Data Examples](#data-examples) | | | | ------------------------ | ----------------------------------------------- | | **Network Data Source** | NetFlows | | **Network Data Labeled** | Yes | | **Host Data Source** | Syslog, auditd | | **Host Data Labeled**...">
+
+  
+  <meta name="twitter:image" content="/COMIDDS/assets/img/avatar-icon.png">
+  
+
+  
+
+
+  
+
+  
+  
+
+  
+
+</head>
+
+
+<body>
+  
+
+
+  <nav class="navbar navbar-expand-xl navbar-light fixed-top navbar-custom top-nav-regular"><a class="navbar-brand" href="/COMIDDS/">COMIDDS</a><button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#main-navbar" aria-controls="main-navbar" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+
+  <div class="collapse navbar-collapse" id="main-navbar">
+    <ul class="navbar-nav ml-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="/COMIDDS/content/all_datasets">All Datasets</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/COMIDDS/content/csv_download">CSV Download</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/COMIDDS/content/related_work">Related Work</a>
+          </li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">More</a>
+            <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown">
+                  <a class="dropdown-item" href="/COMIDDS/content/statistics">Statistics</a>
+                  <a class="dropdown-item" href="/COMIDDS/content/contributing">Contributing</a>
+                  <a class="dropdown-item" href="/COMIDDS/content/about">About</a>
+            </div>
+          </li>
+        
+        <li class="nav-item">
+          <a class="nav-link" id="nav-search-link" href="#" title="Search">
+            <span id="nav-search-icon" class="fa fa-search"></span>
+            <span id="nav-search-text">Search</span>
+          </a>
+        </li></ul>
+  </div>
+
+  
+
+  
+    <div class="avatar-container">
+      <div class="avatar-img-border">
+        <a href="/COMIDDS/">
+          <img alt="Navigation bar avatar" class="avatar-img" src="/COMIDDS/assets/img/avatar-icon.png" />
+        </a>
+      </div>
+    </div>
+  
+
+</nav>
+
+
+
+<div id="beautifuljekyll-search-overlay">
+
+  <div id="nav-search-exit" title="Exit search">✕</div>
+  <input type="text" id="nav-search-input" placeholder="Search">
+  <ul id="search-results-container"></ul>
+  
+  <script src="https://unpkg.com/simple-jekyll-search@latest/dest/simple-jekyll-search.min.js"></script>
+  <script>
+    var searchjson = '[ \
+       \
+        { \
+          "title"    : "News in 1.9.0", \
+          "desc"     : "News in 1.9.0", \
+          "category" : "datasetsfeatures", \
+          "url"      : "/COMIDDS/2026-01-21-version-1-9/", \
+          "date"     : "January 21, 2026" \
+        }, \
+       \
+        { \
+          "title"    : "News in 1.8.0", \
+          "desc"     : "News in 1.8.0", \
+          "category" : "datasetsfeatures", \
+          "url"      : "/COMIDDS/2025-07-22-version-1-8/", \
+          "date"     : "July 22, 2025" \
+        }, \
+       \
+        { \
+          "title"    : "News in 1.7.0", \
+          "desc"     : "News in 1.7.0", \
+          "category" : "datasetsfeatures", \
+          "url"      : "/COMIDDS/2025-02-06-version-1-7/", \
+          "date"     : "February  6, 2025" \
+        }, \
+       \
+        { \
+          "title"    : "News in 1.6.0", \
+          "desc"     : "News in 1.6.0", \
+          "category" : "datasetsfeatures", \
+          "url"      : "/COMIDDS/2024-09-23-version-1-6/", \
+          "date"     : "September 23, 2024" \
+        }, \
+       \
+        { \
+          "title"    : "News in 1.5.0", \
+          "desc"     : "News in 1.5.0", \
+          "category" : "datasetfeatures", \
+          "url"      : "/COMIDDS/2024-07-22-version-1-5/", \
+          "date"     : "July 22, 2024" \
+        }, \
+       \
+        { \
+          "title"    : "News in v1.4.0", \
+          "desc"     : "News in v1.4.0", \
+          "category" : "datasetfeatures", \
+          "url"      : "/COMIDDS/2024-06-04-version-1-4/", \
+          "date"     : "June  4, 2024" \
+        }, \
+       \
+        { \
+          "title"    : "News in v1.3.0", \
+          "desc"     : "News in v1.3.0", \
+          "category" : "datasetfeatures", \
+          "url"      : "/COMIDDS/2024-04-17-csv-download/", \
+          "date"     : "April 17, 2024" \
+        }, \
+       \
+        { \
+          "title"    : "News in v1.2.0", \
+          "desc"     : "News in v1.2.0", \
+          "category" : "datasets", \
+          "url"      : "/COMIDDS/2024-04-04-new-datasets/", \
+          "date"     : "April  4, 2024" \
+        }, \
+       \
+        { \
+          "title"    : "Related Work added", \
+          "desc"     : "Related Work added", \
+          "category" : "features", \
+          "url"      : "/COMIDDS/2024-02-21-related-work/", \
+          "date"     : "February 21, 2024" \
+        }, \
+       \
+        { \
+          "title"    : "First release of COMIDDS", \
+          "desc"     : "First release of COMIDDS", \
+          "category" : "datasetsfeatures", \
+          "url"      : "/COMIDDS/2024-01-23-initial-post/", \
+          "date"     : "January 23, 2024" \
+        }, \
+       \
+       \
+        { \
+          "title"    : "About", \
+          "desc"     : "About", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/about/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "ADFA Linux Dataset", \
+          "desc"     : "ADFA Linux Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/adfa_ld/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "ADFA WD", \
+          "desc"     : "ADFA WD", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/adfa_wd/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "AIT Alert Data Set", \
+          "desc"     : "AIT Alert Data Set", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/ait_alert_dataset/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "AIT Log Data Set", \
+          "desc"     : "AIT Log Data Set", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/ait_log_dataset/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "All Datasets", \
+          "desc"     : "All Datasets", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/all_datasets/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "ASNM Datasets", \
+          "desc"     : "ASNM Datasets", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/asnm_datasets/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "AWID", \
+          "desc"     : "AWID", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/awid/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "AWSCTD", \
+          "desc"     : "AWSCTD", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/awsctd/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Biblio-US17", \
+          "desc"     : "Biblio-US17", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/biblio_us17/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CasinoLimit", \
+          "desc"     : "CasinoLimit", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/casinolimit/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CDX CTF 2009", \
+          "desc"     : "CDX CTF 2009", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/cdx_2009/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CICDDos2019", \
+          "desc"     : "CICDDos2019", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/cic_ddos/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CIC DoS", \
+          "desc"     : "CIC DoS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/cic_dos/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CIC-IDS2017", \
+          "desc"     : "CIC-IDS2017", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/cic_ids2017/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CIDD", \
+          "desc"     : "CIDD", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/cidd/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CLUE-LDS", \
+          "desc"     : "CLUE-LDS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/clue_lds/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Comprehensive, Multi-Source Cybersecurity Events", \
+          "desc"     : "Comprehensive, Multi-Source Cybersecurity Events", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/comp_multi_source_cybersec_events/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Contribution Guide", \
+          "desc"     : "Contribution Guide", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/contributing/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CSE-CIC-IDS2018", \
+          "desc"     : "CSE-CIC-IDS2018", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/cse_cic_ids2018/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CSV Download", \
+          "desc"     : "CSV Download", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/csv_download/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "CTU-13 Dataset", \
+          "desc"     : "CTU-13 Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/ctu_13/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "DAPT 2020", \
+          "desc"     : "DAPT 2020", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/dapt2020/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "DARPA&#39;98 Intrusion Detection Program", \
+          "desc"     : "DARPA&#39;98 Intrusion Detection Program", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/darpa98/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "DARPA TC3", \
+          "desc"     : "DARPA TC3", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/darpa_tc3/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "DARPA TC5", \
+          "desc"     : "DARPA TC5", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/darpa_tc5/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "DEDALE", \
+          "desc"     : "DEDALE", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/dedale/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "EVTX to MITRE ATT&amp;CK", \
+          "desc"     : "EVTX to MITRE ATT&amp;CK", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/evtx_to_mitre_attck/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "FLNET2023", \
+          "desc"     : "FLNET2023", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/flnet2023/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "gureKDDCup", \
+          "desc"     : "gureKDDCup", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/gure_kddcup/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "I-Sec-IDS", \
+          "desc"     : "I-Sec-IDS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/i_sec_ids/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "IDEA Dataset", \
+          "desc"     : "IDEA Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/idea_2020/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "COMIDDS", \
+          "desc"     : "COMIDDS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "ISCX Botnet Dataset 2014", \
+          "desc"     : "ISCX Botnet Dataset 2014", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/iscx_botnet_2014/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "ISCX IDS 2012", \
+          "desc"     : "ISCX IDS 2012", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/iscx_ids_2012/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "ISOT BOTNET", \
+          "desc"     : "ISOT BOTNET", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/isot_botnet/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "KDD Cup 1999", \
+          "desc"     : "KDD Cup 1999", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/kdd_cup_1999/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Kyoto Honeypot Dataset", \
+          "desc"     : "Kyoto Honeypot Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/kyoto_honeypot/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "LID-DS 2019", \
+          "desc"     : "LID-DS 2019", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/lids_ds_2019/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "NF-UQ-NIDS", \
+          "desc"     : "NF-UQ-NIDS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/nf_uq_nids/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "NGIDS Dataset", \
+          "desc"     : "NGIDS Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/ngids_dataset/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "NSL-KDD", \
+          "desc"     : "NSL-KDD", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/nsl_kdd_dataset/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "OD-IDS2022", \
+          "desc"     : "OD-IDS2022", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/od_ids2022/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "OpTC", \
+          "desc"     : "OpTC", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/optc/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "OTFR APT 29", \
+          "desc"     : "OTFR APT 29", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/otfr_apt_29/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "OTFR APT 3", \
+          "desc"     : "OTFR APT 3", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/otfr_apt_3/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "OTFR Atomic Security Datasets", \
+          "desc"     : "OTFR Atomic Security Datasets", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/otfr_atomic/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "SimuLand Golden SAML Dataset", \
+          "desc"     : "SimuLand Golden SAML Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/otfr_golden_saml/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "OTFR Log4Shell", \
+          "desc"     : "OTFR Log4Shell", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/otfr_log4shell/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "OTFR LSASS Campaign", \
+          "desc"     : "OTFR LSASS Campaign", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/otfr_lsass_campaign/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "PWNJUTSU", \
+          "desc"     : "PWNJUTSU", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/pwnjutsu/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Related Work", \
+          "desc"     : "Related Work", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/related_work/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Skopik 2014", \
+          "desc"     : "Skopik 2014", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/skopik_et_al/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "SOCBED Example Dataset", \
+          "desc"     : "SOCBED Example Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/socbed_dataset/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "SR-BH 2020", \
+          "desc"     : "SR-BH 2020", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/sr_bh_2020/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Dataset Statistics", \
+          "desc"     : "Dataset Statistics", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/statistics/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Tag Index", \
+          "desc"     : "Tag Index", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/tags/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "TUIDS", \
+          "desc"     : "TUIDS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/tuids/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Twente 2009 Dataset", \
+          "desc"     : "Twente 2009 Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/twente_2009/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Twente 2014 Dataset", \
+          "desc"     : "Twente 2014 Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/twente_2014/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "UGR&#39;16", \
+          "desc"     : "UGR&#39;16", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/ugr16/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "UNIBS", \
+          "desc"     : "UNIBS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/unibs/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Unified Host and Network Dataset", \
+          "desc"     : "Unified Host and Network Dataset", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/unified_host_and_network_dataset/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "UNR-IDD", \
+          "desc"     : "UNR-IDD", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/unr_idd/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "Unraveled", \
+          "desc"     : "Unraveled", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/unraveled/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "UNSW-NB15", \
+          "desc"     : "UNSW-NB15", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/unsw_nb15/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "User-Computer Authentication Associations in Time", \
+          "desc"     : "User-Computer Authentication Associations in Time", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/user_computer_associations/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "UWF-ZeekData22", \
+          "desc"     : "UWF-ZeekData22", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/uwf_zeekdata22/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "VAST Challenge 2011", \
+          "desc"     : "VAST Challenge 2011", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/vast_2011/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "VAST Challenge 2012", \
+          "desc"     : "VAST Challenge 2012", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/content/datasets/vast_2012/", \
+          "date"     : "January 1, 1970" \
+        }, \
+       \
+        { \
+          "title"    : "COMIDDS", \
+          "desc"     : "COMIDDS", \
+          "category" : "page", \
+          "url"      : "/COMIDDS/page2/", \
+          "date"     : "January 1, 1970" \
+        } \
+       \
+    ]';
+    searchjson = JSON.parse(searchjson);
+
+    var sjs = SimpleJekyllSearch({
+      searchInput: document.getElementById('nav-search-input'),
+      resultsContainer: document.getElementById('search-results-container'),
+      json: searchjson
+    });
+  </script>
+</div>
+
+
+
+
+
+  
+
+
+
+<header class="header-section ">
+<div class="intro-header ">
+  
+  <div class="container-md">
+    <div class="row">
+      <div class="col-xl-8 offset-xl-2 col-lg-10 offset-lg-1">
+        <div class="page-heading">
+          <h1>CasinoLimit</h1>
+          
+          
+          
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  
+</div>
+
+
+
+</header>
+
+
+<main class=" container-md ">
+  <div class="row">
+    <div class=" col-xl-8 offset-xl-2 col-lg-10 offset-lg-1 ">
+      
+
+      <ul>
+  <li><a href="#overview">Overview</a></li>
+  <li><a href="#environment">Environment</a></li>
+  <li><a href="#activity">Activity</a></li>
+  <li><a href="#contained-data">Contained Data</a></li>
+  <li><a href="#papers">Papers</a></li>
+  <li><a href="#links">Links</a></li>
+  <li><a href="#data-examples">Data Examples</a></li>
+</ul>
+
+<table>
+  <thead>
+    <tr>
+      <th><!-- --></th>
+      <th><!-- --></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Network Data Source</strong></td>
+      <td>NetFlows</td>
+    </tr>
+    <tr>
+      <td><strong>Network Data Labeled</strong></td>
+      <td>Yes</td>
+    </tr>
+    <tr>
+      <td><strong>Host Data Source</strong></td>
+      <td>Syslog, auditd</td>
+    </tr>
+    <tr>
+      <td><strong>Host Data Labeled</strong></td>
+      <td>Yes</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td><strong>Overall Setting</strong></td>
+      <td>Enterprise IT</td>
+    </tr>
+    <tr>
+      <td><strong>OS Types</strong></td>
+      <td>Linux</td>
+    </tr>
+    <tr>
+      <td><strong>Number of Machines</strong></td>
+      <td>4 (+ Attacker)</td>
+    </tr>
+    <tr>
+      <td><strong>Total Runtime</strong></td>
+      <td>11 hours</td>
+    </tr>
+    <tr>
+      <td><strong>Year of Collection</strong></td>
+      <td>2024</td>
+    </tr>
+    <tr>
+      <td><strong>Attack Categories</strong></td>
+      <td>Most ATT&amp;CK tactics</td>
+    </tr>
+    <tr>
+      <td><strong>User Emulation</strong></td>
+      <td>None</td>
+    </tr>
+    <tr>
+      <td> </td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td><strong>Packed Size</strong></td>
+      <td>3,6 GB</td>
+    </tr>
+    <tr>
+      <td><strong>Unpacked Size</strong></td>
+      <td>54,4 GB</td>
+    </tr>
+    <tr>
+      <td><strong>Download Link</strong></td>
+      <td><a href="https://doi.org/10.5281/zenodo.15278062">goto</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<hr />
+
+<h3 id="overview">Overview</h3>
+<p>The CasinoLimit dataset is a set of labeled logs collected from 114 individual attack campaigns, all performed against (copies of) the same target during the Breizh CTF 2024.
+Notably, labels are not binary, but instead describe the associated MITRE ATT&amp;CK technique of the associated log.
+The dataset is aimed at providing a basis for kill-chain analysis and attacker identification via command inspection, though it does not feature any benign behavior.</p>
+
+<h3 id="environment">Environment</h3>
+<p>Each team was provided with an isolated environment that featured 4 Linux hosts distributed across two networks.
+Players are given SSH credentials for the first machine and are then meant to move laterally and horizontally through the environment, finding various vulnerabilities as well as clues leading them to these vulnerabilities.
+The authors used the <a href="https://gitlab.inria.fr/pirat-public/ursid">URSID</a> tool for automated and repeatable deployment.
+All interactions from players are purely command-line based.</p>
+
+<h3 id="activity">Activity</h3>
+<p>Players were tasked with deleting a specific entry in a database, followed by reading a flag found in an email sent to an admin account.
+The “minimal” path to achieve this goal contained the following techniques:</p>
+<ul>
+  <li>T1021: Remote Services</li>
+  <li>T1125: Video Capture</li>
+  <li>T1021: Remote Services</li>
+  <li>T1068: Exploitation for Privilege Escalation</li>
+  <li>T1190: Exploit Public-Facing Application</li>
+  <li>T1485: Data Destruction</li>
+  <li>T1114: Email Collection</li>
+</ul>
+
+<p>Refer to Section 3c of the paper for a detailed description of the attack path.
+Since players naturally didn’t strictly adhere to this path, the  final labels contain techniques from all MITRE ATT&amp;CK tactics, except for Initial Access and Execution.</p>
+
+<h3 id="contained-data">Contained Data</h3>
+<p>All hosts and their network traffic were monitored to collect kernel and user-space events as well as network flows.
+The authors further filtered these to contain only logs related to terminal interaction, arguing that only those are related to attacker actions.
+System logs are automatically labeled based on the command they originated from, followed by a manual review using the Manatee labeling tool.
+Created labels were then propagated to the network flows originating from the respective system events, resulting in the following six files:</p>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">labelled_flows.zip</code>: The network flows in unidirectional format with corresponding labels.</li>
+  <li><code class="language-plaintext highlighter-rouge">flows_zeek.zip</code>: The network flows in bidirectional format, extracted with Zeek.</li>
+  <li><code class="language-plaintext highlighter-rouge">syslogs.zip</code>: The linux system logs, including auditd logs.</li>
+  <li><code class="language-plaintext highlighter-rouge">syslogs_labels.zip</code>: The system logs labels for auditd events.</li>
+  <li><code class="language-plaintext highlighter-rouge">cache.zip</code>: The preprocessed data used by the Manatee labeling tool.</li>
+  <li><code class="language-plaintext highlighter-rouge">output.zip</code>: The output of the Manatee labeling tool, including system labels, relations, and validation data.</li>
+</ul>
+
+<p>Within each directory, data is structured by instance.
+The labels in <code class="language-plaintext highlighter-rouge">syslogs_labels</code> refer to entries in <code class="language-plaintext highlighter-rouge">syslog</code>.
+The authors also provide a <a href="https://gitlab.inria.fr/pirat-public/datasets/casinolimit/-/blob/main/datasheet_casinolimit.pdf">Datasheet</a> and a <a href="https://gitlab.inria.fr/pirat-public/datasets/casinolimit/-/blob/main/README.md?ref_type=heads">README</a>, supplying further details.</p>
+
+<h3 id="papers">Papers</h3>
+<ul>
+  <li><a href="https://hal.science/hal-05224264">CasinoLimit: An Offensive Dataset Labeled with MITRE ATT&amp;CK Techniques</a></li>
+</ul>
+
+<h3 id="links">Links</h3>
+<ul>
+  <li><a href="https://casinolimit.inria.fr/">Homepage</a></li>
+  <li><a href="https://gitlab.inria.fr/pirat-public/casinolimit">CasinoLimit Repo</a></li>
+  <li><a href="https://gitlab.inria.fr/pirat-public/datasets/casinolimit/-/blob/main/datasheet_casinolimit.pdf">Dataset Datasheet</a></li>
+</ul>
+
+<h3 id="data-examples">Data Examples</h3>
+<p>Snippet of entries from <code class="language-plaintext highlighter-rouge">syslog_labels/system_labels/aeriella.json</code></p>
+
+<!--   -->
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>{
+    "dfb6882f73d14be9a79882c50002658c": {         # Label UID as key
+        "id": "dfb6882f73d14be9a79882c50002658c", # Label UID
+        "auditd_events": {                        # Auditd events related to the label
+            "start": [                            # Machine name as key
+                "94050",                          # List of auditd event IDs
+                "94052"
+            ]
+        },
+        "technique": "T1069: Permission Groups Discovery" # MITRE ATT&amp;CK technique (format: &lt;id&gt;: &lt;name&gt;)
+    }
+}
+
+</code></pre></div></div>
+<!--   -->
+
+<p>Snippet of entries from <code class="language-plaintext highlighter-rouge">syslogs/syslogs/aerliella/start-56/audit.log</code> (labeled by the entry above)
+<!--   --></p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>type=PATH msg=audit(1715994529.336:94050): item=0 name="/etc/shadow" inode=4842 dev=08:01 mode=0100640 ouid=0 ogid=42 rdev=00:00 nametype=NORMAL cap_fp=0 cap_fi=0 cap_fe=0 cap_fver=0 cap_frootid=0 OUID="root" OGID="shadow"
+type=SYSCALL msg=audit(1715994529.336:94050): arch=c000003e syscall=257 success=yes exit=7 a0=ffffff9c a1=7fcff4efbbf9 a2=80000 a3=0 items=1 ppid=24962 pid=24968 auid=1001 uid=1001 gid=1001 euid=0 suid=0 fsuid=0 egid=1001 sgid=1001 fsgid=1001 tty=pts0 ses=59 comm="sudo" exe="/usr/bin/sudo" subj=unconfined key="etcpasswd" ARCH=x86_64 SYSCALL=openat AUID="tbenedict" UID="tbenedict" GID="tbenedict" EUID="root" SUID="root" FSUID="root" EGID="tbenedict" SGID="tbenedict" FSGID="tbenedict"
+type=PROCTITLE msg=audit(1715994529.336:94050): proctitle=7375646F002D6C
+type=PATH msg=audit(1715994529.336:94052): item=0 name="/etc/shadow" inode=4842 dev=08:01 mode=0100640 ouid=0 ogid=42 rdev=00:00 nametype=NORMAL cap_fp=0 cap_fi=0 cap_fe=0 cap_fver=0 cap_frootid=0 OUID="root" OGID="shadow"
+type=SYSCALL msg=audit(1715994529.336:94052): arch=c000003e syscall=257 success=yes exit=7 a0=ffffff9c a1=7fcff4efbbf9 a2=80000 a3=0 items=1 ppid=24962 pid=24968 auid=1001 uid=1001 gid=1001 euid=0 suid=0 fsuid=0 egid=1001 sgid=1001 fsgid=1001 tty=pts0 ses=59 comm="sudo" exe="/usr/bin/sudo" subj=unconfined key="etcpasswd" ARCH=x86_64 SYSCALL=openat AUID="tbenedict" UID="tbenedict" GID="tbenedict" EUID="root" SUID="root" FSUID="root" EGID="tbenedict" SGID="tbenedict" FSGID="tbenedict"
+type=PROCTITLE msg=audit(1715994529.336:94052): proctitle=7375646F002D6C
+</code></pre></div></div>
+<!--   -->
+
+
+
+      
+
+      
+
+    </div>
+  </div>
+</main>
+
+
+  <footer>
+  <div class="container-md beautiful-jekyll-footer">
+    <div class="row">
+      <div class="col-xl-8 offset-xl-2 col-lg-10 offset-lg-1">
+      
+<ul class="list-inline text-center footer-links"><li class="list-inline-item">
+    <a href="https://github.com/fkie-cad" title="GitHub">
+      <span class="fa-stack fa-lg" aria-hidden="true">
+        <i class="fas fa-circle fa-stack-2x"></i>
+        <i class="fab fa-github fa-stack-1x fa-inverse"></i>
+      </span>
+      <span class="sr-only">GitHub</span>
+   </a>
+  </li></ul>
+
+      
+      <p class="copyright text-muted">
+      
+        Fraunhofer FKIE, Philipp Bönninghausen
+        &nbsp;&bull;&nbsp;
+      
+      2026
+
+      
+        &nbsp;&bull;&nbsp;
+        <span class="author-site">
+          <a href="/COMIDDS/">COMIDDS</a>
+        </span>
+      
+
+      
+
+      
+
+      </p>
+      <p class="theme-by text-muted">
+        Powered by
+        <a href="https://beautifuljekyll.com">Beautiful Jekyll</a>
+      </p>
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+  
+  
+    
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha256-4+XzXVhsDmqanXGHaHvgh1gMQKX40OUvDEBTu8JcmNs=" crossorigin="anonymous"></script>
+
+
+  
+    
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+
+
+  
+    
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+
+
+  
+
+
+
+  
+    <!-- doing something a bit funky here because I want to be careful not to include JQuery twice! -->
+    
+      <script src="/COMIDDS/assets/js/beautifuljekyll.js"></script>
+    
+  
+
+
+
+
+
+
+
+
+
+</body>
+</html>

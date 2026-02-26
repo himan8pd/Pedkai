@@ -1,0 +1,633 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2868
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 .SFNS-Semibold;\f1\fnil\fcharset0 .SFNS-Regular;\f2\fnil\fcharset0 HelveticaNeue-Bold;
+\f3\fswiss\fcharset0 Helvetica;\f4\fnil\fcharset0 .AppleSystemUIFontMonospaced-Regular;\f5\fnil\fcharset0 .SFNS-Bold;
+}
+{\colortbl;\red255\green255\blue255;\red14\green14\blue14;}
+{\*\expandedcolortbl;;\cssrgb\c6700\c6700\c6700;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww13960\viewh14400\viewkind0
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 Forensic Vision Alignment & Production Readiness Audit
+\f1\b0\fs32 \
+\
+Act as a 
+\f2\b Principal Product Architect, Security Engineer, and Forensic Code Auditor
+\f1\b0  responsible for approving (or rejecting) this system for external production pilot deployment.\
+\
+Your mandate is to determine \'97 with evidence \'97 whether the current implementation faithfully, securely, and completely delivers the original and evolved product vision.\
+\
+You are accountable for the final Go / Conditional Go / No-Go decision.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 INPUT SCOPE (Project Base Directory)
+\f1\b0\fs32 \
+\
+You must use 
+\f2\b only canonical materials in the base directory
+\f1\b0 , including:\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs34 \cf2 Vision & Evolution Sources (Read in Exact Order)
+\f1\b0\fs32 \
+\pard\tqr\tx280\tx440\li440\fi-440\sl324\slmult1\sb240\partightenfactor0
+\cf2 	1.	
+\f4 pedkai.rtf
+\f1  \'97 Original product idea\
+	2.	
+\f4 pedkai.md
+\f1  \'97 Expanded concept and proposed architecture\
+	3.	All 
+\f4 demo*.html
+\f1  files \'97 Demonstrations of intended UX and customer value\
+	4.	All review documents \'97 Multi-round, multi-perspective critiques\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs34 \cf2 Implementation
+\f1\b0\fs32 \
+\pard\tqr\tx280\tx440\li440\fi-440\sl324\slmult1\sb240\partightenfactor0
+\cf2 	5.	The 
+\f2\b entire current codebase
+\f1\b0  (recursive scan)\
+\
+Exclude build artifacts and vendor directories unless referenced explicitly (e.g., 
+\f4 node_modules
+\f1 , 
+\f4 .venv
+\f1 , 
+\f4 dist
+\f1 , 
+\f4 build
+\f1 , 
+\f4 *.min.*
+\f1 , large binaries).\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 PHASE 1 \'97 Vision Reconstruction & Historical Synthesis
+\f1\b0\fs32 \
+\
+Do not touch the codebase until this phase is complete.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 1.1 Reconstruct the Original Intent
+\f1\b0\fs32 \
+\
+From 
+\f4 pedkai.rtf
+\f1 :\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Core concept\
+	\'95	Target users\
+	\'95	Problem being solved\
+	\'95	Value proposition\
+	\'95	Implicit assumptions\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 1.2 Identify Evolution
+\f1\b0\fs32 \
+\
+From 
+\f4 pedkai.md
+\f1 :\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Structural refinements\
+	\'95	Architectural direction\
+	\'95	Capability expansion\
+	\'95	Non-functional commitments (security, scalability, reliability, UX)\
+	\'95	Design constraints\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 1.3 Extract Behavioral Contract
+\f1\b0\fs32 \
+\
+From 
+\f4 demo*.html
+\f1 :\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Intended UX flows\
+	\'95	User journeys\
+	\'95	Interaction models\
+	\'95	Value delivery moments\
+	\'95	Implied system guarantees\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 1.4 Review History & Strategic Drift
+\f1\b0\fs32 \
+\
+From review documents:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Previously identified risks\
+	\'95	Architectural concerns\
+	\'95	UX critiques\
+	\'95	Security observations\
+	\'95	Issues marked resolved\
+	\'95	Recurring or unresolved concerns\
+	\'95	Decisions made and rationale\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 1.5 Produce a Clear Product Contract
+\f1\b0\fs32 \
+\
+Synthesize:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	The true product intent\
+	\'95	The evolved product contract\
+	\'95	Functional requirements\
+	\'95	Non-functional requirements\
+	\'95	Success criteria\
+	\'95	Pilot expectations\
+	\'95	Explicit and implicit commitments\
+\
+If documents conflict, document the conflict explicitly.\
+\
+Do not proceed until the product vision is unambiguous.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 PHASE 2 \'97 Vision-to-Implementation Traceability
+\f1\b0\fs32 \
+\
+Create a 
+\f2\b traceability matrix
+\f1\b0  mapping:
+\f3\fs24 \cf0 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f5\b\fs30 \cf2 Requirement
+\f3\b0\fs24 \cf0 	
+\f5\b\fs30 \cf2 Source (File + Quote/Section)
+\f3\b0\fs24 \cf0 	
+\f5\b\fs30 \cf2 Code Artifact(s)
+\f3\b0\fs24 \cf0 	
+\f5\b\fs30 \cf2 Status
+\f3\b0\fs24 \cf0 \
+\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 Status must be:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Fully Met\
+	\'95	Partially Met\
+	\'95	Not Met\
+	\'95	At Risk\
+\
+Every requirement must map to:\
+	\'95	Specific files\
+	\'95	Specific functions/classes/modules\
+	\'95	Line numbers where possible\
+	\'95	Related tests (if any)\
+\
+No requirement should remain unexamined.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 PHASE 3 \'97 Forensic Codebase Audit
+\f1\b0\fs32 \
+\
+Perform a systematic, evidence-based audit of the entire repository.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.1 Functional Completeness
+\f1\b0\fs32 \
+\
+Verify:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Feature coverage vs vision\
+	\'95	Demo parity\
+	\'95	Edge case handling\
+	\'95	Error states\
+	\'95	State management consistency\
+	\'95	Data validation and integrity\
+\
+Identify:\
+	\'95	Gaps\
+	\'95	Underimplementation\
+	\'95	Overengineering\
+	\'95	Silent assumptions\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.2 Architecture & Design Integrity
+\f1\b0\fs32 \
+\
+Evaluate:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Modularity and separation of concerns\
+	\'95	Coupling and cohesion\
+	\'95	API boundaries\
+	\'95	Data flow clarity\
+	\'95	Configuration management\
+	\'95	Logging and observability\
+	\'95	Environment handling\
+	\'95	Deployment assumptions\
+\
+Identify fragile components and structural risks.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.3 Security Assessment (OWASP-Aligned)
+\f1\b0\fs32 \
+\
+Assess against OWASP Top 10 categories:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Injection risks\
+	\'95	Broken authentication\
+	\'95	Broken access control\
+	\'95	Insecure direct object references\
+	\'95	Cryptographic misuse\
+	\'95	Secrets exposure\
+	\'95	Dependency vulnerabilities\
+	\'95	SSRF risks\
+	\'95	Input validation gaps\
+	\'95	XSS / CSRF exposure\
+	\'95	Misconfigured CORS\
+	\'95	Unsafe deserialization\
+	\'95	Security headers\
+\
+For each issue:\
+	\'95	Severity: Critical / High / Medium / Low\
+	\'95	Likelihood\
+	\'95	Impact\
+	\'95	Exact file references\
+	\'95	Recommended remediation\
+\
+Explicitly identify:\
+	\'95	Hardcoded secrets\
+	\'95	API keys\
+	\'95	Credentials\
+	\'95	Debug backdoors\
+	\'95	Unsafe environment variable handling\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.4 Privacy & Data Handling
+\f1\b0\fs32 \
+\
+Evaluate:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	PII collection\
+	\'95	Data storage\
+	\'95	Retention assumptions\
+	\'95	Encryption at rest/in transit assumptions\
+	\'95	Logging of sensitive data\
+	\'95	Data minimization compliance\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.5 Dependencies & Supply Chain
+\f1\b0\fs32 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Outdated libraries\
+	\'95	Known vulnerabilities (if inferable)\
+	\'95	License risks\
+	\'95	Supply chain exposure\
+\
+If you cannot execute audits, describe what commands would be run and expected findings.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.6 Code Quality & Maintainability
+\f1\b0\fs32 \
+\
+Identify:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Dead code\
+	\'95	Duplicate logic\
+	\'95	TODO/FIXME markers\
+	\'95	Excessive complexity\
+	\'95	Missing documentation\
+	\'95	Technical debt accumulation\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.7 Testing & Reliability
+\f1\b0\fs32 \
+\
+Evaluate:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Unit coverage\
+	\'95	Integration coverage\
+	\'95	E2E coverage\
+	\'95	Test reliability\
+	\'95	CI/CD signals (if present)\
+\
+Identify untested critical paths.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.8 Performance & Scalability Risks
+\f1\b0\fs32 \
+\
+Identify:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Blocking operations\
+	\'95	N+1 patterns\
+	\'95	Hot paths\
+	\'95	Client-side bottlenecks (from demos)\
+	\'95	Scalability ceilings\
+	\'95	Resource assumptions\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3.9 Accessibility & UX Risks
+\f1\b0\fs32 \
+\
+From demos and implementation:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Accessibility violations (contrast, ARIA, keyboard nav)\
+	\'95	UX inconsistencies\
+	\'95	Flows that undermine stated value\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 PHASE 4 \'97 Review & Bug Reconciliation
+\f1\b0\fs32 \
+\
+From review documents:\
+\
+For each previously identified issue:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Original concern\
+	\'95	Expected resolution\
+	\'95	Current status (Resolved / Partially / Not Resolved)\
+	\'95	Evidence in code\
+	\'95	Reproduction steps (if applicable)\
+\
+Highlight unresolved or recurring issues.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 PHASE 5 \'97 Risk & Gap Classification
+\f1\b0\fs32 \
+\
+For every finding:\
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Category (Functional / Architectural / Security / UX / Performance / Process)\
+	\'95	Severity (Critical / High / Medium / Low)\
+	\'95	Likelihood\
+	\'95	Impact\
+	\'95	Blocking status for pilot (Yes / Conditional / No)\
+	\'95	Clear remediation recommendation\
+\
+Distinguish:\
+	\'95	Verified facts (directly observed)\
+	\'95	Inferences (clearly labeled)\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 DELIVERABLE FORMAT
+\f1\b0\fs32 \
+\
+Produce a single, structured Markdown report:\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 Product Vision Alignment & Forensic Code Review Report
+\f1\b0\fs32 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 1. Executive Summary
+\f1\b0\fs32 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Overall state\
+	\'95	Top 5 risks\
+	\'95	Alignment confidence level\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 2. Reconstructed Product Vision
+\f1\b0\fs32 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Original intent\
+	\'95	Evolution\
+	\'95	Final product contract\
+	\'95	Success criteria\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 3. Evolution Timeline & Strategic Drift
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 4. Traceability Matrix
+\f1\b0\fs32 \
+\
+(Vision \uc0\u8594  Code \u8594  Status)\
+\
+
+\f0\b\fs38 5. Alignment Analysis
+\f1\b0\fs32 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Fully Delivered\
+	\'95	Partially Delivered\
+	\'95	Not Delivered\
+	\'95	Overimplemented\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs38 \cf2 6. Security & Risk Assessment
+\f1\b0\fs32 \
+\
+(OWASP-aligned, severity-ranked)\
+\
+
+\f0\b\fs38 7. Architecture & Technical Debt Review
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 8. Testing & Reliability Assessment
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 9. Performance & Scalability Risks
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 10. Accessibility & UX Risks
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 11. Outstanding Issues & Review Reconciliation
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 12. Gaps, Risks & Prioritized Remediation Plan
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 13. Open Questions & Assumptions
+\f1\b0\fs32 \
+\
+
+\f0\b\fs38 14. Production Pilot Readiness Assessment
+\f1\b0\fs32 \
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs34 \cf2 Decision:
+\f1\b0\fs32 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Go\
+	\'95	Conditional Go (with explicit prerequisites)\
+	\'95	No-Go\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs34 \cf2 Production Pilot Readiness Statement:
+\f1\b0\fs32 \
+\
+A single unambiguous sentence:\
+\
+\pard\tx860\tx1420\tx1980\tx2540\tx3100\tx3660\tx4220\tx4780\tx5340\tx5900\tx6460\tx7020\li300\sl324\slmult1\partightenfactor0
+\cf2 \'93The codebase IS / IS NOT ready for a production pilot.\'94\
+\
+Followed by concise justification.\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs34 \cf2 Confidence Level:
+\f1\b0\fs32 \
+\
+Low / Moderate / High\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 RIGOR REQUIREMENTS
+\f1\b0\fs32 \
+\pard\tqr\tx100\tx260\li260\fi-260\sl324\slmult1\sb240\partightenfactor0
+\cf2 	\'95	Cite exact file paths and line numbers for all findings.\
+	\'95	Quote or reference vision documents when identifying misalignment.\
+	\'95	Separate facts from interpretation.\
+	\'95	Do not provide generic advice.\
+	\'95	Assume you are personally accountable for approving public deployment.\
+	\'95	Do not skip any category.\
+	\'95	If information is missing, explicitly state it.\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f3\fs24 \cf0 \
+\uc0\u11835 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f1\fs32 \cf2 \
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\sl324\slmult1\pardirnatural\partightenfactor0
+
+\f0\b\fs48 \cf2 OBJECTIVE
+\f1\b0\fs32 \
+\
+Determine \'97 with precision and evidence \'97 whether the current implementation faithfully, securely, and completely delivers the original and evolved product vision and whether it is safe to deploy to an external pilot audience.\
+\
+This is a forensic audit, not a surface review.}
