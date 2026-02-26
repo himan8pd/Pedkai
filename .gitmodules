@@ -1,0 +1,3 @@
+[submodule "datagerry_cmdb"]
+	path = datagerry_cmdb
+	url = https://github.com/DATAGerry/DATAGerry
