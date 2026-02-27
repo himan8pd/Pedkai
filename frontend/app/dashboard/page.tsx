@@ -90,6 +90,16 @@ export default function DashboardPage() {
         alarms={alarms}
         selectedAlarm={selectedAlarm}
         onSelectAlarm={(a) => setSelectedAlarm(a)}
+        onAcknowledge={(id) => {
+          setAlarms((current) =>
+            current.map((alarm) =>
+              alarm.id === id ? { ...alarm, ackState: 'acknowledged' } : alarm
+            )
+          )
+          setSelectedAlarm((current: any) =>
+            current?.id === id ? { ...current, ackState: 'acknowledged' } : current
+          )
+        }}
         scorecard={scorecard}
       />
     </div>

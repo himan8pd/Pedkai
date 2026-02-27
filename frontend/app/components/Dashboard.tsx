@@ -11,6 +11,7 @@ interface DashboardProps {
   alarms: any[]
   selectedAlarm: any
   onSelectAlarm: (alarm: any) => void
+  onAcknowledge: (id: string) => void
   scorecard: any
 }
 
@@ -19,6 +20,7 @@ export default function Dashboard({
   alarms,
   selectedAlarm,
   onSelectAlarm,
+  onAcknowledge,
   scorecard,
 }: DashboardProps) {
   return (
@@ -32,28 +34,23 @@ export default function Dashboard({
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
-          title="Active Alarms"
-          value={alarms.length}
-          unit="events"
+          label="Active Alarms"
+          value={`${alarms.length} events`}
           icon={<AlertCircle className="w-6 h-6" />}
-          trend={alarms.length > 10 ? 'up' : 'down'}
         />
         <StatCard
-          title="Avg MTTR"
-          value={scorecard?.avg_mttr ?? 'N/A'}
-          unit="minutes"
+          label="Avg MTTR"
+          value={scorecard?.avg_mttr ? `${scorecard.avg_mttr} minutes` : 'N/A'}
           icon={<Zap className="w-6 h-6" />}
         />
         <StatCard
-          title="Uptime"
-          value={scorecard?.uptime_pct ?? 'N/A'}
-          unit="%"
+          label="Uptime"
+          value={scorecard?.uptime_pct ? `${scorecard.uptime_pct}%` : 'N/A'}
           icon={<AlertCircle className="w-6 h-6" />}
         />
         <StatCard
-          title="SLA Score"
-          value="98.5"
-          unit="%"
+          label="SLA Score"
+          value="98.5%"
           icon={<AlertCircle className="w-6 h-6" />}
         />
       </div>
@@ -74,7 +71,7 @@ export default function Dashboard({
                   key={alarm.id}
                   alarm={alarm}
                   isSelected={selectedAlarm?.id === alarm.id}
-                  onSelect={() => onSelectAlarm(alarm)}
+                  onClick={() => onSelectAlarm(alarm)}
                 />
               ))
             )}
@@ -84,7 +81,7 @@ export default function Dashboard({
         {/* SITREP Panel */}
         <div>
           <h2 className="text-xl font-bold text-white mb-4">AI SITREP</h2>
-          <SitrepPanel alarm={selectedAlarm} />
+          <SitrepPanel selectedAlarm={selectedAlarm} onAcknowledge={onAcknowledge} />
         </div>
       </div>
     </div>

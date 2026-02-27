@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { LayoutDashboard, AlertSquare, BarChart3, Network } from 'lucide-react'
+import { LayoutDashboard, AlertTriangle, BarChart3, Network } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePathname } from 'next/navigation'
 
@@ -11,7 +11,7 @@ export default function Navigation() {
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/incidents', label: 'Incidents', icon: AlertSquare },
+    { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
     { href: '/scorecard', label: 'Scorecard', icon: BarChart3 },
     { href: '/topology', label: 'Topology', icon: Network },
   ]
