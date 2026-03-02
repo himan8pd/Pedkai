@@ -9,7 +9,7 @@ WS5 — Autonomous Shield (Detection & Recommendation Only).
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Security, Query
 from sqlalchemy import select, func, and_, text
@@ -148,8 +148,13 @@ async def get_detections(
         baseline = 0.5
         current = baseline * (1 + drift_seed)
         
+        # Safe UUID conversion: try parsing, fall back to deterministic uuid5
+        try:
+            parsed_id = uuid.UUID(entity_id_str)
+        except (ValueError, AttributeError):
+            parsed_id = uuid.uuid5(uuid.NAMESPACE_OID, entity_id_str)
         detection = service.detect_drift(
-            entity_id=uuid.UUID(entity_id_str) if len(entity_id_str) == 36 else uuid.uuid4(),
+            entity_id=parsed_id,
             entity_name=entity_name,
             metric_name="data_throughput_gbps" if "cell" in entity_name.lower() else "latency_ms",
             current_value=current,
@@ -351,6 +356,20 @@ async def submit_autonomous_action(
 
     if not action_type or not entity_id:
         raise HTTPException(status_code=400, detail="action_type and entity_id required")
+
+    # Idempotency: check for a pending/running action of same type on same entity
+    from backend.app.models.autonomous_orm import ActionExecutionORM
+    existing = await db.execute(
+        select(ActionExecutionORM).where(
+            ActionExecutionORM.tenant_id == current_user.tenant_id,
+            ActionExecutionORM.action_type == action_type,
+            ActionExecutionORM.entity_id == entity_id,
+            ActionExecutionORM.state.in_(["PENDING", "RUNNING", "PENDING_CONFIRMATION"]),
+        ).limit(1)
+    )
+    dup = existing.scalar_one_or_none()
+    if dup:
+        return {"action_id": dup.id, "state": dup.state.value if hasattr(dup.state, 'value') else str(dup.state), "idempotent": True}
 
     executor = AutonomousActionExecutor(async_session_maker)
     # Ensure worker started (idempotent)

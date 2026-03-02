@@ -56,7 +56,7 @@ export default function FeedbackWidget({ decisionId, onFeedbackSubmitted }: Feed
                         >
                             <Star
                                 className={cn(
-                                    "w-5 h-5",
+                                    "w-7 h-7",
                                     s <= score ? "fill-amber-400 text-amber-400" : "text-slate-600 hover:text-slate-400"
                                 )}
                             />
@@ -69,7 +69,7 @@ export default function FeedbackWidget({ decisionId, onFeedbackSubmitted }: Feed
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Optional comment..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:ring-1 focus:ring-cyan-500 outline-none h-20 resize-none"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 focus:ring-1 focus:ring-cyan-500 outline-none h-32 resize-none"
             />
 
             <button

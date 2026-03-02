@@ -56,11 +56,11 @@ export default function Dashboard({
       </div>
 
       {/* Alarms + SITREP Side-by-side */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Alarm Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Alarm Feed — narrower column */}
         <div className="lg:col-span-2 space-y-4">
           <h2 className="text-xl font-bold text-white">Alarm Feed</h2>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-2 max-h-[600px] overflow-y-auto">
             {alarms.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 No active alarms
@@ -78,8 +78,8 @@ export default function Dashboard({
           </div>
         </div>
 
-        {/* SITREP Panel */}
-        <div>
+        {/* SITREP Panel — wider column */}
+        <div className="lg:col-span-3">
           <h2 className="text-xl font-bold text-white mb-4">AI SITREP</h2>
           <SitrepPanel selectedAlarm={selectedAlarm} onAcknowledge={onAcknowledge} />
         </div>

@@ -16,6 +16,7 @@ import time
 
 from backend.app.core.config import get_settings
 from backend.app.core.logging import setup_logging, get_logger, correlation_id_ctx
+from backend.app.core.database import async_session_maker
 from backend.app.api import decisions, health, tmf642, tmf628, auth, capacity, cx_router
 from backend.app.core.security import oauth2_scheme
 from backend.app.middleware.trace import TracingMiddleware
@@ -105,9 +106,18 @@ from backend.app.core.observability import setup_tracing
 
 app = FastAPI(
     title=settings.app_name,
-    description="Decision intelligence and automation for large-scale telcos",
+    description=(
+        "Decision intelligence and automation for large-scale telcos.\n\n"
+        "**Authentication:** Click the **Authorize** button (🔒) above, enter "
+        "username & password (e.g. `admin`/`admin` or `operator`/`operator`), "
+        "leave Client credentials blank, then click **Authorize**."
+    ),
     version=settings.app_version,
     lifespan=lifespan,
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+        "tryItOutEnabled": True,
+    },
 )
 
 # Initialize Tracing

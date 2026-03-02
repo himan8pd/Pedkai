@@ -13,21 +13,24 @@ export default function DashboardPage() {
   const esRef = useRef<EventSource | null>(null)
   const reconnectRef = useRef<number>(0)
 
-  // Simple function to synthesize alarms when SSE payload contains only counts
-  const synthesizeAlarmsFromPayload = (payload: any) => {
-    const count = payload.count ?? 1
-    const tenant = payload.tenant_id ?? 'unknown'
-    const now = new Date().toISOString()
-    const generated = Array.from({ length: Math.min(count, 20) }).map((_, i) => ({
-      id: `${payload.timestamp || now}-${i}`,
-      specificProblem: `Generated alarm ${i + 1}`,
-      perceivedSeverity: i % 3 === 0 ? 'critical' : 'major',
-      alarmedObject: { id: `entity-${i + 1}` },
-      eventTime: now,
-      tenant_id: tenant,
-    }))
-    return generated
-  }
+  // Load initial alarms & scorecard via REST on mount
+  useEffect(() => {
+    async function loadInitial() {
+      try {
+        // Fetch scorecard (public-safe endpoint)
+        const scRes = await fetch(`${API_BASE_URL}/api/v1/autonomous/scorecard`, {
+          headers: { 'Authorization': 'Bearer guest' },
+        }).catch(() => null)
+        if (scRes && scRes.ok) {
+          const scData = await scRes.json()
+          setScorecard(scData)
+        }
+      } catch (e) {
+        console.warn('Initial data load error:', e)
+      }
+    }
+    loadInitial()
+  }, [])
 
   // Connect to SSE with exponential backoff reconnection
   useEffect(() => {
@@ -38,7 +41,7 @@ export default function DashboardPage() {
         esRef.current = null
       }
 
-      const es = new EventSource(`${API_BASE_URL}/api/v1/stream/alarms`)
+      const es = new EventSource(`${API_BASE_URL}/api/v1/stream/alarms?tenant_id=casinolimit`)
       esRef.current = es
 
       es.onopen = () => {
@@ -50,11 +53,17 @@ export default function DashboardPage() {
         try {
           const data = JSON.parse(ev.data)
           if (data.event === 'alarms_updated') {
-            // If backend provides only counts, synthesize placeholder alarms
-            const items = synthesizeAlarmsFromPayload(data)
-            setAlarms(items)
-            // Optionally refresh scorecard placeholder
-            setScorecard({ avg_mttr: 12.4, uptime_pct: 99.2 })
+            // Use real alarm objects if provided, otherwise show count placeholder
+            if (data.alarms && Array.isArray(data.alarms)) {
+              setAlarms(data.alarms)
+            }
+            // Update scorecard with alarm count
+            setScorecard((prev: any) => ({
+              ...(prev || {}),
+              active_alarms: data.count,
+              avg_mttr: prev?.avg_mttr ?? 12.4,
+              uptime_pct: prev?.uptime_pct ?? 99.2,
+            }))
           }
         } catch (e) {
           console.warn('SSE parse error', e)

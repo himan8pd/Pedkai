@@ -137,10 +137,27 @@ async def create_incident(
             entity = entity_result.scalars().first()
             is_emergency = entity is not None
         except Exception as e:
+            # Rollback the failed sub-query to avoid poisoning the transaction
+            await db.rollback()
             logger.warning(f"Emergency service DB check failed: {e}")
 
     if is_emergency:
         severity = IncidentSeverity.CRITICAL
+
+    # Idempotency: check for duplicate incident (same title + entity within tenant)
+    tenant = current_user.tenant_id or payload.tenant_id
+    entity_str = str(payload.entity_id) if payload.entity_id else None
+    if payload.title and entity_str:
+        dup_result = await db.execute(
+            select(IncidentORM).where(
+                IncidentORM.tenant_id == tenant,
+                IncidentORM.title == payload.title,
+                IncidentORM.entity_id == entity_str,
+            ).limit(1)
+        )
+        existing = dup_result.scalars().first()
+        if existing:
+            return _to_response(existing)
 
     incident = IncidentORM(
         id=str(uuid.uuid4()),
@@ -178,7 +195,11 @@ async def list_incidents(
     """List incidents with optional filters."""
     query = select(IncidentORM)
     # Finding S-1 Fix: Mandatory tenant filtering
-    tid = current_user.tenant_id or tenant_id
+    # Admins can specify any tenant_id via query param; non-admins are locked to their own tenant
+    if current_user.role == "admin":
+        tid = tenant_id or current_user.tenant_id
+    else:
+        tid = current_user.tenant_id or tenant_id
     if not tid and current_user.role != "admin":
          raise HTTPException(status_code=403, detail="Tenant ID required for non-admin users.")
     
@@ -616,13 +637,27 @@ async def _get_or_404(db: AsyncSession, incident_id: str, tenant_id: Optional[st
 
 
 def _to_response(incident: IncidentORM) -> IncidentResponse:
+    # Derive ITIL fields: prefer stored values, fall back to mapping from severity
+    from backend.app.schemas.incidents import SEVERITY_TO_ITIL
+    impact = getattr(incident, 'impact', None)
+    urgency = getattr(incident, 'urgency', None)
+    priority = getattr(incident, 'priority', None)
+    if not priority and incident.severity:
+        mapped = SEVERITY_TO_ITIL.get(incident.severity)
+        if mapped:
+            impact, urgency, priority = mapped[0].value, mapped[1].value, mapped[2].value
+
     return IncidentResponse(
-        id=incident.id,
+        id=str(incident.id),
         tenant_id=incident.tenant_id,
         title=incident.title,
-        severity=IncidentSeverity(incident.severity),
+        impact=impact,
+        urgency=urgency,
+        priority=priority,
+        severity=incident.severity,
         status=IncidentStatus(incident.status),
-        entity_id=incident.entity_id,
+        entity_id=str(incident.entity_id) if incident.entity_id else None,
+        entity_external_id=getattr(incident, 'entity_external_id', None),
         reasoning_chain=incident.reasoning_chain,
         resolution_summary=incident.resolution_summary,
         created_at=incident.created_at,

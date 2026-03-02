@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react'
 import Navigation from './components/Navigation'
+import { AuthProvider } from './context/AuthContext'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
-export default function RootLayout({
+export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode
@@ -16,6 +17,14 @@ export default function RootLayout({
   const [authError, setAuthError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showPasswordWarning, setShowPasswordWarning] = useState(false)
+
+  const handleLogout = () => {
+    setToken(null)
+    setUsername('operator')
+    setPassword('operator')
+    setAuthError('')
+    setShowPasswordWarning(false)
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,8 +58,6 @@ export default function RootLayout({
 
   if (!token) {
     return (
-      <html lang="en">
-        <body className="bg-gray-950">
           <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-black">
             <div className="w-full max-w-md">
               <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 shadow-xl">
@@ -106,19 +113,15 @@ export default function RootLayout({
               </div>
             </div>
           </div>
-        </body>
-      </html>
     )
   }
 
   return (
-    <html lang="en">
-      <body className="bg-gray-950">
-        <Navigation />
-        <main className="max-w-7xl mx-auto">
-          {children}
-        </main>
-      </body>
-    </html>
+    <AuthProvider token={token} onLogout={handleLogout}>
+      <Navigation />
+      <main className="w-full px-4 md:px-8">
+        {children}
+      </main>
+    </AuthProvider>
   )
 }

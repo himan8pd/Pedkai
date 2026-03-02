@@ -115,6 +115,17 @@ async def ingest_alarm(
     tenant_id = current_user.tenant_id or "default"
     
     try:
+        # Idempotency: if caller supplies the same entity_id + alarm_type + raised_at,
+        # return the previously accepted event_id instead of re-publishing.
+        dedup_key = f"{tenant_id}:{request.entity_id}:{request.alarm_type}:{request.raised_at}"
+        if not hasattr(ingest_alarm, '_seen'):
+            ingest_alarm._seen = {}   # type: ignore[attr-defined]
+        if dedup_key in ingest_alarm._seen:
+            prev = ingest_alarm._seen[dedup_key]
+            return AlarmIngestionResponse(
+                event_id=prev, tenant_id=tenant_id, status="accepted (idempotent)"
+            )
+
         # Create event with server-assigned tracking IDs
         event = AlarmIngestedEvent(
             tenant_id=tenant_id,
@@ -129,6 +140,9 @@ async def ingest_alarm(
         # Publish to internal queue for async processing
         await publish_event(event)
         
+        # Cache for idempotency
+        ingest_alarm._seen[dedup_key] = event.event_id   # type: ignore[attr-defined]
+
         logger.info(
             f"Alarm ingested: type={request.alarm_type}, "
             f"severity={request.severity}, "

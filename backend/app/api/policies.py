@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 
 from backend.app.core.database import get_db
-from backend.app.core.security import Security, get_current_user
+from backend.app.core.security import get_current_user
 from backend.app.models.policy_orm import PolicyORM, PolicyEvaluationORM, PolicyVersionORM
 from backend.app.schemas.policies import (
     PolicyCreate,
@@ -34,7 +34,6 @@ async def create_policy(
     policy: PolicyCreate,
     session: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-    security: Security = Depends(Security),
 ) -> PolicyResponse:
     """
     P5.1: Create a new policy for autonomous execution gating.
@@ -45,6 +44,17 @@ async def create_policy(
     if current_user.tenant_id != tenant_id and not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized")
     
+    # Idempotency: check for duplicate policy name within tenant
+    dup_result = await session.execute(
+        select(PolicyORM).where(
+            PolicyORM.tenant_id == tenant_id,
+            PolicyORM.name == policy.name,
+        ).limit(1)
+    )
+    existing = dup_result.scalars().first()
+    if existing:
+        return PolicyResponse.from_orm(existing)
+
     # Create new policy
     policy_id = str(uuid.uuid4())
     new_policy = PolicyORM(
@@ -86,7 +96,6 @@ async def list_policies(
     status_filter: Optional[str] = None,
     session: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-    security: Security = Depends(Security),
 ) -> List[PolicyResponse]:
     """
     P5.1: List all policies for a tenant (active by default).
@@ -117,7 +126,6 @@ async def get_policy(
     policy_id: str,
     session: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-    security: Security = Depends(Security),
 ) -> PolicyResponse:
     """
     P5.1: Retrieve a specific policy.
@@ -146,7 +154,6 @@ async def update_policy(
     update: PolicyUpdate,
     session: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-    security: Security = Depends(Security),
 ) -> PolicyResponse:
     """
     P5.1: Update a policy (creates new version).
@@ -203,7 +210,6 @@ async def evaluate_action(
     request: PolicyEvaluationRequest,
     session: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-    security: Security = Depends(Security),
 ) -> PolicyEvaluationResponse:
     """
     P5.1: Pre-evaluate if an autonomous action is permitted.
@@ -251,7 +257,6 @@ async def get_policy_audit_trail(
     limit: int = 100,
     session: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-    security: Security = Depends(Security),
 ) -> List[PolicyAuditEntry]:
     """
     P5.1: Retrieve audit trail for a policy.
@@ -289,7 +294,6 @@ async def get_policy_versions(
     policy_id: str,
     session: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
-    security: Security = Depends(Security),
 ) -> List[PolicyVersionResponse]:
     """
     P5.1: Retrieve version history for a policy.

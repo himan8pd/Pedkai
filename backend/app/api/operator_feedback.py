@@ -30,6 +30,33 @@ async def submit_feedback(
     if payload.score not in (1, -1):
         raise HTTPException(status_code=400, detail="score must be 1 or -1")
 
+    # Idempotency: check if this operator already submitted feedback for this decision
+    from sqlalchemy import select
+    dup_result = await db.execute(
+        select(DecisionFeedbackORM).where(
+            DecisionFeedbackORM.decision_id == payload.decision_id,
+            DecisionFeedbackORM.operator_id == payload.operator_id,
+        ).limit(1)
+    )
+    existing_fb = dup_result.scalars().first()
+    if existing_fb:
+        # Update existing feedback if score changed, otherwise return as-is
+        if existing_fb.score != payload.score:
+            existing_fb.score = payload.score
+            await db.flush()
+        # Recompute aggregate
+        result = await db.execute(
+            "SELECT COALESCE(SUM(score),0) FROM decision_feedback WHERE decision_id = :did",
+            {"did": payload.decision_id},
+        )
+        agg = result.scalar() or 0
+        await db.execute(
+            "UPDATE decision_traces SET feedback_score = :agg WHERE id = :did",
+            {"agg": int(agg), "did": payload.decision_id},
+        )
+        await db.commit()
+        return {"ok": True, "decision_id": payload.decision_id, "aggregate_score": int(agg), "idempotent": True}
+
     # Create feedback entry
     fb = DecisionFeedbackORM(
         decision_id=payload.decision_id,

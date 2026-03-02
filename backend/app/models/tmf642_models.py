@@ -4,7 +4,7 @@ TMF642 Alarm Management Models (v4.0)
 Pydantic models for standards-compliant alarm exposure.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
 from uuid import UUID

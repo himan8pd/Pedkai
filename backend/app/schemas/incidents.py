@@ -25,11 +25,54 @@ class IncidentStatus(str, Enum):
     LEARNING = "learning"
 
 
+class IncidentImpact(str, Enum):
+    """ITIL v4 Impact — effect on business processes."""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class IncidentUrgency(str, Enum):
+    """ITIL v4 Urgency — how quickly resolution is required."""
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class IncidentPriority(str, Enum):
+    """ITIL v4 Priority — derived from Impact x Urgency matrix.
+
+    Impact / Urgency |  High       |  Medium  |  Low
+    High             |  P1 Critical|  P2 High |  P3 Medium
+    Medium           |  P2 High    |  P3 Med  |  P4 Low
+    Low              |  P3 Medium  |  P4 Low  |  P5 Info
+    """
+    P1 = "P1"  # Critical
+    P2 = "P2"  # High
+    P3 = "P3"  # Medium
+    P4 = "P4"  # Low
+    P5 = "P5"  # Informational
+
+
+# Keep legacy enum for backward compatibility with IncidentCreate callers
 class IncidentSeverity(str, Enum):
-    CRITICAL = "critical"  # P1
-    MAJOR = "major"        # P2
-    MINOR = "minor"        # P3
-    WARNING = "warning"    # P4
+    CRITICAL = "critical"
+    HIGH = "high"
+    MAJOR = "major"
+    MEDIUM = "medium"
+    MINOR = "minor"
+    WARNING = "warning"
+
+
+# Mapping from legacy severity to ITIL fields
+SEVERITY_TO_ITIL = {
+    "critical": (IncidentImpact.HIGH, IncidentUrgency.HIGH, IncidentPriority.P1),
+    "high":     (IncidentImpact.HIGH, IncidentUrgency.MEDIUM, IncidentPriority.P2),
+    "major":    (IncidentImpact.HIGH, IncidentUrgency.MEDIUM, IncidentPriority.P2),
+    "medium":   (IncidentImpact.MEDIUM, IncidentUrgency.MEDIUM, IncidentPriority.P3),
+    "minor":    (IncidentImpact.MEDIUM, IncidentUrgency.LOW, IncidentPriority.P3),
+    "warning":  (IncidentImpact.LOW, IncidentUrgency.MEDIUM, IncidentPriority.P4),
+}
 
 
 class ReasoningStep(BaseModel):
@@ -50,13 +93,18 @@ class IncidentCreate(BaseModel):
 
 
 class IncidentResponse(BaseModel):
-    id: UUID
+    id: str  # Accepts both UUIDs and custom IDs like INC-CL-PAPILLON-xxx
     tenant_id: str
     title: str
-    severity: IncidentSeverity
+    # ITIL v4 Priority Matrix
+    impact: Optional[str] = None        # high | medium | low
+    urgency: Optional[str] = None       # high | medium | low
+    priority: Optional[str] = None      # P1 | P2 | P3 | P4 | P5
+    severity: Optional[str] = None      # Legacy raw severity value
     status: IncidentStatus
-    entity_id: Optional[str | UUID] = None
-    reasoning_chain: Optional[List[ReasoningStep]] = None
+    entity_id: Optional[str] = None
+    entity_external_id: Optional[str] = None
+    reasoning_chain: Optional[List[Dict[str, Any]]] = None  # Flexible shape for different data sources
     resolution_summary: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

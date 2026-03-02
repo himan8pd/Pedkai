@@ -4,6 +4,7 @@ API Router for Phase 14: Customer Experience Intelligence.
 from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_db, async_session_maker
@@ -48,7 +49,17 @@ async def trigger_proactive_care(
 ):
     """
     Trigger proactive care automation for all high-risk customers impacted by an anomaly.
+    Idempotent: returns existing care records if already triggered for this anomaly.
     """
+    # Idempotency: check if proactive care records already exist for this anomaly
+    from backend.app.models.customer_orm import ProactiveCareORM
+    existing_result = await db.execute(
+        select(ProactiveCareORM).where(ProactiveCareORM.anomaly_id == anomaly_id)
+    )
+    existing_records = existing_result.scalars().all()
+    if existing_records:
+        return existing_records
+
     service = CXIntelligenceService(db)
     impacted = await service.identify_impacted_customers(anomaly_id)
     

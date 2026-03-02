@@ -20,8 +20,13 @@ class IncidentORM(Base):
     # Core fields
     tenant_id = Column(String(50), nullable=False, index=True)
     title = Column(String(500), nullable=False)
-    severity = Column(String(20), nullable=False, index=True)  # IncidentSeverity values
+    severity = Column(String(20), nullable=False, index=True)  # Legacy raw severity value
     status = Column(String(30), nullable=False, default="anomaly", index=True)  # IncidentStatus values
+
+    # ITIL v4 Priority Matrix fields
+    impact = Column(String(20), nullable=True)    # high | medium | low
+    urgency = Column(String(20), nullable=True)   # high | medium | low
+    priority = Column(String(20), nullable=True, index=True)  # P1 | P2 | P3 | P4 | P5
 
     # Entity reference (no FK constraint for SQLite compatibility)
     entity_id = Column(String(36), nullable=True, index=True)

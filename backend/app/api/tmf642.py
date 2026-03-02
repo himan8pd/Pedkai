@@ -5,8 +5,9 @@ Adapts internal DecisionTrace resources to TMF642 Alarm resources.
 Fulfills Strategic Review GAPs 1 and 3.
 """
 
+from datetime import datetime, timezone
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Security
 from sqlalchemy import select
@@ -107,9 +108,22 @@ async def create_alarm(
     Ingress endpoint for legacy NMS tools (Strategic Review GAP 1).
     Converts TMF payload to Pedkai DecisionTrace and persists to DB.
     """
-    # 1. Map TMF to DecisionTraceORM (Actual Persistence Fix)
+    # 1. Idempotency: check if this external alarm ID was already ingested
+    existing = await db.execute(
+        select(DecisionTraceORM).where(
+            DecisionTraceORM.external_correlation_id == alarm.id,
+            DecisionTraceORM.tenant_id == (current_user.tenant_id or "default"),
+        ).limit(1)
+    )
+    dup = existing.scalar_one_or_none()
+    if dup:
+        return {"status": "already_exists", "id": str(dup.id), "idempotent": True}
+
+    # 2. Map TMF to DecisionTraceORM (Actual Persistence Fix)
+    # External alarm IDs (e.g. "ALARM-20260302-xxx") are NOT valid UUIDs,
+    # so we always generate a fresh UUID and store the external ID for correlation.
     new_trace = DecisionTraceORM(
-        id=UUID(alarm.id) if alarm.id else uuid4(),
+        id=uuid4(),
         tenant_id=current_user.tenant_id or "default",
         trigger_id=alarm.alarmedObject.id,
         trigger_description=f"TMF642 Ingress: {alarm.specificProblem or 'No description'}",
@@ -123,6 +137,7 @@ async def create_alarm(
         severity=alarm.perceivedSeverity.value,
         status="raised",
         domain="anops",
+        external_correlation_id=alarm.id,
         created_at=alarm.eventTime or datetime.now(timezone.utc),
     )
     

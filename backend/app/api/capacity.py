@@ -30,8 +30,21 @@ async def create_densification_request(
     """
     Launch a new regional densification optimization.
     """
+    # Idempotency: check for existing request with same region_name + tenant
+    from sqlalchemy import select
+    tenant = current_user.tenant_id if hasattr(current_user, 'tenant_id') else "default"
+    dup_result = await db.execute(
+        select(DensificationRequestORM).where(
+            DensificationRequestORM.tenant_id == tenant,
+            DensificationRequestORM.region_name == request.region_name,
+        ).limit(1)
+    )
+    existing = dup_result.scalars().first()
+    if existing:
+        return existing
+
     db_request = DensificationRequestORM(
-        tenant_id=current_user.tenant_id if hasattr(current_user, 'tenant_id') else "default",
+        tenant_id=tenant,
         region_name=request.region_name,
         budget_limit=request.budget_limit,
         target_kpi=request.target_kpi,

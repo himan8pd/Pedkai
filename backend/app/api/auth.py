@@ -37,7 +37,7 @@ async def login_for_access_token(
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
 
     # Generate scopes based on role
-    role = Role(user.role)
+    role = user.role  # Role is a plain class with string constants, not an enum
     scopes = ROLE_SCOPES.get(role, [])
     tenant_id = user.tenant_id
 

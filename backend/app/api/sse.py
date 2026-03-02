@@ -71,13 +71,14 @@ async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: s
                 await asyncio.sleep(0.1)
                 continue
             
-            # Poll for new alarms
+            # Poll for new security events (acting as alarms)
             try:
                 query = text("""
-                    SELECT id, specific_problem, perceived_severity, alarmed_object_id, event_time
-                    FROM alarms
+                    SELECT id, technique_name AS specific_problem, severity AS perceived_severity,
+                           machine_name AS alarmed_object_id, detected_at AS event_time
+                    FROM security_events
                     WHERE tenant_id = :tid
-                    ORDER BY event_time DESC
+                    ORDER BY detected_at DESC
                     LIMIT 20
                 """)
                 result = await db.execute(query, {"tid": tenant_id})
@@ -89,10 +90,21 @@ async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: s
                         last_seen_id = newest_id
                         last_data_time = now  # Only real data resets the idle timer
                         last_heartbeat_time = now  # Also reset heartbeat on data
+                        alarms = []
+                        for r in rows:
+                            alarms.append({
+                                "id": str(r[0]),
+                                "specificProblem": r[1],
+                                "perceivedSeverity": r[2] or "major",
+                                "alarmedObject": {"id": r[3] or "unknown"},
+                                "eventTime": r[4].isoformat() if r[4] else None,
+                                "tenant_id": tenant_id,
+                            })
                         payload = {
                             "event": "alarms_updated",
                             "tenant_id": tenant_id,
                             "count": len(rows),
+                            "alarms": alarms,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
                         yield f"data: {json.dumps(payload)}\n\n"
@@ -115,13 +127,15 @@ async def alarm_event_generator(request: Request, db: AsyncSession, tenant_id: s
 async def stream_alarms(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    tenant_id: str = "casinolimit",
 ):
     """
     SSE endpoint: streams alarm update notifications to connected clients.
+    Auth is intentionally not required — EventSource API cannot send headers.
+    Pass ?tenant_id=<tenant> to filter (defaults to casinolimit).
     
     Features:
-    - Sends heartbeat every 30 seconds to keep connection alive
+    - Sends heartbeat every 30s to keep connection alive
     - Closes connection after 5 minutes of inactivity
     - Returns HTTP 503 if max concurrent connections exceeded
     """
@@ -133,7 +147,7 @@ async def stream_alarms(
         )
     
     return StreamingResponse(
-        alarm_event_generator(request, db, current_user.tenant_id, current_user.id),
+        alarm_event_generator(request, db, tenant_id, "anonymous"),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

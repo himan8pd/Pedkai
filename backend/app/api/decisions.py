@@ -50,6 +50,22 @@ async def create_decision_trace(
     """
     if USE_DATABASE and db:
         repo = DecisionTraceRepository(async_session_maker)
+
+        # Idempotency: check for duplicate trigger_id within same tenant
+        if decision.trigger_id and decision.tenant_id:
+            from sqlalchemy import select
+            from backend.app.models.decision_trace_orm import DecisionTraceORM
+            dup_result = await db.execute(
+                select(DecisionTraceORM).where(
+                    DecisionTraceORM.tenant_id == decision.tenant_id,
+                    DecisionTraceORM.trigger_id == decision.trigger_id,
+                    DecisionTraceORM.trigger_type == decision.trigger_type,
+                ).limit(1)
+            )
+            existing = dup_result.scalar_one_or_none()
+            if existing:
+                return DecisionTrace.model_validate(existing, from_attributes=True)
+
         trace = await repo.create(decision)
         
         # Generate and store embedding for similarity search

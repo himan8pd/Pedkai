@@ -15,6 +15,13 @@ from backend.app.core.config import get_settings
 from backend.app.core.database import Base
 from backend.app.core.logging import get_logger
 
+# Import all ORM models so Base.metadata knows about every table
+from backend.app.models import *  # noqa: F401, F403
+from backend.app.models.user_orm import UserORM  # noqa: F401
+from backend.app.models.topology_models import EntityRelationshipORM  # noqa: F401
+from backend.app.models.decision_trace_orm import DecisionTraceORM  # noqa: F401
+from backend.app.models.incident_orm import IncidentORM  # noqa: F401
+
 settings = get_settings()
 logger = get_logger(__name__)
 
