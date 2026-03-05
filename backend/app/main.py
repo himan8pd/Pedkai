@@ -252,6 +252,25 @@ from backend.app.api import sse
 
 app.include_router(sse.router, prefix=f"{settings.api_prefix}", tags=["Real-time SSE"])
 
+# Ingestion API
+from backend.app.api import ingestion
+
+app.include_router(
+    ingestion.router,
+    prefix=f"{settings.api_prefix}/ingestion",
+    tags=["Ingestion"],
+)
+
+# Reports API
+from backend.app.api import reports
+
+app.include_router(
+    reports.router,
+    prefix=f"{settings.api_prefix}/reports",
+    tags=["Reports"],
+    dependencies=[Depends(oauth2_scheme)],
+)
+
 # Adapters (Netconf/YANG PoC) — P5.4
 from backend.app.api import adapters
 

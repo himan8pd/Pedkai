@@ -5,6 +5,7 @@ import { AlertCircle, Zap } from 'lucide-react'
 import StatCard from '@/app/components/StatCard'
 import AlarmCard from '@/app/components/AlarmCard'
 import SitrepPanel from '@/app/components/SitrepPanel'
+import IngestionControlPanel from '@/app/components/IngestionControlPanel'
 
 interface DashboardProps {
   token: string
@@ -13,6 +14,7 @@ interface DashboardProps {
   onSelectAlarm: (alarm: any) => void
   onAcknowledge: (id: string) => void
   scorecard: any
+  onRefetchData?: () => void
 }
 
 export default function Dashboard({
@@ -22,6 +24,7 @@ export default function Dashboard({
   onSelectAlarm,
   onAcknowledge,
   scorecard,
+  onRefetchData,
 }: DashboardProps) {
   return (
     <div className="space-y-8">
@@ -84,6 +87,9 @@ export default function Dashboard({
           <SitrepPanel selectedAlarm={selectedAlarm} onAcknowledge={onAcknowledge} />
         </div>
       </div>
+
+      {/* Ingestion & Reports */}
+      <IngestionControlPanel onIngestionComplete={onRefetchData} />
     </div>
   )
 }

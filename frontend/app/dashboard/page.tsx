@@ -16,27 +16,28 @@ export default function DashboardPage() {
   const esRef = useRef<EventSource | null>(null);
   const reconnectRef = useRef<number>(0);
 
-  // Load initial scorecard via REST once auth token is available
-  useEffect(() => {
+  // Load initial scorecard via REST
+  const fetchScorecard = async () => {
     if (!token) return;
-    async function loadInitial() {
-      try {
-        // Fetch scorecard using real auth token
-        const scRes = await fetch(
-          `${API_BASE_URL}/api/v1/autonomous/scorecard`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        ).catch(() => null);
-        if (scRes && scRes.ok) {
-          const scData = await scRes.json();
-          setScorecard(scData);
-        }
-      } catch (e) {
-        console.warn("Initial data load error:", e);
+    try {
+      // Fetch scorecard using real auth token
+      const scRes = await fetch(
+        `${API_BASE_URL}/api/v1/autonomous/scorecard`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      ).catch(() => null);
+      if (scRes && scRes.ok) {
+        const scData = await scRes.json();
+        setScorecard(scData);
       }
+    } catch (e) {
+      console.warn("Initial data load error:", e);
     }
-    loadInitial();
+  };
+
+  useEffect(() => {
+    fetchScorecard();
   }, [token]);
 
   // Connect to SSE with exponential backoff reconnection
@@ -48,7 +49,7 @@ export default function DashboardPage() {
       if (esRef.current) {
         try {
           esRef.current.close();
-        } catch (e) {}
+        } catch (e) { }
         esRef.current = null;
       }
 
@@ -87,7 +88,7 @@ export default function DashboardPage() {
         setConnected(false);
         try {
           es.close();
-        } catch (e) {}
+        } catch (e) { }
         // Backoff reconnect
         reconnectRef.current = Math.min(
           60,
@@ -104,7 +105,7 @@ export default function DashboardPage() {
       if (esRef.current) {
         try {
           esRef.current.close();
-        } catch (e) {}
+        } catch (e) { }
         esRef.current = null;
       }
     };
@@ -134,6 +135,7 @@ export default function DashboardPage() {
           );
         }}
         scorecard={scorecard}
+        onRefetchData={() => fetchScorecard()}
       />
     </div>
   );
