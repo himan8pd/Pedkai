@@ -8,21 +8,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore", # Allow extra env vars without failing
+        extra="ignore",  # Allow extra env vars without failing
     )
-    
+
     # Ports and URLs (added for startup script synchronization)
     pedkai_backend_port: int = 8000
     pedkai_frontend_port: int = 3000
     next_public_api_base_url: str = "http://localhost:8000"
     frontend_url: str = "http://localhost:3000"
     backend_url: str = "http://localhost:8000"
-    
+
     # App
     app_name: str = "Pedkai"
     app_version: str = "0.1.0"
@@ -32,45 +32,47 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    
+
     # Auth Passwords
-    admin_password: str = "admin" # Default for safety, override in .env
+    admin_password: str = "admin"  # Default for safety, override in .env
     operator_password: str = "operator"
-    
+
     # API
     api_prefix: str = "/api/v1"
     # Default for local Next.js frontend; override via ALLOWED_ORIGINS env for cloud
     allowed_origins: list[str] = ["http://localhost:3000"]
-    
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./pedkai.db"
     metrics_database_url: str = "sqlite+aiosqlite:///./metrics.db"
-    db_ssl_mode: str = "disable" # "require" for production
+    db_ssl_mode: str = "disable"  # "require" for production
     database_pool_size: int = 5
     database_max_overflow: int = 10
-    
+
     # Gemini LLM
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.0-flash"
-    llm_sampling_rate: float = 1.0 # Cost control (Disabled for reliable demos, reset to 0.8 later)
-    
+    llm_sampling_rate: float = (
+        1.0  # Cost control (Disabled for reliable demos, reset to 0.8 later)
+    )
+
     # Kafka
-    kafka_bootstrap_servers: str = "localhost:9092" # hard coded for demo, remove " = "localhost:9092"" for live env.
+    kafka_bootstrap_servers: str = "localhost:9092"  # hard coded for demo, remove " = "localhost:9092"" for live env.
     kafka_consumer_group: str = "pedkai-consumers"
-    
+
     # Multi-tenancy
-    default_tenant_id: str = "default"
-    
+    default_tenant_id: str = "casinolimit"
+
     # Vector search
     embedding_dimension: int = 3072
-    
+
     # Hugging Face
     hf_token: Optional[str] = None
-    
+
     # Kaggle
     kaggle_username: Optional[str] = None
     kaggle_key: Optional[str] = None
-    
+
     # Decision Memory Search Tuning
     memory_search_min_similarity: float = 0.9  # Expansive by default for MVP
     memory_search_limit: int = 5
@@ -82,7 +84,7 @@ class Settings(BaseSettings):
     ai_maturity_level: int = 2
 
     # Drift Detection Calibration (Task 7.2 — Amendment #24)
-    drift_threshold_pct: float = 15.0       # Configurable via DRIFT_THRESHOLD_PCT env var
+    drift_threshold_pct: float = 15.0  # Configurable via DRIFT_THRESHOLD_PCT env var
     drift_false_positive_window_days: int = 30  # Track FP rate over this window
 
     # Customer Prioritisation (Task 7.3 — Amendment #21)

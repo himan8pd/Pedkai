@@ -5,16 +5,17 @@ Accepts inbound alarms from external systems (OSS, monitoring, etc.)
 and publishes them as events for downstream processing.
 Implements REST accept pattern: receive, validate, queue, respond 202.
 """
+
 import logging
-from typing import Optional
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from pydantic import BaseModel, Field
 
-from backend.app.core.security import get_current_user, User, TMF642_READ, TMF642_WRITE
-from backend.app.events.schemas import AlarmIngestedEvent
+from backend.app.core.security import TMF642_READ, TMF642_WRITE, User, get_current_user
 from backend.app.events.bus import publish_event
+from backend.app.events.schemas import AlarmIngestedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -28,52 +29,34 @@ router = APIRouter(
 class AlarmIngestionRequest(BaseModel):
     """
     Schema for incoming alarm ingestion request.
-    
+
     Subset of AlarmIngestedEvent that the client provides;
     server fills in event_id, timestamp, and tenant_id.
     """
-    
-    entity_id: str = Field(
-        description="Network entity UUID affected by alarm"
-    )
-    
+
+    entity_id: str = Field(description="Network entity UUID affected by alarm")
+
     entity_external_id: Optional[str] = Field(
-        default=None,
-        description="Optional external system reference"
+        default=None, description="Optional external system reference"
     )
-    
-    alarm_type: str = Field(
-        description="Alarm category (e.g., LINK_DOWN, DEGRADATION)"
-    )
-    
-    severity: str = Field(
-        description="Severity: minor, major, critical"
-    )
-    
-    raised_at: datetime = Field(
-        description="When alarm was raised (may be historical)"
-    )
-    
-    source_system: str = Field(
-        description="Origin (e.g., oss_vendor, snmp, api)"
-    )
+
+    alarm_type: str = Field(description="Alarm category (e.g., LINK_DOWN, DEGRADATION)")
+
+    severity: str = Field(description="Severity: minor, major, critical")
+
+    raised_at: datetime = Field(description="When alarm was raised (may be historical)")
+
+    source_system: str = Field(description="Origin (e.g., oss_vendor, snmp, api)")
 
 
 class AlarmIngestionResponse(BaseModel):
     """Response from alarm ingestion endpoint."""
-    
-    event_id: str = Field(
-        description="Event ID assigned by server"
-    )
-    
-    tenant_id: str = Field(
-        description="Tenant to which alarm was assigned"
-    )
-    
-    status: str = Field(
-        default="accepted",
-        description="Status of ingestion"
-    )
+
+    event_id: str = Field(description="Event ID assigned by server")
+
+    tenant_id: str = Field(description="Tenant to which alarm was assigned")
+
+    status: str = Field(default="accepted", description="Status of ingestion")
 
 
 @router.post(
@@ -89,37 +72,44 @@ async def ingest_alarm(
 ) -> AlarmIngestionResponse:
     """
     Ingestion endpoint for external alarms.
-    
+
     Process:
     1. Validate request schema
     2. Extract tenant from current user
     3. Create AlarmIngestedEvent with server-assigned event_id
     4. Publish to internal event bus
     5. Return 202 Accepted with event_id
-    
+
     Authentication:
         Requires ALARM_WRITE scope. Tenant isolation via current_user.tenant_id.
-    
+
     Args:
         request: Alarm data from external system
         current_user: Authenticated user (provides tenant_id for isolation)
-    
+
     Returns:
         202 with event_id (no response body awaited by client)
-    
+
     Raises:
         401: If unauthenticated or insufficient scope
         422: If request validation fails
         503: If event bus is full
     """
-    tenant_id = current_user.tenant_id or "default"
-    
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tenant bound to session. Call /auth/select-tenant first.",
+        )
+    tenant_id = current_user.tenant_id
+
     try:
         # Idempotency: if caller supplies the same entity_id + alarm_type + raised_at,
         # return the previously accepted event_id instead of re-publishing.
-        dedup_key = f"{tenant_id}:{request.entity_id}:{request.alarm_type}:{request.raised_at}"
-        if not hasattr(ingest_alarm, '_seen'):
-            ingest_alarm._seen = {}   # type: ignore[attr-defined]
+        dedup_key = (
+            f"{tenant_id}:{request.entity_id}:{request.alarm_type}:{request.raised_at}"
+        )
+        if not hasattr(ingest_alarm, "_seen"):
+            ingest_alarm._seen = {}  # type: ignore[attr-defined]
         if dedup_key in ingest_alarm._seen:
             prev = ingest_alarm._seen[dedup_key]
             return AlarmIngestionResponse(
@@ -136,12 +126,12 @@ async def ingest_alarm(
             raised_at=request.raised_at,
             source_system=request.source_system,
         )
-        
+
         # Publish to internal queue for async processing
         await publish_event(event)
-        
+
         # Cache for idempotency
-        ingest_alarm._seen[dedup_key] = event.event_id   # type: ignore[attr-defined]
+        ingest_alarm._seen[dedup_key] = event.event_id  # type: ignore[attr-defined]
 
         logger.info(
             f"Alarm ingested: type={request.alarm_type}, "
@@ -150,13 +140,11 @@ async def ingest_alarm(
             f"tenant={tenant_id}, "
             f"event_id={event.event_id[:8]}..."
         )
-        
+
         return AlarmIngestionResponse(
-            event_id=event.event_id,
-            tenant_id=tenant_id,
-            status="accepted"
+            event_id=event.event_id, tenant_id=tenant_id, status="accepted"
         )
-        
+
     except ValueError as e:
         logger.warning(f"Invalid alarm request: {e}")
         raise HTTPException(

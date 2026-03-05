@@ -4,23 +4,21 @@ Pedkai - AI-Native Telco Operating System
 FastAPI application entry point.
 """
 
+import time
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-import uuid
-import time
 
+from backend.app.api import auth, capacity, cx_router, decisions, health, tmf628, tmf642
 from backend.app.core.config import get_settings
-from backend.app.core.logging import setup_logging, get_logger, correlation_id_ctx
 from backend.app.core.database import async_session_maker
-from backend.app.api import decisions, health, tmf642, tmf628, auth, capacity, cx_router
+from backend.app.core.logging import correlation_id_ctx, get_logger, setup_logging
 from backend.app.core.security import oauth2_scheme
 from backend.app.middleware.trace import TracingMiddleware
-from fastapi import Depends
 
 settings = get_settings()
 
@@ -37,17 +35,20 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
-    
+
     # Initialize event bus (P1.6)
     from backend.app.events.bus import initialize_event_bus
+
     initialize_event_bus(maxsize=10000)
-    
+
     # Start background event consumer (P1.7)
     from backend.app.workers.consumer import start_event_consumer
+
     consumer_task = await start_event_consumer()
-    
+
     # Start autonomous action executor (P5.3)
     from backend.app.services.autonomous_action_executor import AutonomousActionExecutor
+
     executor = AutonomousActionExecutor(async_session_maker)
     await executor.start()
 
@@ -56,12 +57,34 @@ async def lifespan(app: FastAPI):
     if settings.sleeping_cell_enabled:
         from backend.app.services.sleeping_cell_detector import SleepingCellDetector
         from backend.app.workers.scheduled import start_scheduler
+
         detector = SleepingCellDetector()
 
         async def _scan_sleeping_cells():
-            """Run sleeping cell scan for the default tenant."""
+            """Run sleeping cell scan. Uses data-driven reference time for historic mode."""
             try:
-                await detector.scan(settings.default_tenant_id)
+                # Determine reference time from actual data so that historic
+                # datasets (e.g. timestamped Jan 2024) produce meaningful
+                # results instead of comparing against datetime.now().
+                from sqlalchemy import text as sa_text
+
+                from backend.app.core.database import metrics_session_maker
+
+                ref_time = None
+                try:
+                    async with metrics_session_maker() as msession:
+                        result = await msession.execute(
+                            sa_text(
+                                "SELECT MAX(timestamp) FROM kpi_metrics WHERE tenant_id = :tid"
+                            ),
+                            {"tid": settings.default_tenant_id},
+                        )
+                        max_ts = result.scalar()
+                    ref_time = max_ts if max_ts else None
+                except Exception as e:
+                    logger.warning(f"Could not determine KPI reference time: {e}")
+
+                await detector.scan(settings.default_tenant_id, reference_time=ref_time)
             except Exception as e:
                 logger.error(f"Sleeping cell scan error: {e}", exc_info=True)
 
@@ -74,11 +97,11 @@ async def lifespan(app: FastAPI):
             f"(interval={settings.sleeping_cell_scan_interval_seconds}s, "
             f"tenant={settings.default_tenant_id})"
         )
-    
+
     yield
     # Shutdown
     logger.info(f"👋 Shutting down {settings.app_name}")
-    
+
     # Cancel sleeping cell scheduler
     if sleeping_cell_task and not sleeping_cell_task.done():
         sleeping_cell_task.cancel()
@@ -94,7 +117,7 @@ async def lifespan(app: FastAPI):
             await consumer_task
         except Exception:
             pass
-    
+
     # Stop autonomous executor
     try:
         await executor.stop()
@@ -138,14 +161,10 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router, tags=["Health"])
 app.include_router(
-    auth.router,
-    prefix=f"{settings.api_prefix}/auth",
-    tags=["Authentication"]
+    auth.router, prefix=f"{settings.api_prefix}/auth", tags=["Authentication"]
 )
 app.include_router(
-    decisions.router, 
-    prefix=f"{settings.api_prefix}/decisions",
-    tags=["Decisions"]
+    decisions.router, prefix=f"{settings.api_prefix}/decisions", tags=["Decisions"]
 )
 
 # TMF642 Alarm Management (Phase 3 - Revised with Security GAP 3)
@@ -153,14 +172,14 @@ app.include_router(
     tmf642.router,
     prefix="/tmf-api/alarmManagement/v4",
     tags=["TMF642 Alarm Management"],
-    dependencies=[Depends(oauth2_scheme)] # Enforce auth on all standard TMF endpoints
+    dependencies=[Depends(oauth2_scheme)],  # Enforce auth on all standard TMF endpoints
 )
 
 app.include_router(
     tmf628.router,
     prefix="/tmf-api/performanceManagement/v4",
     tags=["TMF628 Performance Management"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # AI-Driven Capacity Planning (Wedge 2)
@@ -175,73 +194,87 @@ app.include_router(
     cx_router.router,
     prefix=f"{settings.api_prefix}/cx",
     tags=["Customer Experience"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # Topology API (WS1)
 from backend.app.api import topology
+
 app.include_router(
     topology.router,
     prefix=f"{settings.api_prefix}/topology",
     tags=["Topology & Impact Analysis"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # Incident Lifecycle API (WS2)
 from backend.app.api import incidents
+
 app.include_router(
     incidents.router,
     prefix=f"{settings.api_prefix}/incidents",
     tags=["Incident Lifecycle"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # Service Impact API (WS4)
 from backend.app.api import service_impact
+
 app.include_router(
     service_impact.router,
     prefix=f"{settings.api_prefix}/service-impact",
     tags=["Service Impact & Alarm Correlation"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # Autonomous Shield API (WS5)
 from backend.app.api import autonomous
+
 app.include_router(
     autonomous.router,
     prefix=f"{settings.api_prefix}/autonomous",
     tags=["Autonomous Shield"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # Policies API (P5.1)
 from backend.app.api import policies
+
 app.include_router(
     policies.router,
     prefix=f"{settings.api_prefix}/policies",
     tags=["Policies"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # Real-time SSE push (Task 4.1 — replaces 10s polling)
 from backend.app.api import sse
+
 app.include_router(sse.router, prefix=f"{settings.api_prefix}", tags=["Real-time SSE"])
 
 # Adapters (Netconf/YANG PoC) — P5.4
 from backend.app.api import adapters
+
 app.include_router(
     adapters.router,
     prefix=f"{settings.api_prefix}/adapters",
     tags=["Adapters"],
-    dependencies=[Depends(oauth2_scheme)]
+    dependencies=[Depends(oauth2_scheme)],
 )
 
 # Operator feedback API (P2.8)
 from backend.app.api import operator_feedback
-app.include_router(operator_feedback.router, prefix=f"{settings.api_prefix}", tags=["Operator Feedback"], dependencies=[Depends(oauth2_scheme)])
+
+app.include_router(
+    operator_feedback.router,
+    prefix=f"{settings.api_prefix}",
+    tags=["Operator Feedback"],
+    dependencies=[Depends(oauth2_scheme)],
+)
 
 # Alarm Ingestion Webhook (P1.6)
 from backend.app.api import alarm_ingestion
+
 app.include_router(
     alarm_ingestion.router,
     tags=["Alarm Ingestion"],

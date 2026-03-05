@@ -6,31 +6,40 @@ Human gates cannot be bypassed — the API enforces lifecycle ordering.
 
 WS2 — Incident Lifecycle Management.
 """
+
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Security, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
 
-from backend.app.core.database import get_db
+from backend.app.core.database import async_session_maker, get_db
 from backend.app.core.security import (
-    get_current_user, User,
-    INCIDENT_READ, INCIDENT_APPROVE_SITREP, INCIDENT_APPROVE_ACTION, INCIDENT_CLOSE,
+    INCIDENT_APPROVE_ACTION,
+    INCIDENT_APPROVE_SITREP,
+    INCIDENT_CLOSE,
+    INCIDENT_READ,
+    User,
+    get_current_user,
 )
-from backend.app.schemas.incidents import (
-    IncidentCreate, IncidentResponse, IncidentStatus, IncidentSeverity,
-    ApprovalRequest, AuditTrailEntry, ReasoningStep,
-)
+from backend.app.middleware.trace import correlation_id_ctx
+from backend.app.models.audit_orm import IncidentAuditEntryORM
 from backend.app.models.incident_orm import IncidentORM
 from backend.app.models.network_entity_orm import NetworkEntityORM
-from backend.app.models.audit_orm import IncidentAuditEntryORM
+from backend.app.schemas.incidents import (
+    ApprovalRequest,
+    AuditTrailEntry,
+    IncidentCreate,
+    IncidentResponse,
+    IncidentSeverity,
+    IncidentStatus,
+    ReasoningStep,
+)
 from backend.app.services.decision_repository import DecisionTraceRepository
 from backend.app.services.rl_evaluator import get_rl_evaluator
-from backend.app.core.database import async_session_maker
-from backend.app.middleware.trace import correlation_id_ctx
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -116,13 +125,13 @@ async def create_incident(
     # P1.2 Fix: Detect emergency service via string match (resilient fallback) and DB lookup
     is_emergency = False
     severity = payload.severity
-    
+
     entity_id_str = str(payload.entity_id) if payload.entity_id else ""
     external_id_str = payload.entity_external_id or ""
-    
+
     if "EMERGENCY" in entity_id_str.upper() or "EMERGENCY" in external_id_str.upper():
         is_emergency = True
-        
+
     if not is_emergency and payload.entity_id:
         try:
             # P1.2: Use NetworkEntityORM instead of raw SQL
@@ -130,7 +139,7 @@ async def create_incident(
                 select(NetworkEntityORM).where(
                     and_(
                         NetworkEntityORM.id == payload.entity_id,
-                        NetworkEntityORM.entity_type == 'EMERGENCY_SERVICE'
+                        NetworkEntityORM.entity_type == "EMERGENCY_SERVICE",
                     )
                 )
             )
@@ -149,11 +158,13 @@ async def create_incident(
     entity_str = str(payload.entity_id) if payload.entity_id else None
     if payload.title and entity_str:
         dup_result = await db.execute(
-            select(IncidentORM).where(
+            select(IncidentORM)
+            .where(
                 IncidentORM.tenant_id == tenant,
                 IncidentORM.title == payload.title,
                 IncidentORM.entity_id == entity_str,
-            ).limit(1)
+            )
+            .limit(1)
         )
         existing = dup_result.scalars().first()
         if existing:
@@ -174,7 +185,9 @@ async def create_incident(
 
     # Log initial audit event
     await _log_audit_event(
-        db, incident.id, incident.tenant_id,
+        db,
+        incident.id,
+        incident.tenant_id,
         action="ANOMALY_DETECTED",
         action_type="automated",
         actor="pedkai-platform",
@@ -201,12 +214,14 @@ async def list_incidents(
     else:
         tid = current_user.tenant_id or tenant_id
     if not tid and current_user.role != "admin":
-         raise HTTPException(status_code=403, detail="Tenant ID required for non-admin users.")
-    
+        raise HTTPException(
+            status_code=403, detail="Tenant ID required for non-admin users."
+        )
+
     if tid:
         query = query.where(IncidentORM.tenant_id == tid)
 
-    result = await db.execute(query.order_by(IncidentORM.created_at.desc()).limit(100))
+    result = await db.execute(query.order_by(IncidentORM.created_at.desc()).limit(500))
     incidents = result.scalars().all()
     return [_to_response(i) for i in incidents]
 
@@ -236,16 +251,19 @@ async def generate_sitrep(
 
     # RCA and context logic (simulated for PoC or fetched from DB)
     from backend.app.services.llm_service import get_llm_service
+
     llm_service = get_llm_service()
 
     # Context enrichment logic
     incident_context = {
         "entity_id": incident.entity_id,
         "entity_name": incident.entity_external_id or "Unknown",
-        "entity_type": "EMERGENCY_SERVICE" if incident.severity == "critical" else "NETWORK_ELEMENT",
+        "entity_type": "EMERGENCY_SERVICE"
+        if incident.severity == "critical"
+        else "NETWORK_ELEMENT",
         "severity": incident.severity,
         "title": incident.title,
-        "metrics": {"load": 75, "latency_ms": 120}
+        "metrics": {"load": 75, "latency_ms": 120},
     }
 
     # Fetch similar decisions (placeholder for task 4.x)
@@ -255,19 +273,21 @@ async def generate_sitrep(
     llm_response = await llm_service.generate_sitrep(
         incident_context=incident_context,
         similar_decisions=similar_decisions,
-        session=db
+        session=db,
     )
-    
+
     incident.llm_model_version = llm_response.get("model_version", "unknown")
     incident.llm_prompt_hash = llm_response.get("prompt_hash", "")
     incident.resolution_summary = llm_response.get("text", "")
     incident.status = IncidentStatus.SITREP_DRAFT.value
-    
+
     incident.updated_at = datetime.now(timezone.utc)
-    
+
     # Log audit event for SITREP generation
     await _log_audit_event(
-        db, incident.id, incident.tenant_id,
+        db,
+        incident.id,
+        incident.tenant_id,
         action="SITREP_GENERATED",
         action_type="automated",
         actor="llm_service",
@@ -278,7 +298,7 @@ async def generate_sitrep(
 
     await db.commit()
     await db.refresh(incident)
-    
+
     return _to_response(incident)
 
 
@@ -296,7 +316,9 @@ async def advance_lifecycle(
     next_status = _next_status(incident.status)
 
     if not next_status:
-        raise HTTPException(status_code=400, detail="Incident is already at the final lifecycle stage.")
+        raise HTTPException(
+            status_code=400, detail="Incident is already at the final lifecycle stage."
+        )
 
     # Human gate enforcement
     gate = _HUMAN_GATE_REQUIRED_BEFORE.get(IncidentStatus(next_status))
@@ -325,10 +347,14 @@ async def approve_sitrep(
     """Human Gate 1: Approve situation report. Requires incident:approve_sitrep scope."""
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
 
-    if incident.status not in (IncidentStatus.SITREP_DRAFT.value, IncidentStatus.DETECTED.value, IncidentStatus.RCA.value):
+    if incident.status not in (
+        IncidentStatus.SITREP_DRAFT.value,
+        IncidentStatus.DETECTED.value,
+        IncidentStatus.RCA.value,
+    ):
         raise HTTPException(
             status_code=400,
-            detail=f"Incident must be in sitrep_draft/detected/rca status to approve sitrep. Current: {incident.status}"
+            detail=f"Incident must be in sitrep_draft/detected/rca status to approve sitrep. Current: {incident.status}",
         )
 
     incident.status = IncidentStatus.SITREP_APPROVED.value
@@ -339,7 +365,9 @@ async def approve_sitrep(
 
     # Log audit event
     await _log_audit_event(
-        db, incident.id, incident.tenant_id,
+        db,
+        incident.id,
+        incident.tenant_id,
         action="SITREP_APPROVED",
         action_type="human",
         actor=payload.approved_by,
@@ -359,10 +387,13 @@ async def approve_action(
     """Human Gate 2: Approve resolution action. Requires incident:approve_action scope."""
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
 
-    if incident.status not in (IncidentStatus.SITREP_APPROVED.value, IncidentStatus.RESOLVING.value):
+    if incident.status not in (
+        IncidentStatus.SITREP_APPROVED.value,
+        IncidentStatus.RESOLVING.value,
+    ):
         raise HTTPException(
             status_code=400,
-            detail=f"Incident must have sitrep approved before action can be approved. Current: {incident.status}"
+            detail=f"Incident must have sitrep approved before action can be approved. Current: {incident.status}",
         )
 
     incident.status = IncidentStatus.RESOLUTION_APPROVED.value
@@ -373,7 +404,9 @@ async def approve_action(
 
     # Log audit event
     await _log_audit_event(
-        db, incident.id, incident.tenant_id,
+        db,
+        incident.id,
+        incident.tenant_id,
         action="ACTION_APPROVED",
         action_type="human",
         actor=payload.approved_by,
@@ -393,10 +426,13 @@ async def close_incident(
     """Human Gate 3: Close incident. Requires incident:close scope."""
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
 
-    if incident.status not in (IncidentStatus.RESOLUTION_APPROVED.value, IncidentStatus.RESOLVED.value):
+    if incident.status not in (
+        IncidentStatus.RESOLUTION_APPROVED.value,
+        IncidentStatus.RESOLVED.value,
+    ):
         raise HTTPException(
             status_code=400,
-            detail=f"Incident must be resolved before closing. Current: {incident.status}"
+            detail=f"Incident must be resolved before closing. Current: {incident.status}",
         )
 
     incident.status = IncidentStatus.CLOSED.value
@@ -407,7 +443,9 @@ async def close_incident(
 
     # Log audit event
     await _log_audit_event(
-        db, incident.id, incident.tenant_id,
+        db,
+        incident.id,
+        incident.tenant_id,
         action="CLOSED",
         action_type="human",
         actor=payload.approved_by,
@@ -453,7 +491,7 @@ async def get_audit_trail(
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
     """Get the full audit trail for an incident.
-    
+
     Enhanced with action_type and trace_id for compliance and auditability.
     Each automated or human action is logged with:
     - timestamp: When the action occurred
@@ -461,9 +499,9 @@ async def get_audit_trail(
     - trace_id: Distributed tracing ID linking to request logs
     """
     from backend.app.middleware.trace import correlation_id_ctx
-    
+
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
-    
+
     # Query persistent audit entries
     stmt = (
         select(IncidentAuditEntryORM)
@@ -486,41 +524,49 @@ async def get_audit_trail(
         )
         for e in entries
     ]
-    
+
     # Fallback for legacy incidents if no entries found (compute from dates)
     if not trail:
-        trail.append(AuditTrailEntry(
-            timestamp=incident.created_at,
-            action="ANOMALY_DETECTED",
-            action_type="automated",
-            actor="pedkai-platform",
-            details=f"Incident created with severity {incident.severity}",
-            trace_id=incident.decision_trace_id
-        ))
+        trail.append(
+            AuditTrailEntry(
+                timestamp=incident.created_at,
+                action="ANOMALY_DETECTED",
+                action_type="automated",
+                actor="pedkai-platform",
+                details=f"Incident created with severity {incident.severity}",
+                trace_id=incident.decision_trace_id,
+            )
+        )
         if incident.sitrep_approved_at:
-            trail.append(AuditTrailEntry(
-                timestamp=incident.sitrep_approved_at,
-                action="SITREP_APPROVED",
-                action_type="human",
-                actor=incident.sitrep_approved_by or "unknown",
-                details="Engineer reviewed SITREP"
-            ))
+            trail.append(
+                AuditTrailEntry(
+                    timestamp=incident.sitrep_approved_at,
+                    action="SITREP_APPROVED",
+                    action_type="human",
+                    actor=incident.sitrep_approved_by or "unknown",
+                    details="Engineer reviewed SITREP",
+                )
+            )
         if incident.action_approved_at:
-            trail.append(AuditTrailEntry(
-                timestamp=incident.action_approved_at,
-                action="ACTION_APPROVED",
-                action_type="human",
-                actor=incident.action_approved_by or "unknown",
-                details="Engineer approved action"
-            ))
+            trail.append(
+                AuditTrailEntry(
+                    timestamp=incident.action_approved_at,
+                    action="ACTION_APPROVED",
+                    action_type="human",
+                    actor=incident.action_approved_by or "unknown",
+                    details="Engineer approved action",
+                )
+            )
         if incident.closed_at:
-            trail.append(AuditTrailEntry(
-                timestamp=incident.closed_at,
-                action="CLOSED",
-                action_type="human",
-                actor=incident.closed_by or "unknown",
-                details="Incident closed"
-            ))
+            trail.append(
+                AuditTrailEntry(
+                    timestamp=incident.closed_at,
+                    action="CLOSED",
+                    action_type="human",
+                    actor=incident.closed_by or "unknown",
+                    details="Incident closed",
+                )
+            )
 
     return {"incident_id": incident_id, "audit_trail": trail}
 
@@ -532,16 +578,17 @@ async def get_audit_trail_csv(
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
     """Export audit trail as CSV for regulatory filing.
-    
+
     Returns a properly formatted CSV file suitable for audit, compliance, and regulatory teams.
     Includes action_type classification for governance purposes.
     """
     import csv
     from io import StringIO
+
     from fastapi.responses import StreamingResponse
-    
+
     incident = await _get_or_404(db, incident_id, current_user.tenant_id)
-    
+
     # Query persistent audit entries (reuse logic from JSON endpoint)
     stmt = (
         select(IncidentAuditEntryORM)
@@ -550,7 +597,7 @@ async def get_audit_trail_csv(
     )
     result = await db.execute(stmt)
     entries = result.scalars().all()
-    
+
     trail = [
         {
             "timestamp": e.timestamp.isoformat(),
@@ -565,87 +612,111 @@ async def get_audit_trail_csv(
 
     if not trail:
         # Fallback for legacy
-        trail.append({
-            "timestamp": incident.created_at.isoformat(),
-            "action": "ANOMALY_DETECTED",
-            "action_type": "automated",
-            "actor": "pedkai-platform",
-            "details": f"Incident created with severity {incident.severity}",
-            "trace_id": incident.decision_trace_id,
-        })
+        trail.append(
+            {
+                "timestamp": incident.created_at.isoformat(),
+                "action": "ANOMALY_DETECTED",
+                "action_type": "automated",
+                "actor": "pedkai-platform",
+                "details": f"Incident created with severity {incident.severity}",
+                "trace_id": incident.decision_trace_id,
+            }
+        )
         if incident.sitrep_approved_at:
-            trail.append({
-                "timestamp": incident.sitrep_approved_at.isoformat(),
-                "action": "SITREP_APPROVED",
-                "action_type": "human",
-                "actor": incident.sitrep_approved_by,
-                "details": "Engineer approved SITREP",
-                "trace_id": None,
-            })
+            trail.append(
+                {
+                    "timestamp": incident.sitrep_approved_at.isoformat(),
+                    "action": "SITREP_APPROVED",
+                    "action_type": "human",
+                    "actor": incident.sitrep_approved_by,
+                    "details": "Engineer approved SITREP",
+                    "trace_id": None,
+                }
+            )
         if incident.action_approved_at:
-            trail.append({
-                "timestamp": incident.action_approved_at.isoformat(),
-                "action": "ACTION_APPROVED",
-                "action_type": "human",
-                "actor": incident.action_approved_by,
-                "details": "Engineer approved action",
-                "trace_id": None,
-            })
+            trail.append(
+                {
+                    "timestamp": incident.action_approved_at.isoformat(),
+                    "action": "ACTION_APPROVED",
+                    "action_type": "human",
+                    "actor": incident.action_approved_by,
+                    "details": "Engineer approved action",
+                    "trace_id": None,
+                }
+            )
         if incident.closed_at:
-            trail.append({
-                "timestamp": incident.closed_at.isoformat(),
-                "action": "CLOSED",
-                "action_type": "human",
-                "actor": incident.closed_by,
-                "details": "Incident closed",
-                "trace_id": None,
-            })
+            trail.append(
+                {
+                    "timestamp": incident.closed_at.isoformat(),
+                    "action": "CLOSED",
+                    "action_type": "human",
+                    "actor": incident.closed_by,
+                    "details": "Incident closed",
+                    "trace_id": None,
+                }
+            )
 
     # Generate CSV with proper formatting
     output = StringIO()
     csv_writer = csv.DictWriter(
         output,
-        fieldnames=["timestamp", "action", "action_type", "actor", "details", "trace_id"],
+        fieldnames=[
+            "timestamp",
+            "action",
+            "action_type",
+            "actor",
+            "details",
+            "trace_id",
+        ],
         quoting=csv.QUOTE_MINIMAL,
     )
-    
+
     csv_writer.writeheader()
     for row in trail:
         csv_writer.writerow(row)
-    
+
     csv_content = output.getvalue()
-    
+
     return StreamingResponse(
         iter([csv_content]),
         media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="incident-{incident_id}-audit-trail.csv"'
-        }
+        },
     )
 
 
-async def _get_or_404(db: AsyncSession, incident_id: str, tenant_id: Optional[str] = None) -> IncidentORM:
+async def _get_or_404(
+    db: AsyncSession, incident_id: str, tenant_id: Optional[str] = None
+) -> IncidentORM:
     query = select(IncidentORM).where(IncidentORM.id == incident_id)
     if tenant_id:
         query = query.where(IncidentORM.tenant_id == tenant_id)
-    
+
     result = await db.execute(query)
     incident = result.scalar_one_or_none()
     if not incident:
-        raise HTTPException(status_code=404, detail=f"Incident {incident_id} not found or access denied")
+        raise HTTPException(
+            status_code=404, detail=f"Incident {incident_id} not found or access denied"
+        )
     return incident
 
 
 def _to_response(incident: IncidentORM) -> IncidentResponse:
     # Derive ITIL fields: prefer stored values, fall back to mapping from severity
     from backend.app.schemas.incidents import SEVERITY_TO_ITIL
-    impact = getattr(incident, 'impact', None)
-    urgency = getattr(incident, 'urgency', None)
-    priority = getattr(incident, 'priority', None)
+
+    impact = getattr(incident, "impact", None)
+    urgency = getattr(incident, "urgency", None)
+    priority = getattr(incident, "priority", None)
     if not priority and incident.severity:
         mapped = SEVERITY_TO_ITIL.get(incident.severity)
         if mapped:
-            impact, urgency, priority = mapped[0].value, mapped[1].value, mapped[2].value
+            impact, urgency, priority = (
+                mapped[0].value,
+                mapped[1].value,
+                mapped[2].value,
+            )
 
     return IncidentResponse(
         id=str(incident.id),
@@ -657,7 +728,7 @@ def _to_response(incident: IncidentORM) -> IncidentResponse:
         severity=incident.severity,
         status=IncidentStatus(incident.status),
         entity_id=str(incident.entity_id) if incident.entity_id else None,
-        entity_external_id=getattr(incident, 'entity_external_id', None),
+        entity_external_id=getattr(incident, "entity_external_id", None),
         reasoning_chain=incident.reasoning_chain,
         resolution_summary=incident.resolution_summary,
         created_at=incident.created_at,
@@ -670,5 +741,7 @@ def _to_response(incident: IncidentORM) -> IncidentResponse:
         closed_at=incident.closed_at,
         llm_model_version=incident.llm_model_version,
         ai_generated=True if incident.llm_model_version else False,
-        ai_watermark="This content was generated by Pedkai AI (Gemini). It is advisory only and requires human review before action." if incident.llm_model_version else None,
+        ai_watermark="This content was generated by Pedkai AI (Gemini). It is advisory only and requires human review before action."
+        if incident.llm_model_version
+        else None,
     )

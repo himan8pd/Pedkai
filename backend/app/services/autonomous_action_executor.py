@@ -4,21 +4,22 @@ Autonomous Action Executor (P5.3)
 Implements a safety-gated pipeline for executing autonomous actions.
 This is a conservative implementation suitable for staging and testing.
 """
+
 import asyncio
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
+from backend.app.core.logging import get_logger
 from backend.app.models.action_execution_orm import ActionExecutionORM, ActionState
-from backend.app.services.policy_engine import get_policy_engine
-from backend.app.services.digital_twin import DigitalTwinMock
 from backend.app.services.autonomous_actions.cell_failover import CellFailoverAction
 from backend.app.services.decision_repository import DecisionTraceRepository
+from backend.app.services.digital_twin import DigitalTwinMock
 from backend.app.services.embedding_service import get_embedding_service
-from backend.app.core.logging import get_logger
+from backend.app.services.policy_engine import get_policy_engine
 
 logger = get_logger(__name__)
 
@@ -29,7 +30,7 @@ _pending_queue = asyncio.Queue()
 class AutonomousActionExecutor:
     # Safety thresholds
     BLAST_RADIUS_MAX_ENTITIES = 10  # R-9: hard limit on affected entities
-    VALIDATION_POLL_SECONDS = 300   # R-8: 5-minute KPI poll window
+    VALIDATION_POLL_SECONDS = 300  # R-8: 5-minute KPI poll window
     VALIDATION_DEGRADATION_PCT = 10.0  # R-8: auto-rollback threshold
 
     def __init__(self, session_factory=None):
@@ -50,7 +51,17 @@ class AutonomousActionExecutor:
                 pass
             self._worker_task = None
 
-    async def submit_action(self, session: AsyncSession, tenant_id: str, action_type: str, entity_id: str, affected_entity_count: int = 1, parameters: Optional[Dict[str, Any]] = None, submitted_by: Optional[str] = None, trace_id: Optional[str] = None) -> ActionExecutionORM:
+    async def submit_action(
+        self,
+        session: AsyncSession,
+        tenant_id: str,
+        action_type: str,
+        entity_id: str,
+        affected_entity_count: int = 1,
+        parameters: Optional[Dict[str, Any]] = None,
+        submitted_by: Optional[str] = None,
+        trace_id: Optional[str] = None,
+    ) -> ActionExecutionORM:
         # Create DB record
         action_id = str(uuid.uuid4())
         action = ActionExecutionORM(
@@ -71,7 +82,9 @@ class AutonomousActionExecutor:
 
         # Enqueue for processing
         await _pending_queue.put(action_id)
-        logger.info(f"Enqueued autonomous action {action_id} for tenant {tenant_id} action={action_type}")
+        logger.info(
+            f"Enqueued autonomous action {action_id} for tenant {tenant_id} action={action_type}"
+        )
         return action
 
     async def _worker_loop(self):
@@ -82,7 +95,9 @@ class AutonomousActionExecutor:
                 # Acquire a DB session for processing
                 async with self.session_factory() as session:
                     # Fetch action
-                    stmt = select(ActionExecutionORM).where(ActionExecutionORM.id == action_id)
+                    stmt = select(ActionExecutionORM).where(
+                        ActionExecutionORM.id == action_id
+                    )
                     res = await session.execute(stmt)
                     action = res.scalar_one_or_none()
                     if not action:
@@ -107,13 +122,19 @@ class AutonomousActionExecutor:
                         continue
 
                     # Compute confidence from Decision Memory similarity (replaces hardcoded 0.9)
-                    confidence_score = 0.5  # conservative default if no similar decisions found
+                    confidence_score = (
+                        0.5  # conservative default if no similar decisions found
+                    )
                     try:
                         embedding_svc = get_embedding_service()
                         action_text = f"{action.action_type} on {action.entity_id} with {action.parameters}"
-                        action_embedding = await embedding_svc.generate_embedding(action_text)
+                        action_embedding = await embedding_svc.generate_embedding(
+                            action_text
+                        )
                         if action_embedding:
-                            decision_repo = DecisionTraceRepository(self.session_factory)
+                            decision_repo = DecisionTraceRepository(
+                                self.session_factory
+                            )
                             similar = await decision_repo.find_similar(
                                 embedding=action_embedding,
                                 tenant_id=action.tenant_id,
@@ -122,15 +143,27 @@ class AutonomousActionExecutor:
                             )
                             if similar:
                                 # Use highest similarity score from top match
-                                top_similarity = similar[0].get("similarity", 0.5) if isinstance(similar[0], dict) else 0.5
+                                top_similarity = (
+                                    similar[0].get("similarity", 0.5)
+                                    if isinstance(similar[0], dict)
+                                    else 0.5
+                                )
                                 confidence_score = max(0.3, min(0.99, top_similarity))
-                                logger.info(f"Action {action_id} confidence from Decision Memory: {confidence_score:.2f} ({len(similar)} similar decisions)")
+                                logger.info(
+                                    f"Action {action_id} confidence from Decision Memory: {confidence_score:.2f} ({len(similar)} similar decisions)"
+                                )
                             else:
-                                logger.info(f"Action {action_id} no similar decisions found, using default confidence {confidence_score}")
+                                logger.info(
+                                    f"Action {action_id} no similar decisions found, using default confidence {confidence_score}"
+                                )
                         else:
-                            logger.warning(f"Action {action_id} embedding generation failed, using default confidence {confidence_score}")
+                            logger.warning(
+                                f"Action {action_id} embedding generation failed, using default confidence {confidence_score}"
+                            )
                     except Exception as e:
-                        logger.warning(f"Action {action_id} confidence lookup failed: {e}, using default {confidence_score}")
+                        logger.warning(
+                            f"Action {action_id} confidence lookup failed: {e}, using default {confidence_score}"
+                        )
 
                     # ===== GATE 2: POLICY EVALUATION =====
                     policy_engine = get_policy_engine()
@@ -147,10 +180,15 @@ class AutonomousActionExecutor:
 
                     if eval_result.decision != "allow":
                         action.state = ActionState.FAILED
-                        action.result = {"reason": "policy_blocked", "details": eval_result.matched_rules}
+                        action.result = {
+                            "reason": "policy_blocked",
+                            "details": eval_result.matched_rules,
+                        }
                         action.updated_at = datetime.utcnow()
                         await session.commit()
-                        logger.info(f"Action {action_id} blocked by policy: {eval_result.reason}")
+                        logger.info(
+                            f"Action {action_id} blocked by policy: {eval_result.reason}"
+                        )
                         continue
 
                     # For PoC: mark as awaiting confirmation then execute automatically after confirmation window
@@ -160,7 +198,9 @@ class AutonomousActionExecutor:
 
                     # Wait confirmation window (non-blocking in real impl; blocking here for PoC)
                     wait_sec = eval_result.recommended_confirmation_window_sec or 30
-                    logger.info(f"Action {action_id} awaiting confirmation for {wait_sec}s")
+                    logger.info(
+                        f"Action {action_id} awaiting confirmation for {wait_sec}s"
+                    )
                     await asyncio.sleep(wait_sec)
 
                     # Execute: Simulate Netconf call via DigitalTwin or adapter
@@ -171,16 +211,26 @@ class AutonomousActionExecutor:
                     # Simulated execution — in real world call Netconf adapter
                     # For PoC, we assume success and poll digital twin
                     dt = DigitalTwinMock(self.session_factory)
-                    pred = await dt.predict(session, action.action_type, action.entity_id, action.parameters)
+                    pred = await dt.predict(
+                        session, action.action_type, action.entity_id, action.parameters
+                    )
                     # If action type is cell_failover, invoke the specialized handler for additional validation
                     if action.action_type == "cell_failover":
                         try:
                             handler = CellFailoverAction(self.session_factory)
                             target = (action.parameters or {}).get("target_cell")
-                            host = (action.parameters or {}).get("device_host", "nokia-mock-host")
-                            validation = await handler.estimate_impact(session, action.entity_id, target)
-                            pred.impact_delta = getattr(pred, "impact_delta", validation.get("impact_delta"))
-                            pred.risk_score = getattr(pred, "risk_score", validation.get("risk_score"))
+                            host = (action.parameters or {}).get(
+                                "device_host", "nokia-mock-host"
+                            )
+                            validation = await handler.estimate_impact(
+                                session, action.entity_id, target
+                            )
+                            pred.impact_delta = getattr(
+                                pred, "impact_delta", validation.get("impact_delta")
+                            )
+                            pred.risk_score = getattr(
+                                pred, "risk_score", validation.get("risk_score")
+                            )
                         except Exception as e:
                             logger.warning(f"CellFailover handler error: {e}")
                     # Simulate execution latency
@@ -196,7 +246,10 @@ class AutonomousActionExecutor:
                         action.state = ActionState.COMPLETED
                         action.success = True
                         action.result = {
-                            "prediction": {"risk_score": pred.risk_score, "impact_delta": pred.impact_delta},
+                            "prediction": {
+                                "risk_score": pred.risk_score,
+                                "impact_delta": pred.impact_delta,
+                            },
                             "validation": "passed",
                             "executed_at": datetime.utcnow().isoformat(),
                         }
@@ -204,17 +257,24 @@ class AutonomousActionExecutor:
                         action.state = ActionState.ROLLED_BACK
                         action.success = False
                         action.result = {
-                            "prediction": {"risk_score": pred.risk_score, "impact_delta": pred.impact_delta},
+                            "prediction": {
+                                "risk_score": pred.risk_score,
+                                "impact_delta": pred.impact_delta,
+                            },
                             "validation": "failed_auto_rollback",
                             "reason": "KPI degradation exceeded threshold",
                             "executed_at": datetime.utcnow().isoformat(),
                         }
-                        logger.warning(f"Action {action_id} AUTO-ROLLED BACK due to KPI degradation")
+                        logger.warning(
+                            f"Action {action_id} AUTO-ROLLED BACK due to KPI degradation"
+                        )
 
                     action.updated_at = datetime.utcnow()
                     await session.commit()
 
-                    logger.info(f"Action {action_id} executed, success={action.success}")
+                    logger.info(
+                        f"Action {action_id} executed, success={action.success}"
+                    )
 
             except Exception as e:
                 logger.error(f"Error in autonomous executor loop: {e}", exc_info=True)
@@ -226,8 +286,10 @@ class AutonomousActionExecutor:
         """
         R-8: Post-execution VALIDATION gate.
         """
-        from backend.app.models.kpi_sample_orm import KpiSampleORM
         import uuid
+
+        from backend.app.core.database import metrics_session_maker
+        from backend.app.models.kpi_orm import KPIMetricORM
 
         entity_id = action.entity_id
         # Convert to UUID object if it's a string, to satisfy ORM type requirements
@@ -243,19 +305,22 @@ class AutonomousActionExecutor:
 
         # Capture pre-execution baseline KPI (average of last 5 samples)
         try:
-            baseline_result = await session.execute(
-                select(func.avg(KpiSampleORM.value))
-                .where(
-                    KpiSampleORM.entity_id == entity_id,
-                    KpiSampleORM.metric_name == "traffic_volume",
-                    KpiSampleORM.timestamp < action.created_at
+            async with metrics_session_maker() as metrics_session:
+                baseline_result = await metrics_session.execute(
+                    select(func.avg(KPIMetricORM.value))
+                    .where(
+                        KPIMetricORM.entity_id == str(entity_id),
+                        KPIMetricORM.metric_name == "traffic_volume",
+                        KPIMetricORM.timestamp < action.created_at,
+                    )
+                    .order_by(KPIMetricORM.timestamp.desc())
+                    .limit(5)
                 )
-                .order_by(KpiSampleORM.timestamp.desc())
-                .limit(5)
-            )
-            baseline_avg = baseline_result.scalar()
+                baseline_avg = baseline_result.scalar()
         except Exception as e:
-            logger.warning(f"Validation: baseline KPI fetch failed for {entity_id}: {e}")
+            logger.warning(
+                f"Validation: baseline KPI fetch failed for {entity_id}: {e}"
+            )
             baseline_avg = None
 
         if baseline_avg is None:
@@ -278,15 +343,16 @@ class AutonomousActionExecutor:
             elapsed += poll_interval_sec
 
             try:
-                post_result = await session.execute(
-                    select(func.avg(KpiSampleORM.value))
-                    .where(
-                        KpiSampleORM.entity_id == entity_id,
-                        KpiSampleORM.metric_name == "traffic_volume",
-                        KpiSampleORM.timestamp >= datetime.utcnow() - timedelta(seconds=poll_duration_sec),
+                async with metrics_session_maker() as metrics_session:
+                    post_result = await metrics_session.execute(
+                        select(func.avg(KPIMetricORM.value)).where(
+                            KPIMetricORM.entity_id == str(entity_id),
+                            KPIMetricORM.metric_name == "traffic_volume",
+                            KPIMetricORM.timestamp
+                            >= datetime.utcnow() - timedelta(seconds=poll_duration_sec),
+                        )
                     )
-                )
-                post_avg = post_result.scalar()
+                    post_avg = post_result.scalar()
             except Exception:
                 post_avg = None
 

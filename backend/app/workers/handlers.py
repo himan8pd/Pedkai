@@ -8,15 +8,20 @@ Phase 1: Simple logging handlers
 Phase 2: Correlation, incident creation, anomaly detection handlers
 Phase 3: Full orchestration pipeline
 """
+
 import asyncio
 import logging
-from typing import Callable, Dict, Any
 from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict
 
-from backend.app.events.schemas import BaseEvent, AlarmIngestedEvent, AlarmClusterCreatedEvent
-from backend.app.events.bus import publish_event
-from backend.app.services.alarm_correlation import AlarmCorrelationService
 from backend.app.core.database import async_session_maker
+from backend.app.events.bus import publish_event
+from backend.app.events.schemas import (
+    AlarmClusterCreatedEvent,
+    AlarmIngestedEvent,
+    BaseEvent,
+)
+from backend.app.services.alarm_correlation import AlarmCorrelationService
 
 logger = logging.getLogger(__name__)
 
@@ -83,11 +88,14 @@ async def _flush_tenant(tenant_id: str) -> None:
     try:
         svc = AlarmCorrelationService(session_factory=async_session_maker)
         clusters = svc.correlate_alarms(alarms)
-        logger.info(f"Correlated {len(alarms)} alarms → {len(clusters)} clusters (tenant={tenant_id})")
+        logger.info(
+            f"Correlated {len(alarms)} alarms → {len(clusters)} clusters (tenant={tenant_id})"
+        )
 
         # Publish cluster events
         for cluster in clusters:
             import uuid as _uuid
+
             evt = AlarmClusterCreatedEvent(
                 tenant_id=tenant_id,
                 cluster_id=str(_uuid.uuid4()),
@@ -99,7 +107,9 @@ async def _flush_tenant(tenant_id: str) -> None:
             await publish_event(evt)
 
     except Exception as e:
-        logger.error(f"Error during correlation flush for tenant {tenant_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error during correlation flush for tenant {tenant_id}: {e}", exc_info=True
+        )
 
 
 async def _schedule_flush(tenant_id: str) -> None:
@@ -121,7 +131,9 @@ async def alarm_ingested_handler(event: BaseEvent) -> None:
                 "entity_type": getattr(event, "entity_type", None),
                 "is_emergency_service": getattr(event, "is_emergency_service", False),
             }
-            tenant_id = getattr(event, "tenant_id", "default")
+            from backend.app.core.config import get_settings
+
+            tenant_id = getattr(event, "tenant_id", get_settings().default_tenant_id)
         except Exception:
             logger.debug("Received non-alarm event in alarm_ingested_handler; dropping")
             return
@@ -139,7 +151,9 @@ async def alarm_ingested_handler(event: BaseEvent) -> None:
         buf["alarms"].append(alarm)
         # If buffer exceeds threshold, flush immediately
         if len(buf["alarms"]) >= 100:
-            logger.info(f"Buffer size >=100 for tenant {tenant_id}, flushing immediately")
+            logger.info(
+                f"Buffer size >=100 for tenant {tenant_id}, flushing immediately"
+            )
             # cancel timer if present
             t = buf.get("timer")
             if t and not t.done():
@@ -175,27 +189,30 @@ async def flush_buffer(tenant_id: str) -> None:
 
 
 # P2.2: Alarm cluster -> incident creation handler registration
+from backend.app.core.database import async_session_maker
+from backend.app.events.bus import publish_event
 from backend.app.events.schemas import IncidentCreatedEvent
 from backend.app.services.incident_service import create_incident_from_cluster
-from backend.app.events.bus import publish_event
-from backend.app.core.database import async_session_maker
 
 
 async def _handle_alarm_cluster_created(event: BaseEvent) -> None:
     # Best-effort mapping
-    data = getattr(event, 'dict', None)
-    tenant_id = getattr(event, 'tenant_id', 'default')
-    cluster_id = getattr(event, 'cluster_id', None) or getattr(event, 'event_id', None)
+    data = getattr(event, "dict", None)
+    from backend.app.core.config import get_settings
+
+    tenant_id = getattr(event, "tenant_id", get_settings().default_tenant_id)
+    cluster_id = getattr(event, "cluster_id", None) or getattr(event, "event_id", None)
 
     # Determine primary entity (use root_cause_entity_id if present)
-    entity_id = getattr(event, 'root_cause_entity_id', None)
+    entity_id = getattr(event, "root_cause_entity_id", None)
 
     # Build IncidentCreate payload minimal fields
     from backend.app.schemas.incidents import IncidentCreate
+
     payload = IncidentCreate(
         tenant_id=tenant_id,
         title=f"Auto-created incident from cluster {cluster_id}",
-        severity=getattr(event, 'severity', 'minor'),
+        severity=getattr(event, "severity", "minor"),
         entity_id=entity_id,
         entity_external_id=None,
     )
@@ -203,7 +220,9 @@ async def _handle_alarm_cluster_created(event: BaseEvent) -> None:
     # Create incident using a DB session
     async with async_session_maker() as session:
         try:
-            incident = await create_incident_from_cluster(payload, session, tenant_id=tenant_id)
+            incident = await create_incident_from_cluster(
+                payload, session, tenant_id=tenant_id
+            )
             # Emit IncidentCreatedEvent
             evt = IncidentCreatedEvent(
                 tenant_id=tenant_id,
@@ -214,7 +233,10 @@ async def _handle_alarm_cluster_created(event: BaseEvent) -> None:
             )
             await publish_event(evt)
         except Exception as e:
-            logger.error(f"Failed to auto-create incident from cluster {cluster_id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to auto-create incident from cluster {cluster_id}: {e}",
+                exc_info=True,
+            )
 
 
 register_handler("alarm_cluster_created", _handle_alarm_cluster_created)

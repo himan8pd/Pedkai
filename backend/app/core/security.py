@@ -6,7 +6,7 @@ Required for TMF API compliance (Strategic Review GAP 3).
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from typing import List, Optional
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes
@@ -69,6 +69,7 @@ oauth2_scheme = OAuth2PasswordBearer(
     },
 )
 
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """
     Generate a signed JWT token.
@@ -78,13 +79,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    
+
     # Ensure tenant_id is explicitly handled if present
     if "tenant_id" in data:
         to_encode["tenant_id"] = data["tenant_id"]
-        
+
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.secret_key, algorithm=settings.algorithm
+    )
     return encoded_jwt
 
 
@@ -94,34 +97,66 @@ class Role:
     OPERATOR = "operator"
     VIEWER = "viewer"
     SHIFT_LEAD = "shift_lead"  # Operator + sitrep approval
-    ENGINEER = "engineer"     # Operator + action approval
+    ENGINEER = "engineer"  # Operator + action approval
+
 
 # Role hierarchy/scopes
 _OPERATOR_BASE_SCOPES = [
-    TMF642_READ, TMF642_WRITE, CAPACITY_READ, CAPACITY_WRITE, CX_READ, CX_WRITE,
-    "metrics:read", TOPOLOGY_READ, TOPOLOGY_READ_FULL, TOPOLOGY_REVENUE,
-    INCIDENT_READ, AUTONOMOUS_READ, POLICY_READ,
+    TMF642_READ,
+    TMF642_WRITE,
+    CAPACITY_READ,
+    CAPACITY_WRITE,
+    CX_READ,
+    CX_WRITE,
+    "metrics:read",
+    TOPOLOGY_READ,
+    TOPOLOGY_READ_FULL,
+    TOPOLOGY_REVENUE,
+    INCIDENT_READ,
+    AUTONOMOUS_READ,
+    POLICY_READ,
 ]
 
 ROLE_SCOPES = {
     Role.ADMIN: [
-        TMF642_READ, TMF642_WRITE, CAPACITY_READ, CAPACITY_WRITE, CX_READ, CX_WRITE,
-        "metrics:read", "admin:all",
-        TOPOLOGY_READ, TOPOLOGY_READ_FULL, TOPOLOGY_REVENUE,
-        INCIDENT_READ, INCIDENT_APPROVE_SITREP, INCIDENT_APPROVE_ACTION, INCIDENT_CLOSE,
-        AUTONOMOUS_READ, POLICY_READ, POLICY_WRITE,
+        TMF642_READ,
+        TMF642_WRITE,
+        CAPACITY_READ,
+        CAPACITY_WRITE,
+        CX_READ,
+        CX_WRITE,
+        "metrics:read",
+        "admin:all",
+        TOPOLOGY_READ,
+        TOPOLOGY_READ_FULL,
+        TOPOLOGY_REVENUE,
+        INCIDENT_READ,
+        INCIDENT_APPROVE_SITREP,
+        INCIDENT_APPROVE_ACTION,
+        INCIDENT_CLOSE,
+        AUTONOMOUS_READ,
+        POLICY_READ,
+        POLICY_WRITE,
     ],
     Role.OPERATOR: _OPERATOR_BASE_SCOPES,
     Role.VIEWER: [
-        TMF642_READ, CAPACITY_READ, CX_READ, "metrics:read",
-        TOPOLOGY_READ, INCIDENT_READ, AUTONOMOUS_READ, POLICY_READ,
+        TMF642_READ,
+        CAPACITY_READ,
+        CX_READ,
+        "metrics:read",
+        TOPOLOGY_READ,
+        INCIDENT_READ,
+        AUTONOMOUS_READ,
+        POLICY_READ,
     ],
     Role.SHIFT_LEAD: _OPERATOR_BASE_SCOPES + [INCIDENT_APPROVE_SITREP],
     Role.ENGINEER: _OPERATOR_BASE_SCOPES + [INCIDENT_APPROVE_ACTION],
 }
 
+
 class User(BaseModel):
     username: str
+    user_id: Optional[str] = None
     role: str
     scopes: List[str] = []
     tenant_id: Optional[str] = None
@@ -129,14 +164,14 @@ class User(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+    user_id: Optional[str] = None
     role: Optional[str] = None
     scopes: List[str] = []
     tenant_id: Optional[str] = None
 
 
 async def get_current_user(
-    security_scopes: SecurityScopes, 
-    token: str = Depends(oauth2_scheme)
+    security_scopes: SecurityScopes, token: str = Depends(oauth2_scheme)
 ) -> User:
     """
     Validate JWT token and check required scopes based on Role-Based Access Control.
@@ -151,27 +186,32 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": authenticate_value},
     )
-    
+
     try:
         # Real JWT validation
         payload = jwt.decode(
-            token, 
-            settings.secret_key, 
-            algorithms=[settings.algorithm]
+            token, settings.secret_key, algorithms=[settings.algorithm]
         )
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
-            
+
+        user_id: Optional[str] = payload.get("user_id")
         role: str = payload.get("role", Role.VIEWER)
         tenant_id: Optional[str] = payload.get("tenant_id")
         # Assign scopes based on role if not present in token
         token_scopes = payload.get("scopes", ROLE_SCOPES.get(role, []))
-        
-        token_data = TokenData(username=username, role=role, scopes=token_scopes, tenant_id=tenant_id)
+
+        token_data = TokenData(
+            username=username,
+            user_id=user_id,
+            role=role,
+            scopes=token_scopes,
+            tenant_id=tenant_id,
+        )
     except (JWTError, Exception):
         raise credentials_exception
-        
+
     for scope in security_scopes.scopes:
         if scope not in token_data.scopes:
             raise HTTPException(
@@ -179,8 +219,15 @@ async def get_current_user(
                 detail=f"Not enough permissions. Required scope: {scope}",
                 headers={"WWW-Authenticate": authenticate_value},
             )
-            
+
     from backend.app.core.logging import tenant_id_ctx
+
     tenant_id_ctx.set(tenant_id)
-            
-    return User(username=username, role=role, scopes=token_data.scopes, tenant_id=tenant_id)
+
+    return User(
+        username=username,
+        user_id=user_id,
+        role=role,
+        scopes=token_data.scopes,
+        tenant_id=tenant_id,
+    )

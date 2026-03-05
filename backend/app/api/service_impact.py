@@ -6,20 +6,25 @@ and customer impact analysis with revenue-at-risk.
 
 WS4 — Service Impact & Alarm Correlation.
 """
+
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Security, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select
 
-from backend.app.core.database import get_db, async_session_maker
-from backend.app.core.security import get_current_user, User, TMF642_READ
-from backend.app.schemas.service_impact import AlarmCluster, CustomerImpact, ServiceImpactSummary
-from backend.app.services.alarm_correlation import AlarmCorrelationService
+from backend.app.core.database import async_session_maker, get_db
+from backend.app.core.security import TMF642_READ, User, get_current_user
 from backend.app.models.decision_trace_orm import DecisionTraceORM
+from backend.app.schemas.service_impact import (
+    AlarmCluster,
+    CustomerImpact,
+    ServiceImpactSummary,
+)
+from backend.app.services.alarm_correlation import AlarmCorrelationService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -37,8 +42,8 @@ async def get_impacted_customers(
     """
     try:
         # Finding S-1 Fix: Use current_user.tenant_id if available, otherwise fallback to query param for admins
-        tid = current_user.tenant_id or tenant_id or "default"
-        
+        tid = current_user.tenant_id or tenant_id
+
         query = "SELECT c.id, c.name, c.external_id FROM customers c WHERE c.tenant_id = :tid"
         params = {"tid": tid}
         query += " LIMIT 50"
@@ -61,8 +66,10 @@ async def get_impacted_customers(
         # Check for billing data
         try:
             billing_result = await db.execute(
-                text("SELECT ba.monthly_fee FROM bss_accounts ba WHERE ba.customer_id = :cid LIMIT 1"),
-                {"cid": str(cid)}
+                text(
+                    "SELECT ba.monthly_fee FROM bss_accounts ba WHERE ba.customer_id = :cid LIMIT 1"
+                ),
+                {"cid": str(cid)},
             )
             billing_row = billing_result.fetchone()
         except Exception:
@@ -76,18 +83,23 @@ async def get_impacted_customers(
             revenue_at_risk = None
             unpriced_count += 1
 
-        customers.append(CustomerImpact(
-            customer_id=cid,
-            customer_name=name or "Unknown",
-            customer_external_id=ext_id or str(cid),
-            revenue_at_risk=revenue_at_risk,
-            is_estimate=bss_is_estimate,
-            data_source=bss_data_source,
-            pricing_status=pricing_status,
-            requires_manual_valuation=(pricing_status == "unpriced"),
-        ))
+        customers.append(
+            CustomerImpact(
+                customer_id=cid,
+                customer_name=name or "Unknown",
+                customer_external_id=ext_id or str(cid),
+                revenue_at_risk=revenue_at_risk,
+                is_estimate=bss_is_estimate,
+                data_source=bss_data_source,
+                pricing_status=pricing_status,
+                requires_manual_valuation=(pricing_status == "unpriced"),
+            )
+        )
 
-    total_revenue = sum(c.revenue_at_risk for c in customers if c.revenue_at_risk is not None) or None
+    total_revenue = (
+        sum(c.revenue_at_risk for c in customers if c.revenue_at_risk is not None)
+        or None
+    )
 
     return ServiceImpactSummary(
         total_customers_impacted=len(customers),
@@ -108,9 +120,7 @@ async def get_alarm_clusters(
     service = AlarmCorrelationService(async_session_maker)
     try:
         # Fetch actual alarms (stored in decision_traces for this version)
-        tid = current_user.tenant_id or "default"
-        # Fetch actual alarms (stored in decision_traces as the system of record)
-        tid = current_user.tenant_id or "default"
+        tid = current_user.tenant_id
         result = await db.execute(
             text("""
                 SELECT id, title, severity, status, entity_id, created_at, ack_state
@@ -119,7 +129,7 @@ async def get_alarm_clusters(
                 ORDER BY created_at DESC
                 LIMIT 200
             """),
-            {"tid": tid}
+            {"tid": tid},
         )
         rows = result.fetchall()
 
@@ -144,36 +154,42 @@ async def get_alarm_clusters(
 
     # Use the real correlation service logic
     clusters_raw = service.correlate_alarms(raw_alarms)
-    
+
     clusters = []
     for c in clusters_raw:
         count = c["alarm_count"]
         reduction = ((count - 1) / count * 100.0) if count > 0 else 0.0
-        
+
         # Finding 4 Fix: Resolve entity name (Removal of TBD)
         entity_name = "Unknown"
         if c["root_cause_entity_id"]:
             try:
                 # Direct SQL for name resolution
                 name_res = await db.execute(
-                    text("SELECT from_entity_id FROM topology_relationships WHERE from_entity_id = :eid LIMIT 1"),
-                    {"eid": c["root_cause_entity_id"]}
+                    text(
+                        "SELECT from_entity_id FROM topology_relationships WHERE from_entity_id = :eid LIMIT 1"
+                    ),
+                    {"eid": c["root_cause_entity_id"]},
                 )
                 row = name_res.fetchone()
                 entity_name = row[0] if row else c["root_cause_entity_id"]
             except Exception:
                 entity_name = c["root_cause_entity_id"]
 
-        clusters.append(AlarmCluster(
-            cluster_id=uuid.uuid4(),
-            alarm_count=count,
-            noise_reduction_pct=round(reduction, 1),
-            root_cause_entity_id=c["root_cause_entity_id"],
-            root_cause_entity_name=entity_name,
-            severity=c["severity"],
-            created_at=c["created_at"] if isinstance(c["created_at"], datetime) else datetime.fromisoformat(c["created_at"]),
-            is_emergency_service=c["is_emergency_service"],
-        ))
+        clusters.append(
+            AlarmCluster(
+                cluster_id=uuid.uuid4(),
+                alarm_count=count,
+                noise_reduction_pct=round(reduction, 1),
+                root_cause_entity_id=c["root_cause_entity_id"],
+                root_cause_entity_name=entity_name,
+                severity=c["severity"],
+                created_at=c["created_at"]
+                if isinstance(c["created_at"], datetime)
+                else datetime.fromisoformat(c["created_at"]),
+                is_emergency_service=c["is_emergency_service"],
+            )
+        )
 
     return clusters
 
@@ -185,7 +201,7 @@ async def get_noise_wall(
 ):
     """Get raw alarm wall data — all uncorrelated alarms."""
     try:
-        tid = current_user.tenant_id or "default"
+        tid = current_user.tenant_id
         result = await db.execute(
             text("""
                 SELECT id, title, severity, status, entity_id, created_at
@@ -194,7 +210,7 @@ async def get_noise_wall(
                 ORDER BY created_at DESC
                 LIMIT 200
             """),
-            {"tid": tid}
+            {"tid": tid},
         )
         rows = result.fetchall()
     except Exception as e:
@@ -226,12 +242,10 @@ async def get_cluster_deep_dive(
     current_user: User = Security(get_current_user, scopes=[TMF642_READ]),
 ):
     """Get the reasoning chain for a specific alarm cluster."""
-    tid = current_user.tenant_id or "default"
+    tid = current_user.tenant_id
     try:
         result = await db.execute(
-            select(DecisionTraceORM)
-            .where(DecisionTraceORM.tenant_id == tid)
-            .limit(20)
+            select(DecisionTraceORM).where(DecisionTraceORM.tenant_id == tid).limit(20)
         )
         traces = result.scalars().all()
     except Exception as e:
@@ -239,23 +253,33 @@ async def get_cluster_deep_dive(
         traces = []
 
     total = len(traces)
-    alarm_types = list({getattr(t, 'trigger_type', 'UNKNOWN') for t in traces}) or ["UNKNOWN"]
+    alarm_types = list({getattr(t, "trigger_type", "UNKNOWN") for t in traces}) or [
+        "UNKNOWN"
+    ]
     noise_reduction = round(((total - 1) / total * 100) if total > 1 else 0.0, 1)
     confidence = round(min(0.5 + (total / 20), 0.95), 2)
 
-    reasoning_chain = [{
-        "step": 1,
-        "description": f"Temporal clustering: {total} events of type(s): {', '.join(alarm_types[:3])}.",
-        "confidence": confidence,
-        "source": "alarm_correlation:temporal_engine",
-        "evidence_count": total,
-    }] if total > 0 else [{
-        "step": 1,
-        "description": "No alarm data available for this cluster in the current tenant scope.",
-        "confidence": 0.0,
-        "source": "alarm_correlation:temporal_engine",
-        "evidence_count": 0,
-    }]
+    reasoning_chain = (
+        [
+            {
+                "step": 1,
+                "description": f"Temporal clustering: {total} events of type(s): {', '.join(alarm_types[:3])}.",
+                "confidence": confidence,
+                "source": "alarm_correlation:temporal_engine",
+                "evidence_count": total,
+            }
+        ]
+        if total > 0
+        else [
+            {
+                "step": 1,
+                "description": "No alarm data available for this cluster in the current tenant scope.",
+                "confidence": 0.0,
+                "source": "alarm_correlation:temporal_engine",
+                "evidence_count": 0,
+            }
+        ]
+    )
 
     return {
         "cluster_id": cluster_id,
@@ -265,6 +289,6 @@ async def get_cluster_deep_dive(
         "total_alarms_analysed": total,
         "ai_generated": True,
         "ai_watermark": "This content was generated by Pedkai AI (Gemini). It is advisory only and requires human review before action.",
-        "ai_model_version": "gemini-2.0-flash", # Placeholder or fetch from adapter
+        "ai_model_version": "gemini-2.0-flash",  # Placeholder or fetch from adapter
         "note": "Reasoning chain derived from actual cluster telemetry.",
     }

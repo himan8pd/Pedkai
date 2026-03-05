@@ -17,10 +17,11 @@ from backend.app.core.logging import get_logger
 
 # Import all ORM models so Base.metadata knows about every table
 from backend.app.models import *  # noqa: F401, F403
-from backend.app.models.user_orm import UserORM  # noqa: F401
-from backend.app.models.topology_models import EntityRelationshipORM  # noqa: F401
 from backend.app.models.decision_trace_orm import DecisionTraceORM  # noqa: F401
 from backend.app.models.incident_orm import IncidentORM  # noqa: F401
+from backend.app.models.topology_models import EntityRelationshipORM  # noqa: F401
+from backend.app.models.user_orm import UserORM  # noqa: F401
+from backend.app.models.user_tenant_access_orm import UserTenantAccessORM  # noqa: F401
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -28,7 +29,7 @@ logger = get_logger(__name__)
 
 async def init_database():
     """Initialize both graph and metrics databases."""
-    
+
     # 1. Initialize Graph Database
     logger.info(f"📡 Initializing Graph Database at {settings.database_url}...")
     graph_engine = create_async_engine(settings.database_url, echo=True)
@@ -36,42 +37,54 @@ async def init_database():
         logger.info("🔧 Enabling pgvector extension...")
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         logger.info("📦 Creating graph tables...")
-        # In a real system, we'd filter which tables go where. 
+        # In a real system, we'd filter which tables go where.
         # For MVP, creating all is fine as long as we use the right engine for the right data.
         await conn.run_sync(Base.metadata.create_all)
     await graph_engine.dispose()
-    
+
     # 2. Initialize Metrics Database (TimescaleDB)
-    logger.info(f"📈 Initializing Metrics Database at {settings.metrics_database_url}...")
+    logger.info(
+        f"📈 Initializing Metrics Database at {settings.metrics_database_url}..."
+    )
     metrics_async_engine = create_async_engine(settings.metrics_database_url, echo=True)
     async with metrics_async_engine.begin() as conn:
         logger.info("📦 Creating metrics tables...")
         await conn.run_sync(Base.metadata.create_all)
-        
+
         # Convert to Hypertable (Strategic Review Phase 1 Fix)
         logger.info("⚡ Converting kpi_metrics to TimescaleDB Hypertable...")
         try:
             # We must use text() for the raw command
             # timescale extension might already be enabled in the image, but let's be sure
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"))
-            await conn.execute(text(
-                "SELECT create_hypertable('kpi_metrics', 'timestamp', if_not_exists => TRUE)"
-            ))
+            await conn.execute(
+                text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE")
+            )
+            await conn.execute(
+                text(
+                    "SELECT create_hypertable('kpi_metrics', 'timestamp', if_not_exists => TRUE)"
+                )
+            )
 
             # 3. Apply Retention Policy (Strategic Review Fix #2)
             logger.info("⏳ Setting 30-day retention policy...")
-            await conn.execute(text(
-                "SELECT add_retention_policy('kpi_metrics', INTERVAL '30 days', if_not_exists => TRUE)"
-            ))
+            await conn.execute(
+                text(
+                    "SELECT add_retention_policy('kpi_metrics', INTERVAL '30 days', if_not_exists => TRUE)"
+                )
+            )
 
             # 4. Enable Native Compression (Strategic Review Fix #3)
             logger.info("🗜️ Enabling native compression (segmented by entity_id)...")
-            await conn.execute(text(
-                "ALTER TABLE kpi_metrics SET (timescaledb.compress, timescaledb.compress_segmentby = 'entity_id')"
-            ))
-            await conn.execute(text(
-                "SELECT add_compression_policy('kpi_metrics', INTERVAL '7 days', if_not_exists => TRUE)"
-            ))
+            await conn.execute(
+                text(
+                    "ALTER TABLE kpi_metrics SET (timescaledb.compress, timescaledb.compress_segmentby = 'entity_id')"
+                )
+            )
+            await conn.execute(
+                text(
+                    "SELECT add_compression_policy('kpi_metrics', INTERVAL '7 days', if_not_exists => TRUE)"
+                )
+            )
 
         except Exception as e:
             logger.warning(f"⚠️ Could not apply TimescaleDB optimizations: {e}")
@@ -82,20 +95,20 @@ async def init_database():
 
 async def drop_all_tables():
     """Drop all tables (use with caution!)."""
-    
+
     engine = create_async_engine(settings.database_url, echo=True)
-    
+
     async with engine.begin() as conn:
         logger.info("⚠️ Dropping all tables...")
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await engine.dispose()
     logger.info("✅ All tables dropped.")
 
 
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) > 1 and sys.argv[1] == "--drop":
         print("⚠️ WARNING: This will drop all tables!")
         confirm = input("Type 'yes' to confirm: ")
