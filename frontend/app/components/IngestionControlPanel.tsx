@@ -135,14 +135,14 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
     };
 
     return (
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mt-6 md:col-span-4 lg:col-span-5">
+        <div className="bg-[#0a2d4a] rounded-lg p-6 border border-cyan-900/40 mt-6 md:col-span-4 lg:col-span-5">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
                 <div>
                     <h2 className="text-xl font-bold text-white flex items-center">
-                        <Play className="w-5 h-5 mr-2 text-blue-400" />
+                        <Play className="w-5 h-5 mr-2 text-cyan-400" />
                         Ingestion & Reporting Control
                     </h2>
-                    <p className="text-sm text-gray-400 mt-1">
+                    <p className="text-sm text-white/80 mt-1">
                         Manage synthetic data ingestion from Telco2 dataset and generate Day 1 Divergence Reports.
                     </p>
                 </div>
@@ -152,7 +152,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
                         disabled={running}
                         className={`flex items-center justify-center px-4 py-2 rounded-md font-medium transition-colors ${running
                                 ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'bg-cyan-400 text-gray-950 font-bold hover:bg-cyan-300'
                             }`}
                     >
                         {running ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
@@ -161,7 +161,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
                     <button
                         onClick={handleGenerateReport}
                         disabled={reportStatus === 'generating'}
-                        className="flex items-center justify-center px-4 py-2 rounded-md font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50"
+                        className="flex items-center justify-center px-4 py-2 rounded-md font-medium bg-violet-500 text-white hover:bg-violet-400 transition-colors disabled:opacity-50"
                     >
                         {reportStatus === 'generating' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-4 h-4 mr-2" />}
                         {reportStatus === 'generating' ? 'Generating...' : 'Generate Divergence Report'}
@@ -191,14 +191,14 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
                         <span>Progress</span>
                         <span>{progress}%</span>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2.5">
+                    <div className="w-full bg-[#06203b] rounded-full h-2.5">
                         <div
-                            className="bg-blue-500 h-2.5 rounded-full transition-all duration-500 ease-out"
+                            className="bg-cyan-400 h-2.5 rounded-full transition-all duration-500 ease-out"
                             style={{ width: `${progress}%` }}
                         ></div>
                     </div>
 
-                    <div className="bg-black/50 rounded border border-gray-700 p-3 h-48 overflow-y-auto font-mono text-xs text-green-400 mt-4">
+                    <div className="bg-black/50 rounded border border-cyan-900/30 p-3 h-48 overflow-y-auto font-mono text-xs text-green-400 mt-4">
                         {logs.map((log, i) => (
                             <div key={i} className="mb-1 leading-relaxed opacity-90">{log}</div>
                         ))}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   TrendingUp,
   TrendingDown,
@@ -75,7 +76,7 @@ function KpiCard({
   color?: string;
 }) {
   const colorMap: Record<string, string> = {
-    blue: "from-blue-500/20 to-blue-600/5 border-blue-500/30",
+    blue: "from-cyan-500/20 to-cyan-600/5 border-cyan-500/30",
     green: "from-emerald-500/20 to-emerald-600/5 border-emerald-500/30",
     amber: "from-amber-500/20 to-amber-600/5 border-amber-500/30",
     red: "from-red-500/20 to-red-600/5 border-red-500/30",
@@ -119,7 +120,7 @@ export default function ScorecardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showDetections, setShowDetections] = useState(true);
-  const [showMethodology, setShowMethodology] = useState(false);
+  const [showMethodology, setShowMethodology] = useState(true);
 
   useEffect(() => {
     async function fetchAll() {
@@ -165,7 +166,7 @@ export default function ScorecardPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-white mb-1">AI Scorecard</h1>
-        <p className="text-gray-400">
+        <p className="text-white/80">
           Autonomous intelligence performance &middot;{" "}
           {scorecard ? (
             <>
@@ -186,70 +187,82 @@ export default function ScorecardPage() {
 
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        <KpiCard
-          label="Mean Time to Resolve"
-          value={
-            scorecard?.pedkai_zone_mttr_minutes != null
-              ? `${scorecard.pedkai_zone_mttr_minutes} min`
-              : "Pending"
-          }
-          subtitle={
-            scorecard?.pedkai_zone_mttr_minutes != null
-              ? "Pedkai-managed zone"
-              : "No closed incidents yet"
-          }
-          icon={<Clock className="w-5 h-5" />}
-          trend={scorecard?.pedkai_zone_mttr_minutes != null ? "down" : null}
-          color="cyan"
-        />
-        <KpiCard
-          label="Incidents Tracked"
-          value={String(scorecard?.pedkai_zone_incident_count ?? 0)}
-          subtitle="Active monitoring window (30d)"
-          icon={<AlertCircle className="w-5 h-5" />}
-          color="amber"
-        />
-        <KpiCard
-          label="Drift Detections"
-          value={String(detections.length)}
-          subtitle="KPI anomalies flagged"
-          icon={<Activity className="w-5 h-5" />}
-          color="purple"
-        />
-        <KpiCard
-          label="Revenue Protected"
-          value={
-            valueCapture?.revenue_protected != null
-              ? `$${(valueCapture.revenue_protected / 1000).toFixed(0)}K`
-              : "N/A"
-          }
-          subtitle={
-            valueCapture
-              ? "Based on closed incidents"
-              : "Awaiting incident closure"
-          }
-          icon={<Target className="w-5 h-5" />}
-          trend={valueCapture?.revenue_protected ? "up" : null}
-          color="green"
-        />
-        <KpiCard
-          label="Incidents Prevented"
-          value={String(valueCapture?.incidents_prevented ?? "—")}
-          subtitle="Proactive shield interventions"
-          icon={<Shield className="w-5 h-5" />}
-          color="blue"
-        />
-        <KpiCard
-          label="Uptime Recovered"
-          value={
-            valueCapture?.uptime_gained_minutes != null
-              ? `${valueCapture.uptime_gained_minutes.toFixed(0)} min`
-              : "—"
-          }
-          subtitle="From automated resolution"
-          icon={<Zap className="w-5 h-5" />}
-          color="green"
-        />
+        <Link href="/incidents" className="block">
+          <KpiCard
+            label="Mean Time to Resolve"
+            value={
+              scorecard?.pedkai_zone_mttr_minutes != null
+                ? `${scorecard.pedkai_zone_mttr_minutes} min`
+                : "Pending"
+            }
+            subtitle={
+              scorecard?.pedkai_zone_mttr_minutes != null
+                ? "Pedkai-managed zone"
+                : "No closed incidents yet"
+            }
+            icon={<Clock className="w-5 h-5" />}
+            trend={scorecard?.pedkai_zone_mttr_minutes != null ? "down" : null}
+            color="cyan"
+          />
+        </Link>
+        <Link href="/incidents" className="block">
+          <KpiCard
+            label="Incidents Tracked"
+            value={String(scorecard?.pedkai_zone_incident_count ?? 0)}
+            subtitle="Active monitoring window (30d)"
+            icon={<AlertCircle className="w-5 h-5" />}
+            color="amber"
+          />
+        </Link>
+        <Link href="#detections" className="block">
+          <KpiCard
+            label="Drift Detections"
+            value={String(detections.length)}
+            subtitle="KPI anomalies flagged"
+            icon={<Activity className="w-5 h-5" />}
+            color="purple"
+          />
+        </Link>
+        <Link href="/incidents" className="block">
+          <KpiCard
+            label="Revenue Protected"
+            value={
+              valueCapture?.revenue_protected != null
+                ? `$${(valueCapture.revenue_protected / 1000).toFixed(0)}K`
+                : "N/A"
+            }
+            subtitle={
+              valueCapture
+                ? "Based on closed incidents"
+                : "Awaiting incident closure"
+            }
+            icon={<Target className="w-5 h-5" />}
+            trend={valueCapture?.revenue_protected ? "up" : null}
+            color="green"
+          />
+        </Link>
+        <Link href="/incidents" className="block">
+          <KpiCard
+            label="Incidents Prevented"
+            value={String(valueCapture?.incidents_prevented ?? "—")}
+            subtitle="Proactive shield interventions"
+            icon={<Shield className="w-5 h-5" />}
+            color="blue"
+          />
+        </Link>
+        <Link href="/incidents" className="block">
+          <KpiCard
+            label="Uptime Recovered"
+            value={
+              valueCapture?.uptime_gained_minutes != null
+                ? `${valueCapture.uptime_gained_minutes.toFixed(0)} min`
+                : "—"
+            }
+            subtitle="From automated resolution"
+            icon={<Zap className="w-5 h-5" />}
+            color="green"
+          />
+        </Link>
       </div>
 
       {/* Baseline Status */}
@@ -261,10 +274,10 @@ export default function ScorecardPage() {
               <h3 className="text-amber-300 font-semibold text-sm">
                 Counterfactual Baseline Pending
               </h3>
-              <p className="text-gray-400 text-sm mt-1">
+              <p className="text-white/80 text-sm mt-1">
                 {scorecard.baseline_note}
               </p>
-              <p className="text-gray-500 text-xs mt-2">
+              <p className="text-white/60 text-xs mt-2">
                 Non-Pedkai zone comparison will be available after 30-day
                 shadow-mode deployment.
               </p>
@@ -275,7 +288,7 @@ export default function ScorecardPage() {
 
       {/* Drift Calibration */}
       {scorecard?.drift_calibration && !scorecard.drift_calibration.error && (
-        <div className="rounded-xl border border-gray-700 bg-gray-800/50 p-5">
+        <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5">
           <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
             <Activity className="w-4 h-4 text-purple-400" />
             Drift Calibration
@@ -283,7 +296,7 @@ export default function ScorecardPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Object.entries(scorecard.drift_calibration).map(([key, val]) => (
               <div key={key}>
-                <p className="text-xs text-gray-500 uppercase tracking-wider">
+                <p className="text-xs text-slate-400 uppercase tracking-wider">
                   {key.replace(/_/g, " ")}
                 </p>
                 <p className="text-white font-mono text-sm mt-1">
@@ -296,33 +309,33 @@ export default function ScorecardPage() {
       )}
 
       {/* KPI Drift Detections */}
-      <div className="rounded-xl border border-gray-700 bg-gray-800/50 overflow-hidden">
+      <div id="detections" className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] overflow-hidden">
         <button
           onClick={() => setShowDetections(!showDetections)}
-          className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-800 transition-colors"
+          className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#0d3b5e] transition-colors"
         >
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Shield className="w-5 h-5 text-cyan-400" />
             Autonomous Shield Detections
-            <span className="text-sm font-normal text-gray-400">
+            <span className="text-sm font-normal text-white/70">
               ({detections.length})
             </span>
           </h2>
           {showDetections ? (
-            <ChevronUp className="w-5 h-5 text-gray-400" />
+            <ChevronUp className="w-5 h-5 text-slate-400" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-gray-400" />
+            <ChevronDown className="w-5 h-5 text-slate-400" />
           )}
         </button>
 
         {showDetections && (
-          <div className="border-t border-gray-700">
+          <div className="border-t border-cyan-900/40">
             {detections.length === 0 ? (
-              <div className="p-6 text-center text-gray-500">
+              <div className="p-6 text-center text-white">
                 No drift detections in current window
               </div>
             ) : (
-              <div className="divide-y divide-gray-700/50">
+              <div className="divide-y divide-cyan-900/30">
                 {detections.map((det, idx) => (
                   <div key={idx} className="px-5 py-4">
                     <div className="flex items-start justify-between">
@@ -330,7 +343,7 @@ export default function ScorecardPage() {
                         <p className="text-white font-medium">
                           {det.entity_name}
                         </p>
-                        <p className="text-sm text-gray-400 mt-0.5">
+                        <p className="text-sm text-white/80 mt-0.5">
                           {det.metric_name}:{" "}
                           <span className="text-white font-mono">
                             {det.current_value.toFixed(2)}
@@ -345,19 +358,19 @@ export default function ScorecardPage() {
                             ? "bg-red-900/50 text-red-300"
                             : det.severity === "medium"
                               ? "bg-amber-900/50 text-amber-300"
-                              : "bg-gray-700 text-gray-300",
+                              : "bg-slate-700/50 text-slate-200",
                         )}
                       >
                         {det.severity}
                       </span>
                     </div>
                     {det.recommendation && (
-                      <p className="text-sm text-cyan-400/80 mt-2 italic">
+                      <p className="text-sm text-cyan-400 mt-2 italic">
                         &quot;{det.recommendation}&quot;
                       </p>
                     )}
                     {det.ai_generated && (
-                      <span className="inline-flex items-center gap-1 mt-2 text-[10px] text-amber-500/60 uppercase tracking-wider">
+                      <span className="inline-flex items-center gap-1 mt-2 text-[10px] text-amber-400/80 uppercase tracking-wider">
                         AI Generated — Advisory Only
                       </span>
                     )}
@@ -370,10 +383,10 @@ export default function ScorecardPage() {
       </div>
 
       {/* Methodology Footer */}
-      <div className="rounded-xl border border-gray-700 bg-gray-800/30 p-5">
+      <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5">
         <button
           onClick={() => setShowMethodology(!showMethodology)}
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-sm text-white hover:text-cyan-300 transition-colors"
         >
           {showMethodology ? (
             <ChevronUp className="w-4 h-4" />
@@ -383,7 +396,7 @@ export default function ScorecardPage() {
           Methodology & Data Sources
         </button>
         {showMethodology && (
-          <div className="mt-3 text-sm text-gray-500 space-y-2">
+          <div className="mt-3 text-sm text-white/80 space-y-2">
             <p>
               MTTR is calculated from actual incident created_at → closed_at
               timestamps in PostgreSQL.
@@ -400,7 +413,7 @@ export default function ScorecardPage() {
               Non-Pedkai zone comparison requires 30-day shadow-mode data (not
               yet collected).
             </p>
-            <p className="text-gray-600">
+            <p className="text-white/60">
               Full methodology:{" "}
               <span className="font-mono text-xs">
                 /docs/value_methodology.md

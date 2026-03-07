@@ -31,7 +31,7 @@ export default function Dashboard({
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-white mb-2">NOC Dashboard</h1>
-        <p className="text-gray-400">Real-time network operations center</p>
+        <p className="text-white/80">Real-time network operations center</p>
       </div>
 
       {/* KPI Cards */}
@@ -65,7 +65,7 @@ export default function Dashboard({
           <h2 className="text-xl font-bold text-white">Alarm Feed</h2>
           <div className="space-y-2 max-h-[600px] overflow-y-auto">
             {alarms.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
+              <div className="text-center py-8 text-white">
                 No active alarms
               </div>
             ) : (

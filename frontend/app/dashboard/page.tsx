@@ -114,7 +114,7 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="mb-4 text-sm text-gray-400">
+      <div className="mb-4 text-sm text-white/70">
         SSE: {connected ? "connected" : "disconnected"}
       </div>
       <Dashboard

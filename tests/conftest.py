@@ -44,6 +44,7 @@ from backend.app.models.tenant_orm import TenantORM
 from backend.app.models.customer_orm import CustomerORM
 from backend.app.models.policy_orm import PolicyORM, PolicyEvaluationORM, PolicyVersionORM
 from backend.app.models.bss_orm import BillingAccountORM, ServicePlanORM
+from backend.app.models.reconciliation_result_orm import ReconciliationRunORM, ReconciliationResultORM
 # Note: TMF642 and TMF628 are Pydantic only for now.
 
 # Use in-memory SQLite for testing

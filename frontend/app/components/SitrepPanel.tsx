@@ -114,7 +114,7 @@ export default function SitrepPanel({ selectedAlarm, onAcknowledge }: SitrepPane
                         </div>
                     </motion.div>
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-500 opacity-50">
+                    <div className="flex-1 flex flex-col items-center justify-center text-white opacity-70">
                         <Activity className="w-24 h-24 mb-4" />
                         <p className="text-lg tracking-widest uppercase font-black">Select an incident to analyze</p>
                     </div>

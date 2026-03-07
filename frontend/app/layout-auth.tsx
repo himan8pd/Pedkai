@@ -153,36 +153,39 @@ export default function AuthLayout({
   // ═══════════════════════════════════════════════════════════════
   if (phase === "login") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-black">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] to-[#020d18]">
         <div className="w-full max-w-md">
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 shadow-xl">
-            <h1 className="text-2xl font-bold text-white mb-6 text-center">
-              Pedkai
-            </h1>
+          <div className="bg-[#0a2d4a] rounded-xl border border-cyan-900/40 p-8 shadow-2xl">
+            <div className="flex flex-col items-center mb-8">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.jpeg" alt="pedk.ai" className="w-20 h-20 rounded-2xl mb-4" />
+              <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
+              <p className="text-sm text-white mt-1">NOC Command Center</p>
+            </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-white mb-2">
                   Username
                 </label>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                   placeholder="operator"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-white mb-2">
                   Password
                 </label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                   placeholder="••••••"
                 />
               </div>
@@ -196,7 +199,7 @@ export default function AuthLayout({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-semibold transition-colors"
+                className="w-full px-4 py-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-colors"
               >
                 {isLoading ? "Logging in..." : "Login"}
               </button>
@@ -218,25 +221,27 @@ export default function AuthLayout({
   // ═══════════════════════════════════════════════════════════════
   if (phase === "tenant-select") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-black">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] to-[#020d18]">
         <div className="w-full max-w-md">
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 shadow-xl">
-            <h1 className="text-2xl font-bold text-white mb-2 text-center">
-              Pedkai
-            </h1>
-            <p className="text-gray-400 text-sm text-center mb-6">
-              Select a tenant to continue
-            </p>
+          <div className="bg-[#0a2d4a] rounded-xl border border-cyan-900/40 p-8 shadow-2xl">
+            <div className="flex flex-col items-center mb-6">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3" />
+              <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
+              <p className="text-white text-sm mt-1">
+                Select a tenant to continue
+              </p>
+            </div>
 
             <form onSubmit={handleSelectTenant} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-white mb-2">
                   Tenant
                 </label>
                 <select
                   value={selectedTenantId ?? ""}
                   onChange={(e) => setSelectedTenantId(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
                 >
                   {tenants.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -246,7 +251,7 @@ export default function AuthLayout({
                 </select>
               </div>
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-white/80">
                 You have access to {tenants.length} tenant
                 {tenants.length > 1 ? "s" : ""}. To switch tenants later you
                 must log out and log back in.
@@ -261,7 +266,7 @@ export default function AuthLayout({
               <button
                 type="submit"
                 disabled={isTenantLoading || !selectedTenantId}
-                className="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white font-semibold transition-colors"
+                className="w-full px-4 py-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-colors"
               >
                 {isTenantLoading ? "Selecting..." : "Continue"}
               </button>
@@ -269,7 +274,7 @@ export default function AuthLayout({
               <button
                 type="button"
                 onClick={handleLogout}
-                className="w-full px-4 py-2 rounded-lg border border-gray-600 text-gray-400 hover:text-white hover:border-gray-500 text-sm transition-colors"
+                className="w-full px-4 py-2 rounded-lg border border-cyan-900/50 text-slate-400 hover:text-white hover:border-cyan-700/50 text-sm transition-colors"
               >
                 Back to login
               </button>

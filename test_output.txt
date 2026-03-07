@@ -1,31 +1,74 @@
-Form data requires "python-multipart" to be installed. 
-You can install "python-multipart" with: 
+============================= test session starts ==============================
+platform darwin -- Python 3.14.0, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/himanshu/Projects/Pedkai
+configfile: pytest.ini
+plugins: anyio-4.12.1, locust-2.43.3, asyncio-1.3.0, cov-7.0.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
 
-pip install python-multipart
+tests/integration/test_divergence.py F                                   [100%]
 
-ImportError while loading conftest '/Users/himanshu/Library/CloudStorage/GoogleDrive-himanshu@htadvisers.co.uk/My Drive/AI Learning/AntiGravity/Pedkai/tests/conftest.py'.
-tests/conftest.py:30: in <module>
-    from backend.app.main import app
-backend/app/main.py:20: in <module>
-    from backend.app.api import decisions, health, tmf642, tmf628, auth
-backend/app/api/auth.py:32: in <module>
-    @router.post("/token")
-     ^^^^^^^^^^^^^^^^^^^^^
-venv/lib/python3.14/site-packages/fastapi/routing.py:1132: in decorator
-    self.add_api_route(
-venv/lib/python3.14/site-packages/fastapi/routing.py:1071: in add_api_route
-    route = route_class(
-venv/lib/python3.14/site-packages/fastapi/routing.py:670: in __init__
-    self.dependant = get_dependant(
-venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:305: in get_dependant
-    sub_dependant = get_dependant(
-venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:283: in get_dependant
-    param_details = analyze_param(
-venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:506: in analyze_param
-    ensure_multipart_is_installed()
-venv/lib/python3.14/site-packages/fastapi/dependencies/utils.py:109: in ensure_multipart_is_installed
-    raise RuntimeError(multipart_not_installed_error) from None
-E   RuntimeError: Form data requires "python-multipart" to be installed.
-E   You can install "python-multipart" with:
-E
-E   pip install python-multipart
+=================================== FAILURES ===================================
+___________________________ test_reconciliation_run ____________________________
+
+client = <httpx.AsyncClient object at 0x10fb25160>
+seeded_divergence_data = 'test_tenant'
+
+    @pytest.mark.asyncio
+    async def test_reconciliation_run(client: AsyncClient, seeded_divergence_data: str):
+        """Test POST /divergence/run executes algorithm successfully."""
+        tenant_id = seeded_divergence_data
+    
+        response = await client.post(
+            "/api/v1/reports/divergence/run",
+            json={"tenant_id": tenant_id}
+        )
+    
+        assert response.status_code == 200
+        data = response.json()
+>       assert data["status"] == "success"
+E       AssertionError: assert 'complete' == 'success'
+E         
+E         - success
+E         + complete
+
+tests/integration/test_divergence.py:127: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+{"timestamp": "2026-03-06T16:01:32.749530+00:00", "level": "INFO", "message": "Event bus initialized with maxsize=10000", "module": "bus", "func": "initialize_event_bus", "line": 48, "service": "pedkai-backend"}
+------------------------------ Captured log setup ------------------------------
+INFO     backend.app.events.bus:bus.py:48 Event bus initialized with maxsize=10000
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-03-06T16:01:32.756113+00:00", "level": "INFO", "message": "[Reconciliation] Starting run 150b6127-07e5-40fd-ac52-bf56032456dd for tenant test_tenant", "module": "reconciliation_engine", "func": "run", "line": 74, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.759282+00:00", "level": "INFO", "message": "[Reconciliation] Detecting dark nodes\u2026", "module": "reconciliation_engine", "func": "_detect_dark_nodes", "line": 240, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.760346+00:00", "level": "INFO", "message": "  \u2192 1 dark nodes", "module": "reconciliation_engine", "func": "_detect_dark_nodes", "line": 277, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.760410+00:00", "level": "INFO", "message": "[Reconciliation] Detecting phantom nodes\u2026", "module": "reconciliation_engine", "func": "_detect_phantom_nodes", "line": 282, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.761066+00:00", "level": "INFO", "message": "  \u2192 1 phantom nodes", "module": "reconciliation_engine", "func": "_detect_phantom_nodes", "line": 319, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.761115+00:00", "level": "INFO", "message": "[Reconciliation] Detecting identity mutations\u2026", "module": "reconciliation_engine", "func": "_detect_identity_mutations", "line": 324, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.761764+00:00", "level": "INFO", "message": "  \u2192 1 identity mutations", "module": "reconciliation_engine", "func": "_detect_identity_mutations", "line": 366, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.761810+00:00", "level": "INFO", "message": "[Reconciliation] Detecting dark attributes\u2026", "module": "reconciliation_engine", "func": "_detect_dark_attributes", "line": 371, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.764010+00:00", "level": "INFO", "message": "  \u2192 0 dark attributes", "module": "reconciliation_engine", "func": "_detect_dark_attributes", "line": 420, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.764051+00:00", "level": "INFO", "message": "[Reconciliation] Detecting dark edges\u2026", "module": "reconciliation_engine", "func": "_detect_dark_edges", "line": 425, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.764752+00:00", "level": "INFO", "message": "  \u2192 1 dark edges", "module": "reconciliation_engine", "func": "_detect_dark_edges", "line": 470, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.764795+00:00", "level": "INFO", "message": "[Reconciliation] Detecting phantom edges\u2026", "module": "reconciliation_engine", "func": "_detect_phantom_edges", "line": 475, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.765436+00:00", "level": "INFO", "message": "  \u2192 1 phantom edges", "module": "reconciliation_engine", "func": "_detect_phantom_edges", "line": 519, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.766668+00:00", "level": "INFO", "message": "[Reconciliation] Run 150b6127-07e5-40fd-ac52-bf56032456dd complete: 5 divergences in 0.0s | Recall=1.000 Precision=0.400 F1=0.571", "module": "reconciliation_engine", "func": "run", "line": 195, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129"}
+{"timestamp": "2026-03-06T16:01:32.766853+00:00", "level": "INFO", "message": "POST /api/v1/reports/divergence/run completed", "module": "trace", "func": "dispatch", "line": 46, "service": "pedkai-backend", "correlation_id": "1046c123-3db5-40e3-b8c9-2dbb719f1c8d", "event_id": "d5805101-a7ba-4e44-a63a-bad939056ba4", "trace_id": "6fcb32595cc813fc9a6be71a63676e06", "span_id": "a7289f233b991129", "method": "POST", "path": "/api/v1/reports/divergence/run", "status_code": 200, "duration_ms": 12.47, "client_ip": "127.0.0.1"}
+------------------------------ Captured log call -------------------------------
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:74 [Reconciliation] Starting run 150b6127-07e5-40fd-ac52-bf56032456dd for tenant test_tenant
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:240 [Reconciliation] Detecting dark nodes…
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:277   → 1 dark nodes
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:282 [Reconciliation] Detecting phantom nodes…
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:319   → 1 phantom nodes
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:324 [Reconciliation] Detecting identity mutations…
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:366   → 1 identity mutations
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:371 [Reconciliation] Detecting dark attributes…
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:420   → 0 dark attributes
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:425 [Reconciliation] Detecting dark edges…
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:470   → 1 dark edges
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:475 [Reconciliation] Detecting phantom edges…
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:519   → 1 phantom edges
+INFO     backend.app.services.reconciliation_engine:reconciliation_engine.py:195 [Reconciliation] Run 150b6127-07e5-40fd-ac52-bf56032456dd complete: 5 divergences in 0.0s | Recall=1.000 Precision=0.400 F1=0.571
+INFO     backend.app.middleware.trace:trace.py:46 POST /api/v1/reports/divergence/run completed
+=========================== short test summary info ============================
+FAILED tests/integration/test_divergence.py::test_reconciliation_run - Assert...
+============================== 1 failed in 0.11s ===============================

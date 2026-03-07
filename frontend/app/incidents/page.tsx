@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   Clock,
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
@@ -165,17 +167,17 @@ export default function IncidentsPage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-1">Incidents</h1>
-          <p className="text-gray-400">
+          <p className="text-white/80">
             {incidents.length} total &middot; {openCount} open &middot;{" "}
             {closedCount} closed &middot; ITIL v4 Priority Matrix
           </p>
         </div>
         {/* ITIL Matrix legend */}
-        <div className="text-xs text-gray-500 bg-gray-800/50 border border-gray-700 rounded-lg p-3 hidden lg:block">
-          <p className="font-semibold text-gray-400 mb-1">
+        <div className="text-xs bg-[#0a2d4a] border border-cyan-900/40 rounded-lg p-3 hidden lg:block">
+          <p className="font-semibold text-slate-300 mb-1">
             Priority = Impact × Urgency
           </p>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-0.5 font-mono">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-0.5 font-mono text-slate-300">
             <span></span>
             <span className="text-red-400">High</span>
             <span className="text-amber-400">Med</span>
@@ -211,8 +213,8 @@ export default function IncidentsPage() {
             className={cn(
               "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
               filterStatus === key
-                ? "bg-blue-600 text-white"
-                : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700",
+                ? "bg-cyan-500 text-gray-950 font-bold"
+                : "bg-[#0a2d4a] text-slate-300 hover:text-white hover:bg-[#0d3b5e] border border-cyan-900/40",
             )}
           >
             {label} <span className="ml-1 text-xs opacity-70">({count})</span>
@@ -233,54 +235,54 @@ export default function IncidentsPage() {
               className={cn(
                 "rounded-lg border p-4 text-left transition-all",
                 isActive
-                  ? `ring-2 ${meta.cardRing} bg-gray-800`
-                  : "border-gray-700 bg-gray-800/50 hover:bg-gray-800",
+                  ? `ring-2 ${meta.cardRing} bg-[#0d3b5e]`
+                  : "border-cyan-900/40 bg-[#0a2d4a] hover:bg-[#0d3b5e]",
               )}
             >
-              <p className="text-sm text-gray-400">{meta.label}</p>
+              <p className="text-sm text-slate-300">{meta.label}</p>
               <p className="text-2xl font-bold text-white">{count}</p>
-              <p className="text-[10px] text-gray-500 mt-1">{meta.desc}</p>
+              <p className="text-[10px] text-slate-400 mt-1">{meta.desc}</p>
             </button>
           );
         })}
       </div>
 
       {/* Table */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+      <div className="bg-[#0a2d4a] rounded-lg border border-cyan-900/40 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-400">
+          <div className="p-8 text-center text-white">
             Loading incidents...
           </div>
         ) : error ? (
           <div className="p-8 text-center text-red-400">{error}</div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">
+          <div className="p-8 text-center text-white">
             No incidents match filter
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-900 border-b border-gray-700">
+            <thead className="bg-[#06203b] border-b border-cyan-900/40">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider w-8"></th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-8"></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Title
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Entity
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Priority
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Impact
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Urgency
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Created
                 </th>
               </tr>
@@ -292,9 +294,9 @@ export default function IncidentsPage() {
                   <React.Fragment key={inc.id}>
                     <tr
                       onClick={() => setExpandedId(isExpanded ? null : inc.id)}
-                      className="border-b border-gray-700/50 hover:bg-gray-700/30 cursor-pointer transition-colors"
+                      className="border-b border-cyan-900/20 hover:bg-white/5 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 text-gray-500">
+                      <td className="px-4 py-3 text-slate-400">
                         {isExpanded ? (
                           <ChevronUp className="w-4 h-4" />
                         ) : (
@@ -347,7 +349,7 @@ export default function IncidentsPage() {
                           {inc.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-400">
+                      <td className="px-4 py-3 text-sm text-white">
                         {inc.created_at
                           ? new Date(inc.created_at).toLocaleString()
                           : "—"}
@@ -356,7 +358,7 @@ export default function IncidentsPage() {
 
                     {/* Expanded Detail Row */}
                     {isExpanded && (
-                      <tr className="bg-gray-900/60">
+                      <tr className="bg-[#06203b]">
                         <td colSpan={8} className="px-6 py-5">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Reasoning Chain */}
@@ -373,10 +375,10 @@ export default function IncidentsPage() {
                                         key={idx}
                                         className="flex gap-3 text-sm"
                                       >
-                                        <span className="text-gray-500 font-mono text-xs mt-0.5">
+                                        <span className="text-slate-400 font-mono text-xs mt-0.5">
                                           {idx + 1}.
                                         </span>
-                                        <span className="text-gray-300">
+                                        <span className="text-white">
                                           {typeof step === "string"
                                             ? step
                                             : step.description ||
@@ -388,7 +390,7 @@ export default function IncidentsPage() {
                                   )}
                                 </div>
                               ) : (
-                                <p className="text-gray-500 text-sm italic">
+                                <p className="text-slate-400 text-sm italic">
                                   No reasoning chain recorded
                                 </p>
                               )}
@@ -403,7 +405,7 @@ export default function IncidentsPage() {
                                 </h4>
                                 <div className="grid grid-cols-3 gap-3 text-sm">
                                   <div>
-                                    <p className="text-[10px] text-gray-500 uppercase">
+                                    <p className="text-[10px] text-slate-400 uppercase">
                                       Impact
                                     </p>
                                     <p
@@ -416,7 +418,7 @@ export default function IncidentsPage() {
                                     </p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] text-gray-500 uppercase">
+                                    <p className="text-[10px] text-slate-400 uppercase">
                                       Urgency
                                     </p>
                                     <p
@@ -429,7 +431,7 @@ export default function IncidentsPage() {
                                     </p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] text-gray-500 uppercase">
+                                    <p className="text-[10px] text-slate-400 uppercase">
                                       Priority
                                     </p>
                                     <p className="font-bold text-white">
@@ -444,7 +446,7 @@ export default function IncidentsPage() {
                                   <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-2">
                                     Resolution
                                   </h4>
-                                  <p className="text-sm text-gray-300">
+                                  <p className="text-sm text-white">
                                     {inc.resolution_summary}
                                   </p>
                                 </div>
@@ -454,13 +456,23 @@ export default function IncidentsPage() {
                                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
                                     KPI Snapshot
                                   </h4>
-                                  <pre className="text-xs text-gray-400 bg-black/30 rounded p-3 overflow-x-auto">
+                                  <pre className="text-xs text-white bg-black/30 rounded p-3 overflow-x-auto">
                                     {JSON.stringify(inc.kpi_snapshot, null, 2)}
                                   </pre>
                                 </div>
                               )}
-                              <div className="text-xs text-gray-500">
+                              <div className="text-xs text-slate-400">
                                 ID: <span className="font-mono">{inc.id}</span>
+                              </div>
+                              <div>
+                                <Link
+                                  href={`/topology?entity_id=${inc.entity_id}`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-cyan-900/40 hover:bg-cyan-800/60 border border-cyan-700/50 text-cyan-300 text-xs font-semibold transition-colors"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Network className="w-3.5 h-3.5" />
+                                  Explore in Topology
+                                </Link>
                               </div>
                             </div>
                           </div>

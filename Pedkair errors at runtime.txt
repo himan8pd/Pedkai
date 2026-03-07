@@ -1,0 +1,162 @@
+Trajectory ID: f273b9df-697d-40d8-a494-3d22f9b1f96a
+Error: HTTP 503 Service Unavailable
+Sherlog: 
+TraceID: 0xe9cabac93bcd86a5
+Headers: {"Alt-Svc":["h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000"],"Content-Length":["429"],"Content-Type":["text/event-stream"],"Date":["Fri, 06 Mar 2026 15:23:52 GMT"],"Server":["ESF"],"Server-Timing":["gfet4t7; dur=1118"],"Vary":["Origin","X-Origin","Referer"],"X-Cloudaicompanion-Trace-Id":["e9cabac93bcd86a5"],"X-Content-Type-Options":["nosniff"],"X-Frame-Options":["SAMEORIGIN"],"X-Xss-Protection":["0"]}
+
+{
+  "error": {
+    "code": 503,
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "domain": "cloudcode-pa.googleapis.com",
+        "metadata": {
+          "model": "claude-opus-4-6-thinking"
+        },
+        "reason": "MODEL_CAPACITY_EXHAUSTED"
+      }
+    ],
+    "message": "No capacity available for model claude-opus-4-6-thinking on the server",
+    "status": "UNAVAILABLE"
+  }
+}
+
+Trajectory ID: f273b9df-697d-40d8-a494-3d22f9b1f96a
+Error: HTTP 503 Service Unavailable
+Sherlog: 
+TraceID: 0xaa669f8e79ec4fe8
+Headers: {"Alt-Svc":["h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000"],"Content-Length":["524"],"Content-Type":["text/event-stream"],"Date":["Fri, 06 Mar 2026 15:48:54 GMT"],"Server":["ESF"],"Server-Timing":["gfet4t7; dur=929"],"Vary":["Origin","X-Origin","Referer"],"X-Cloudaicompanion-Trace-Id":["aa669f8e79ec4fe8"],"X-Content-Type-Options":["nosniff"],"X-Frame-Options":["SAMEORIGIN"],"X-Xss-Protection":["0"]}
+
+{
+  "error": {
+    "code": 503,
+    "details": [
+      {
+        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+        "domain": "cloudcode-pa.googleapis.com",
+        "metadata": {
+          "model": "gemini-3.1-pro-high"
+        },
+        "reason": "MODEL_CAPACITY_EXHAUSTED"
+      },
+      {
+        "@type": "type.googleapis.com/google.rpc.RetryInfo",
+        "retryDelay": "5s"
+      }
+    ],
+    "message": "No capacity available for model gemini-3.1-pro-high on the server",
+    "status": "UNAVAILABLE"
+  }
+}
+
+Runtime ReferenceError
+
+
+
+Network is not defined
+app/topology/page.tsx (545:14) @ TopologyPage
+
+
+  543 |         {!seedId ? (
+  544 |           <div className="absolute inset-0 flex items-center justify-center flex-col text-gray-500">
+> 545 |             <Network className="w-16 h-16 mb-4 opacity-20" />
+      |              ^
+  546 |             <p className="text-lg">Use the sidebar to search for an entity</p>
+  547 |             <p className="text-sm mt-1 opacity-60">Explore the topology graph outward from a specific node</p>
+  548 |           </div>
+Call Stack
+13
+
+Show 12 ignore-listed frame(s)
+TopologyPage
+app/topology/page.tsx (545:14)
+
+
+"HTTP 500: {"detail":"(sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedColumnError'>: column gt.properties does not exist\n[SQL: \n SELECT\n CAST(ne.id AS TEXT) AS target_id,\n ne.entity_type AS target_type,\n ne.name AS name,\n gt.domain AS domain,\n ne.attributes->>'vendor' AS cmdb_val,\n gt.properties->>'vendor' AS gt_val\n FROM network_entities ne\n JOIN gt_network_entities gt\n ON gt.entity_id = CAST(ne.id AS TEXT) AND gt.tenant_id = ne.tenant_id\n WHERE ne.tenant_id = $1\n AND ne.attributes->>'vendor' IS DISTINCT FROM gt.properties->>'vendor'\n AND ne.attributes->>'vendor' IS NOT NULL\n AND gt.properties->>'vendor' IS NOT NULL\n ]\n[parameters: ('pedkai_telco2_01',)]\n(Background on this error at: https://sqlalche.me/e/20/f405)"}"
+
+Python quit unexpectedly - Click Reopen to open the application again. Click Report to see more detailed information and send a report to Apple.
+
+The entity id on incident does not match any CIs.
+
+Topology Explorer does not provide any handle or guidance about how to search for CIs to get started.
+
+The AI Scorecard buttons for MTTR, Incidents tracked, etc. take you nowhere. The data shown cannot be investigated. 
+
+On the scorecard, Methodology and Data Sources section has no content.
+
+The whole changes you have made recently have caused lots of issues. I need you to be far more careful in the way you are approaching this work. Ensure everything works before you say the job is done.
+
+Console Error
+
+
+A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+See more info here: https://nextjs.org/docs/messages/react-hydration-error
+
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+      <HTTPAccessFallbackErrorBoundary pathname="/incidents" notFound={<NotAllowedRootHTTPFallbackError>} ...>
+        <RedirectBoundary>
+          <RedirectErrorBoundary router={{...}}>
+            <Head>
+            <__next_root_layout_boundary__>
+              <SegmentViewNode type="layout" pagePath="/frontend/...">
+                <SegmentTrieNode>
+                <link>
+                <script>
+                <script>
+                <script>
+                <RootLayout>
+                  <html lang="en">
+                    <body className="geist_a715...">
+                      <AuthLayout>
+                        <div className="flex items...">
+                          <div className="w-full max...">
+                            <div className="bg-gray-80...">
+                              <h1>
+                              <form onSubmit={function handleLogin} className="space-y-4">
+                                <div>
+                                  <label>
+                                  <input
+                                    type="text"
+                                    value="operator"
+                                    onChange={function onChange}
+                                    className="w-full px-4 py-2 rounded-lg bg-gray-700 border border-gray-600 text-whi..."
+                                    placeholder="operator"
+-                                   autocomplete="off"
+                                  >
+                                ...
+            ...
+app/layout-auth.tsx (168:17) @ AuthLayout
+
+
+  166 |                   Username
+  167 |                 </label>
+> 168 |                 <input
+      |                 ^
+  169 |                   type="text"
+  170 |                   value={username}
+  171 |                   onChange={(e) => setUsername(e.target.value)}
+Call Stack
+19
+
+Show 16 ignore-listed frame(s)
+input
+<anonymous>
+AuthLayout
+app/layout-auth.tsx (168:17)
+RootLayout
+app/layout.tsx (31:9)
+
+select * from public.kpi_metrics where entity_id in ("eec566a8-7edb-450e-bcdf-949c76987d4d", "eec566a8-7edb-450e-bcdf-949c76987d4d")
+
+

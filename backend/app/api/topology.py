@@ -456,3 +456,168 @@ async def get_topology_health(
         else 0.0,
         staleness_threshold_days=7,
     )
+
+
+@router.get("/{tenant_id}/search")
+async def search_entities(
+    tenant_id: str,
+    q: str = Query(..., min_length=2, description="Search term (name, external_id, or entity_type)"),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[TOPOLOGY_READ]),
+):
+    """
+    Search for entities in the CMDB. Used to find a seed node for topology exploration.
+    """
+    search_term = f"%{q}%"
+    try:
+        result = await db.execute(
+            text("""
+                SELECT id, name, entity_type, external_id, operational_status
+                FROM network_entities
+                WHERE tenant_id = :tid
+                  AND (name LIKE :q OR external_id LIKE :q OR entity_type LIKE :q)
+                LIMIT :limit
+            """),
+            {"tid": tenant_id, "q": search_term, "limit": limit},
+        )
+        rows = result.fetchall()
+        
+        entities = []
+        for r in rows:
+            entities.append({
+                "id": str(r[0]),
+                "name": r[1],
+                "entity_type": r[2],
+                "external_id": r[3],
+                "status": r[4] or "unknown",
+            })
+            
+        return {"tenant_id": tenant_id, "query": q, "results": entities}
+    except Exception as e:
+        logger.error(f"Topology search failed: {e}")
+        raise HTTPException(status_code=500, detail="Search failed")
+
+
+@router.get("/{tenant_id}/neighborhood/{entity_id}")
+async def get_neighborhood(
+    tenant_id: str,
+    entity_id: str,
+    hops: int = Query(2, ge=1, le=5, description="Number of hops to traverse"),
+    max_nodes: int = Query(300, ge=10, le=1000, description="Safety limit for explosive graphs"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[TOPOLOGY_READ]),
+):
+    """
+    Get an N-hop neighborhood graph around a specific seed entity.
+    Returns nodes and edges formatted for the frontend canvas.
+    """
+    # 1. Start with the seed
+    visited_nodes: set[str] = {entity_id}
+    all_edges: set[tuple[str, str, str]] = set()  # (from_id, to_id, rel_type)
+    
+    current_frontier: set[str] = {entity_id}
+    
+    # Breadth-first traversal up to N hops
+    for hop in range(hops):
+        if not current_frontier or len(visited_nodes) >= max_nodes:
+            break
+            
+        # Get edges where current frontier is source OR target
+        # Using string binding for the IN clause
+        frontier_list = list(current_frontier)
+        
+        try:
+            from sqlalchemy import bindparam
+            result = await db.execute(
+                text("""
+                    SELECT from_entity_id, to_entity_id, relationship_type
+                    FROM topology_relationships
+                    WHERE tenant_id = :tid 
+                      AND (from_entity_id IN :frontier OR to_entity_id IN :frontier)
+                """).bindparams(bindparam("frontier", expanding=True)),
+                {"tid": tenant_id, "frontier": frontier_list}
+            )
+            rows = result.fetchall()
+            
+            next_frontier: set[str] = set()
+            for r in rows:
+                f_id, t_id, r_type = str(r[0]), str(r[1]), r[2]
+                all_edges.add((f_id, t_id, r_type))
+                
+                if f_id not in visited_nodes and len(visited_nodes) < max_nodes:
+                    visited_nodes.add(f_id)
+                    next_frontier.add(f_id)
+                if t_id not in visited_nodes and len(visited_nodes) < max_nodes:
+                    visited_nodes.add(t_id)
+                    next_frontier.add(t_id)
+                    
+            current_frontier = next_frontier
+            
+        except Exception as e:
+            logger.error(f"Neighborhood traversal hop {hop} failed: {e}")
+            break
+
+    # 2. Resolve entity names for all visited nodes
+    entities = []
+    if visited_nodes:
+        try:
+            from sqlalchemy import bindparam
+            name_result = await db.execute(
+                text("""
+                    SELECT id, name, entity_type, external_id, operational_status
+                    FROM network_entities
+                    WHERE tenant_id = :tid AND id IN :ids
+                """).bindparams(bindparam("ids", expanding=True)),
+                {"tid": tenant_id, "ids": list(visited_nodes)}
+            )
+            
+            resolved_ids = set()
+            for r in name_result.fetchall():
+                eid = str(r[0])
+                resolved_ids.add(eid)
+                entities.append({
+                    "id": eid,
+                    "name": r[1],
+                    "entity_type": r[2],
+                    "external_id": r[3] or eid,
+                    "status": r[4] or "unknown",
+                    "properties": {"status": r[4] or "unknown"}
+                })
+                
+            # Add fallbacks for nodes in relationships but missing from entities table
+            for missing_id in visited_nodes - resolved_ids:
+                short = missing_id[:8] if len(missing_id) > 8 else missing_id
+                entities.append({
+                    "id": missing_id,
+                    "name": f"UNKNOWN-{short}",
+                    "entity_type": "UNKNOWN",
+                    "external_id": missing_id,
+                    "status": "unknown",
+                    "properties": {"status": "unknown"}
+                })
+                
+        except Exception as e:
+            logger.error(f"Entity resolution failed: {e}")
+
+    # Format edges
+    edges = [
+        {
+            "id": f"{f}-{t}-{r}",
+            "source_entity_id": f,
+            "target_entity_id": t,
+            "relationship_type": r
+        }
+        for f, t, r in all_edges
+    ]
+
+    return {
+        "tenant_id": tenant_id,
+        "seed_id": entity_id,
+        "hops": hops,
+        "nodes_returned": len(entities),
+        "edges_returned": len(edges),
+        "entities": entities,
+        "relationships": edges
+    }
+

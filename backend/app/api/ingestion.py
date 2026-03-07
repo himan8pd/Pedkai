@@ -21,6 +21,7 @@ _ingestion_running = False
 _ingestion_progress = 0
 _ingestion_logs: list[str] = []
 _ingestion_subscribers: set[asyncio.Queue] = set()
+_ingestion_lock = asyncio.Lock()
 
 class IngestionParams(BaseModel):
     dry_run: bool = False
@@ -34,7 +35,6 @@ async def _publish(event: str, data: dict):
 
 async def run_ingestion_subprocess(params: IngestionParams):
     global _ingestion_running, _ingestion_progress
-    _ingestion_running = True
     _ingestion_progress = 0
     _ingestion_logs.clear()
     
@@ -48,12 +48,17 @@ async def run_ingestion_subprocess(params: IngestionParams):
         
     await _publish("ingestion_started", {"cmd": cmd})
     
+    import os
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            cwd="/Users/himanshu/Projects/Pedkai"
+            cwd="/Users/himanshu/Projects/Pedkai",
+            env=env
         )
         
         while True:
@@ -92,9 +97,12 @@ async def run_ingestion_subprocess(params: IngestionParams):
 @router.post("/start", dependencies=[Depends(oauth2_scheme)])
 async def start_ingestion(params: IngestionParams):
     global _ingestion_running
-    if _ingestion_running:
-        raise HTTPException(status_code=400, detail="Ingestion is already running")
     
+    async with _ingestion_lock:
+        if _ingestion_running:
+            raise HTTPException(status_code=400, detail="Ingestion is already running")
+        _ingestion_running = True
+        
     asyncio.create_task(run_ingestion_subprocess(params))
     return {"message": "Ingestion started", "status": "running"}
 

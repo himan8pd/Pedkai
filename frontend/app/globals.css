@@ -1,9 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --background: #020617;
+  --background: #06203b;
   --foreground: #f8fafc;
+  --brand-navy: #06203b;
+  --brand-navy-mid: #0a2d4a;
+  --brand-navy-border: #0d3b5e;
+  --brand-cyan: #00d4ff;
 }
 
 body {
@@ -13,15 +16,16 @@ body {
   overflow-x: hidden;
 }
 
+/* ── Glass: always brand-dark (SITREP panel, etc.) ─────── */
 .glass {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(6, 32, 59, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.1);
 }
 
 .glow {
-  box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.35);
 }
 
 .critical-glow {
