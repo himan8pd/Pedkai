@@ -67,7 +67,7 @@ export default function Navigation() {
   ];
 
   return (
-    <nav className="bg-[#06203b] border-b border-cyan-900/40 sticky top-0 z-50">
+    <nav className="bg-[#06203b] border-b border-[#06203b] sticky top-0 z-50">
       <div className="w-full px-4 md:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo — clickable link to dashboard */}
@@ -84,16 +84,15 @@ export default function Navigation() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
-
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2",
+                    "px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 border border-slate-700",
                     isActive
-                      ? "bg-cyan-500/10 text-white border border-cyan-400/60"
-                      : "text-white border border-white/25 hover:border-white/60 hover:bg-white/10",
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "text-white hover:bg-slate-800 hover:border-blue-600 hover:text-white",
                   )}
                 >
                   <Icon className="w-4 h-4" />
@@ -106,22 +105,22 @@ export default function Navigation() {
           {/* Tenant badge + Historic banner + Logout */}
           <div className="flex items-center space-x-3">
             {tenantName && (
-              <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#0a2d4a] border border-cyan-900/40 text-xs text-white">
-                <Building2 className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="font-medium">{tenantName}</span>
+              <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-black">
+                <Building2 className="w-3.5 h-3.5 text-black" />
+                <span className="font-medium text-black">{tenantName}</span>
               </div>
             )}
             {dataMode === "historic" && (
-              <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-900/50 border border-amber-600/50 text-xs text-amber-300">
-                <Clock className="w-3.5 h-3.5" />
-                <span>
+              <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-black">
+                <Clock className="w-3.5 h-3.5 text-black" />
+                <span className="text-black">
                   Historic Analysis{dataPeriod ? ` — ${dataPeriod}` : ""}
                 </span>
               </div>
             )}
             <button
               onClick={onLogout}
-              className="px-3 py-2 rounded-lg text-sm font-medium text-slate-200 hover:text-red-400 hover:bg-white/5 transition-colors flex items-center space-x-2"
+              className="px-3 py-2 rounded-lg text-sm font-medium text-white hover:text-blue-600 hover:bg-slate-800 transition-colors flex items-center space-x-2 border border-slate-700 hover:border-blue-600"
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Logout</span>

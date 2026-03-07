@@ -66,14 +66,14 @@ const PRIORITY_META: Record<
   P5: {
     label: "P5 — Info",
     desc: "Impact: Low × Urgency: Low",
-    color: "bg-gray-800/60 text-gray-300 border-gray-600",
+    color: "bg-gray-800/60 text-gray-700 border-gray-600",
     cardRing: "ring-gray-500 border-gray-500",
   },
 };
 
 function priorityColor(p: string | null) {
   return (
-    PRIORITY_META[p ?? ""]?.color ?? "bg-gray-800 text-gray-300 border-gray-700"
+    PRIORITY_META[p ?? ""]?.color ?? "bg-gray-800 text-gray-700 border-gray-700"
   );
 }
 
@@ -96,6 +96,8 @@ function statusColor(s: string) {
       return "bg-blue-900/40 text-blue-300";
     case "rca":
       return "bg-purple-900/40 text-purple-300";
+    case "anomaly":
+      return "bg-red-400/40 text-red-500";
     case "sitrep_draft":
     case "sitrep_approved":
       return "bg-cyan-900/40 text-cyan-300";
@@ -106,7 +108,7 @@ function statusColor(s: string) {
     case "closed":
       return "bg-emerald-900/40 text-emerald-300";
     default:
-      return "bg-gray-800 text-gray-300";
+      return "bg-gray-800 text-gray-700";
   }
 }
 
@@ -174,10 +176,10 @@ export default function IncidentsPage() {
         </div>
         {/* ITIL Matrix legend */}
         <div className="text-xs bg-[#0a2d4a] border border-cyan-900/40 rounded-lg p-3 hidden lg:block">
-          <p className="font-semibold text-slate-300 mb-1">
+          <p className="font-semibold text-gray-700 mb-1">
             Priority = Impact × Urgency
           </p>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-0.5 font-mono text-slate-300">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-0.5 font-mono text-gray-700">
             <span></span>
             <span className="text-red-400">High</span>
             <span className="text-amber-400">Med</span>
@@ -214,7 +216,7 @@ export default function IncidentsPage() {
               "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
               filterStatus === key
                 ? "bg-cyan-500 text-gray-950 font-bold"
-                : "bg-[#0a2d4a] text-slate-300 hover:text-white hover:bg-[#0d3b5e] border border-cyan-900/40",
+                : "bg-[#0a2d4a] text-gray-700 hover:text-white hover:bg-[#0d3b5e] border border-cyan-900/40",
             )}
           >
             {label} <span className="ml-1 text-xs opacity-70">({count})</span>
@@ -239,9 +241,9 @@ export default function IncidentsPage() {
                   : "border-cyan-900/40 bg-[#0a2d4a] hover:bg-[#0d3b5e]",
               )}
             >
-              <p className="text-sm text-slate-300">{meta.label}</p>
+              <p className="text-sm text-gray-700">{meta.label}</p>
               <p className="text-2xl font-bold text-white">{count}</p>
-              <p className="text-[10px] text-slate-400 mt-1">{meta.desc}</p>
+              <p className="text-[10px] text-gray-700 mt-1">{meta.desc}</p>
             </button>
           );
         })}
@@ -263,26 +265,26 @@ export default function IncidentsPage() {
           <table className="w-full">
             <thead className="bg-[#06203b] border-b border-cyan-900/40">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider w-8"></th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider w-8"></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Title
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Entity
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Priority
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Impact
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Urgency
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Created
                 </th>
               </tr>
@@ -296,7 +298,7 @@ export default function IncidentsPage() {
                       onClick={() => setExpandedId(isExpanded ? null : inc.id)}
                       className="border-b border-cyan-900/20 hover:bg-white/5 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 text-slate-400">
+                      <td className="px-4 py-3 text-gray-700">
                         {isExpanded ? (
                           <ChevronUp className="w-4 h-4" />
                         ) : (
@@ -306,7 +308,7 @@ export default function IncidentsPage() {
                       <td className="px-4 py-3 text-sm text-white font-medium max-w-xs truncate">
                         {inc.title}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-300 font-mono text-xs">
+                      <td className="px-4 py-3 text-sm text-gray-700 font-mono text-xs">
                         {inc.entity_external_id || inc.entity_id || "—"}
                       </td>
                       <td className="px-4 py-3">
@@ -375,7 +377,7 @@ export default function IncidentsPage() {
                                         key={idx}
                                         className="flex gap-3 text-sm"
                                       >
-                                        <span className="text-slate-400 font-mono text-xs mt-0.5">
+                                        <span className="text-gray-700 font-mono text-xs mt-0.5">
                                           {idx + 1}.
                                         </span>
                                         <span className="text-white">
@@ -390,7 +392,7 @@ export default function IncidentsPage() {
                                   )}
                                 </div>
                               ) : (
-                                <p className="text-slate-400 text-sm italic">
+                                <p className="text-gray-700 text-sm italic">
                                   No reasoning chain recorded
                                 </p>
                               )}
@@ -405,7 +407,7 @@ export default function IncidentsPage() {
                                 </h4>
                                 <div className="grid grid-cols-3 gap-3 text-sm">
                                   <div>
-                                    <p className="text-[10px] text-slate-400 uppercase">
+                                    <p className="text-[10px] text-gray-700 uppercase">
                                       Impact
                                     </p>
                                     <p
@@ -418,7 +420,7 @@ export default function IncidentsPage() {
                                     </p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] text-slate-400 uppercase">
+                                    <p className="text-[10px] text-gray-700 uppercase">
                                       Urgency
                                     </p>
                                     <p
@@ -431,7 +433,7 @@ export default function IncidentsPage() {
                                     </p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] text-slate-400 uppercase">
+                                    <p className="text-[10px] text-gray-700 uppercase">
                                       Priority
                                     </p>
                                     <p className="font-bold text-white">
@@ -461,7 +463,7 @@ export default function IncidentsPage() {
                                   </pre>
                                 </div>
                               )}
-                              <div className="text-xs text-slate-400">
+                              <div className="text-xs text-gray-700">
                                 ID: <span className="font-mono">{inc.id}</span>
                               </div>
                               <div>
