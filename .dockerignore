@@ -1,0 +1,17 @@
+.git
+.env
+*.db
+__pycache__
+node_modules
+frontend/
+docs/
+data/
+LiveTestData/
+datagerry_cmdb/
+anops/
+k8s/
+tests/
+*.pdf
+.claude/
+.venv/
+venv/

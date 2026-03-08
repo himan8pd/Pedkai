@@ -51,8 +51,14 @@ import psycopg2.extras
 
 TENANT_ID = "pedkai_telco2_01"
 
+import os
+
 # Database connection strings (sync psycopg2 for performance)
-GRAPH_DB_DSN = "host=localhost port=5432 dbname=pedkai user=postgres password=postgres"
+# Read from env var if available, fall back to localhost default for local dev
+GRAPH_DB_DSN = os.environ.get(
+    "GRAPH_DB_DSN",
+    "host=localhost port=5432 dbname=pedkai user=postgres password=postgres",
+)
 
 # Temporal window matching AlarmCorrelationService (5 min)
 TEMPORAL_WINDOW_MINUTES = 5

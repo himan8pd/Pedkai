@@ -1,5 +1,5 @@
 # Build Stage
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# Default: full requirements.txt (local). Cloud compose overrides with requirements-cloud.txt.
+ARG REQUIREMENTS=requirements.txt
+COPY ${REQUIREMENTS} requirements.txt
 RUN pip install --upgrade pip && \
     pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
 
@@ -38,13 +40,13 @@ COPY . .
 # Set PYTHONPATH to include the current directory so imports work
 ENV PYTHONPATH=/app
 
-# Run as non-root user for security (optional but recommended)
+# Run as non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000
 
-# Healthcheck using curl (part of Operational Hardening)
+# Healthcheck using curl
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health/ready || exit 1
 
