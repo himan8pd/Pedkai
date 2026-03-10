@@ -8,7 +8,6 @@ docs/
 data/
 LiveTestData/
 datagerry_cmdb/
-anops/
 k8s/
 tests/
 *.pdf

@@ -1,0 +1,30 @@
+% emoji-fallback.tex — render emoji as inline Twemoji PNG images
+\usepackage{graphicx}
+\usepackage{newunicodechar}
+
+% Helper: inline emoji image at current text height
+\newcommand{\inlineemoji}[1]{\raisebox{-0.15em}{\includegraphics[height=0.9em]{emoji/#1}}}
+
+% Status indicators
+\newunicodechar{✅}{\inlineemoji{2705}}
+\newunicodechar{❌}{\inlineemoji{274c}}
+\newunicodechar{⚠}{\inlineemoji{26a0}}
+
+% Colored circles
+\newunicodechar{🟢}{\inlineemoji{1f7e2}}
+\newunicodechar{🟡}{\inlineemoji{1f7e1}}
+\newunicodechar{🔴}{\inlineemoji{1f534}}
+
+% Misc emoji
+\newunicodechar{🔮}{\inlineemoji{1f52e}}
+\newunicodechar{🔨}{\inlineemoji{1f528}}
+\newunicodechar{📋}{\inlineemoji{1f4cb}}
+
+% Variation selector U+FE0F — discard
+\newunicodechar{️}{}
+
+% Subscript characters
+\newunicodechar{ₙ}{$_{n}$}
+\newunicodechar{ᵢ}{$_{i}$}
+\newunicodechar{₁}{$_{1}$}
+\newunicodechar{₂}{$_{2}$}

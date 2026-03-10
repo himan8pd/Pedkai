@@ -1,0 +1,13 @@
+pandoc PRODUCT_SPEC_INTERNAL.md -o Pedkai_Confidential.pdf \
+  --pdf-engine=xelatex \
+  --template eisvogel \
+  --syntax-highlighting=tango \
+  --include-in-header emoji-fallback.tex \
+  --pdf-engine-opt=-interaction=nonstopmode
+  
+pandoc PRODUCT_SPEC_INTERNAL.md -o Pedkai_Confidential.pdf \
+  --pdf-engine=xelatex \
+  --template eisvogel \
+  --syntax-highlighting=tango \
+  --include-in-header emoji-fallback.tex \
+  --pdf-engine-opt=-interaction=nonstopmode

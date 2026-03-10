@@ -1,0 +1,39 @@
+\documentclass[11pt]{article}
+
+\usepackage{fontspec}
+\usepackage{geometry}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{setspace}
+\usepackage{listings}
+
+\geometry{margin=1in}
+
+% Fonts
+\setmainfont{Inter}
+\setmonofont{JetBrains Mono}
+
+% Emoji font
+\newfontfamily\emojifont{Noto Color Emoji}[Renderer=HarfBuzz]
+
+\newcommand{\emoji}[1]{{\emojifont #1}}
+
+% Better code blocks
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible
+}
+
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0em}
+
+\begin{document}
+
+$body$
+
+\end{document}
