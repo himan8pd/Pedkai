@@ -14,7 +14,7 @@ pedk.ai {
     handle /openapi.json {
         reverse_proxy localhost:8000
     }
-    handle /health/* {
+    handle /health* {
         reverse_proxy localhost:8000
     }
     handle /tmf-api/* {

@@ -23,7 +23,7 @@ echo "App VM IP:    $APP_VM_IP"
 apt-get update && apt-get upgrade -y
 
 # --- 2. Add PostgreSQL 16 repo ---
-apt-get install -y gnupg2 lsb-release curl
+apt-get install -y gnupg2 lsb-release curl rsync
 echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
     > /etc/apt/sources.list.d/pgdg.list
 curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
@@ -67,22 +67,25 @@ sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" "$PG_CONF"
 sed -i "s/max_connections = 100/max_connections = 200/" "$PG_CONF"
 
 # Add TimescaleDB to shared_preload_libraries
-if grep -q "shared_preload_libraries" "$PG_CONF"; then
-    sed -i "s/shared_preload_libraries = '.*'/shared_preload_libraries = 'timescaledb'/" "$PG_CONF"
-else
-    echo "shared_preload_libraries = 'timescaledb'" >> "$PG_CONF"
-fi
+# Remove any existing line (commented or not) and append clean version
+sed -i '/^#\?shared_preload_libraries/d' "$PG_CONF"
+echo "shared_preload_libraries = 'timescaledb'" >> "$PG_CONF"
 
-# --- 8. Configure pg_hba.conf — allow app VM only ---
+# --- 8. Open firewall for PostgreSQL from app VM ---
+iptables -I INPUT 5 -p tcp -s "${APP_VM_IP}" --dport 5432 -j ACCEPT
+apt-get install -y iptables-persistent
+netfilter-persistent save
+
+# --- 9. Configure pg_hba.conf — allow app VM only ---
 PG_HBA="/etc/postgresql/16/main/pg_hba.conf"
 echo "# Allow Pedkai app VM" >> "$PG_HBA"
 echo "host    all    pedkai    ${APP_VM_IP}/32    md5" >> "$PG_HBA"
 
-# --- 9. Start PostgreSQL ---
+# --- 10. Start PostgreSQL ---
 systemctl start postgresql
 systemctl enable postgresql
 
-# --- 10. Create user and databases ---
+# --- 11. Create user and databases ---
 sudo -u postgres psql <<SQL
 CREATE USER pedkai WITH PASSWORD '${DB_PASSWORD}';
 CREATE DATABASE pedkai OWNER pedkai;
