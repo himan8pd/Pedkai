@@ -52,7 +52,12 @@ import pyarrow.parquet as pq
 # Configuration
 # ---------------------------------------------------------------------------
 
-TELCO2_DATA_DIR = Path("/Volumes/Projects/Pedkai Data Store/Telco2")
+import os
+
+_data_store_root = os.environ.get(
+    "PEDKAI_DATA_STORE_ROOT", "/Volumes/Projects/Pedkai Data Store"
+)
+TELCO2_DATA_DIR = Path(_data_store_root) / "Telco2"
 OUTPUT_DIR = TELCO2_DATA_DIR / "output"
 INTERMEDIATE_DIR = TELCO2_DATA_DIR / "intermediate"
 
@@ -60,9 +65,14 @@ TENANT_ID = "pedkai_telco2_01"
 TENANT_DISPLAY_NAME = "Pedkai Telco2 01"
 
 # Database connection strings (sync, for psycopg2 COPY performance)
-GRAPH_DB_DSN = "host=localhost port=5432 dbname=pedkai user=postgres password=postgres"
-METRICS_DB_DSN = (
-    "host=localhost port=5433 dbname=pedkai_metrics user=postgres password=postgres"
+# Read from env vars if available, fall back to localhost defaults for local dev
+GRAPH_DB_DSN = os.environ.get(
+    "GRAPH_DB_DSN",
+    "host=localhost port=5432 dbname=pedkai user=postgres password=postgres",
+)
+METRICS_DB_DSN = os.environ.get(
+    "METRICS_DB_DSN",
+    "host=localhost port=5433 dbname=pedkai_metrics user=postgres password=postgres",
 )
 
 # Batch sizes

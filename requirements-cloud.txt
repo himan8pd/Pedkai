@@ -1,0 +1,57 @@
+# Cloud deployment dependencies
+# Excludes: locust (load testing, dev-only)
+# Adds: pyarrow (Parquet loading for Telco2 dataset)
+
+# Core dependencies
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Database
+asyncpg>=0.29.0
+sqlalchemy>=2.0.25
+alembic>=1.13.0
+pgvector>=0.2.4
+greenlet>=3.0.0
+aiosqlite>=0.19.0
+psycopg2-binary>=2.9.0
+
+# Async HTTP client
+httpx>=0.26.0
+
+# LLM integration
+google-genai
+
+# Kafka
+aiokafka>=0.10.0
+
+# Utilities
+python-dotenv>=1.0.0
+structlog>=24.1.0
+simpleeval>=1.0.0
+
+# Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.7
+
+# Datasets
+datasets>=2.16.0
+huggingface_hub>=0.20.0
+
+# Scientific / Causal AI
+numpy>=1.26.0
+statsmodels>=0.14.0
+sentence-transformers>=2.3.0
+
+# Observability
+opentelemetry-api>=1.22.0
+opentelemetry-sdk>=1.22.0
+opentelemetry-instrumentation-fastapi>=0.43b0
+
+# Netconf client for device configuration
+ncclient>=0.6.14
+
+# Parquet loading (Telco2 dataset)
+pyarrow>=14.0.0

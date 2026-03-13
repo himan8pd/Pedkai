@@ -56,8 +56,8 @@ class Settings(BaseSettings):
         1.0  # Cost control (Disabled for reliable demos, reset to 0.8 later)
     )
 
-    # Kafka
-    kafka_bootstrap_servers: str = "localhost:9092"  # hard coded for demo, remove " = "localhost:9092"" for live env.
+    # Kafka — default "localhost:9092" for local dev; set to "kafka:9092" in cloud .env
+    kafka_bootstrap_servers: str = "localhost:9092"
     kafka_consumer_group: str = "pedkai-consumers"
 
     # Multi-tenancy

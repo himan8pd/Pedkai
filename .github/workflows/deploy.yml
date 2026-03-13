@@ -1,0 +1,31 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/Pedkai
+            git pull origin main
+
+            # Rebuild and restart containers
+            docker compose -f docker-compose.cloud.yml down
+            docker compose -f docker-compose.cloud.yml up -d --build
+
+            # Copy frontend static files to Caddy serve directory
+            docker cp pedkai-frontend:/srv/frontend/. /srv/frontend/
+
+            # Restart Caddy to pick up any config changes
+            sudo systemctl reload caddy
+
+            echo "Deployment complete"

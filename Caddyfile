@@ -1,0 +1,37 @@
+# Caddy reverse proxy for pedk.ai on Oracle Cloud VM
+# TLS uses Cloudflare origin certificate (Full strict mode)
+
+pedk.ai {
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin-key.pem
+
+    # API backend — match these paths first (order matters)
+    handle /api/* {
+        reverse_proxy localhost:8000
+    }
+    handle /docs* {
+        reverse_proxy localhost:8000
+    }
+    handle /openapi.json {
+        reverse_proxy localhost:8000
+    }
+    handle /health* {
+        reverse_proxy localhost:8000
+    }
+    handle /tmf-api/* {
+        reverse_proxy localhost:8000
+    }
+    handle /ingest/* {
+        reverse_proxy localhost:8000
+    }
+
+    # Static frontend (Next.js export) — fallback for everything else
+    handle {
+        root * /srv/frontend
+        try_files {path} {path}.html /index.html
+        file_server
+
+        # Cache static assets aggressively
+        @static path *.js *.css *.png *.jpg *.jpeg *.svg *.ico *.woff *.woff2
+        header @static Cache-Control "public, max-age=31536000, immutable"
+    }
+}

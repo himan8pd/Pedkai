@@ -57,7 +57,7 @@ async def run_ingestion_subprocess(params: IngestionParams):
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            cwd="/Users/himanshu/Projects/Pedkai",
+            cwd=str(Path(__file__).resolve().parents[3]),  # repo root
             env=env
         )
         
