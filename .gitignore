@@ -58,3 +58,6 @@ htmlcov/
 # Database
 *.db
 *.sqlite3
+
+# Claude local worktrees
+.claude/worktrees/
