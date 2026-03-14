@@ -32,7 +32,7 @@ async def test_alarm_ingest_returns_202(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_alarm_ingest_unauthenticated_returns_401(client: AsyncClient):
+async def test_alarm_ingest_unauthenticated_returns_401(client_real_auth: AsyncClient):
     """Verify unauthenticated requests return 401."""
     payload = {
         "entity_id": "cell-001",
@@ -41,9 +41,9 @@ async def test_alarm_ingest_unauthenticated_returns_401(client: AsyncClient):
         "raised_at": datetime.now(timezone.utc).isoformat(),
         "source_system": "oss_vendor",
     }
-    
-    resp = await client.post("/api/v1/alarms/ingest", json=payload)
-    
+
+    resp = await client_real_auth.post("/api/v1/alarms/ingest", json=payload)
+
     assert resp.status_code == 401, f"Expected 401, got {resp.status_code}"
 
 

@@ -23,8 +23,11 @@ class CXIntelligenceService:
 
     @asynccontextmanager
     async def _get_session(self, session: Optional[AsyncSession] = None):
-        if session:
+        if session is not None:
             yield session
+        elif isinstance(self.session_factory, AsyncSession):
+            # Caller passed a bare session instead of a factory (e.g. in tests)
+            yield self.session_factory
         else:
             async with self.session_factory() as new_session:
                 try:
@@ -154,65 +157,65 @@ class CXIntelligenceService:
         return impacted
 
 
-async def trigger_proactive_care(
-    self,
-    customer_ids: List[UUID],
-    anomaly_id: UUID,
-    session: Optional[AsyncSession] = None,
-) -> dict:
-    """
-    Sends proactive care notifications to impacted customers.
+    async def trigger_proactive_care(
+        self,
+        customer_ids: List[UUID],
+        anomaly_id: UUID,
+        session: Optional[AsyncSession] = None,
+    ) -> dict:
+        """
+        Sends proactive care notifications to impacted customers.
 
-    GDPR Compliance (P0.6): Checks consent_proactive_comms before sending.
-    - If customer has no consent: blocked, returns {"blocked": true, "reason": "no_consent"}
-    - If customer has consent: creates ProactiveCareORM record
+        GDPR Compliance (P0.6): Checks consent_proactive_comms before sending.
+        - If customer has no consent: blocked, returns {"blocked": true, "reason": "no_consent"}
+        - If customer has consent: creates ProactiveCareORM record
 
-    Returns: {"sent": [...ProactiveCareORM...], "blocked": [...customer_ids...]}
-    """
-    records = []
-    blocked_customers = []
+        Returns: {"sent": [...ProactiveCareORM...], "blocked": [...customer_ids...]}
+        """
+        records = []
+        blocked_customers = []
 
-    async with self._get_session(session) as s:
-        # Fetch all requested customers and check consent
-        for cid in customer_ids:
-            customer = await s.get(CustomerORM, cid)
+        async with self._get_session(session) as s:
+            # Fetch all requested customers and check consent
+            for cid in customer_ids:
+                customer = await s.get(CustomerORM, cid)
 
-            if customer is None:
-                logger.warning(f"Customer {cid} not found, skipping proactive care.")
-                blocked_customers.append(
-                    {"customer_id": str(cid), "reason": "not_found"}
+                if customer is None:
+                    logger.warning(f"Customer {cid} not found, skipping proactive care.")
+                    blocked_customers.append(
+                        {"customer_id": str(cid), "reason": "not_found"}
+                    )
+                    continue
+
+                # P0.6 GDPR Consent Check
+                if not customer.consent_proactive_comms:
+                    logger.info(f"Proactive care blocked for customer {cid}: no consent")
+                    blocked_customers.append(
+                        {"customer_id": str(cid), "reason": "no_consent"}
+                    )
+                    continue
+
+                # Create notification record for consenting customers
+                record = ProactiveCareORM(
+                    customer_id=cid,
+                    anomaly_id=anomaly_id,
+                    channel="simulation",
+                    status="sent",
+                    message_content="Proactive alert: We've detected an optimization event in your area. Coverage might be improved shortly.",
                 )
-                continue
+                records.append(record)
+                s.add(record)
 
-            # P0.6 GDPR Consent Check
-            if not customer.consent_proactive_comms:
-                logger.info(f"Proactive care blocked for customer {cid}: no consent")
-                blocked_customers.append(
-                    {"customer_id": str(cid), "reason": "no_consent"}
-                )
-                continue
+            if records:
+                await s.flush()
 
-            # Create notification record for consenting customers
-            record = ProactiveCareORM(
-                customer_id=cid,
-                anomaly_id=anomaly_id,
-                channel="simulation",
-                status="sent",
-                message_content="Proactive alert: We've detected an optimization event in your area. Coverage might be improved shortly.",
-            )
-            records.append(record)
-            s.add(record)
+        logger.info(
+            f"Triggered proactive care for {len(records)} consenting customers, blocked {len(blocked_customers)} non-consenting customers (anomaly {anomaly_id})"
+        )
 
-        if records:
-            await s.flush()
-
-    logger.info(
-        f"Triggered proactive care for {len(records)} consenting customers, blocked {len(blocked_customers)} non-consenting customers (anomaly {anomaly_id})"
-    )
-
-    return {
-        "sent": records,
-        "blocked": blocked_customers,
-        "sent_count": len(records),
-        "blocked_count": len(blocked_customers),
-    }
+        return {
+            "sent": records,
+            "blocked": blocked_customers,
+            "sent_count": len(records),
+            "blocked_count": len(blocked_customers),
+        }

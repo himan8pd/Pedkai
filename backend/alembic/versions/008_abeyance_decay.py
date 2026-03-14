@@ -23,7 +23,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add decay_score, corroboration_count, and status to decision_traces."""
+    """Add decay_score, corroboration_count, and abeyance_status to decision_traces.
+
+    Note: 'status' already exists on decision_traces for incident lifecycle
+    (raised/cleared). The abeyance lifecycle field is named 'abeyance_status'
+    to avoid a column name clash.
+    """
     op.add_column(
         'decision_traces',
         sa.Column('decay_score', sa.Float(), nullable=False, server_default='1.0'),
@@ -34,12 +39,12 @@ def upgrade() -> None:
     )
     op.add_column(
         'decision_traces',
-        sa.Column('status', sa.String(20), nullable=False, server_default='ACTIVE'),
+        sa.Column('abeyance_status', sa.String(20), nullable=False, server_default='ACTIVE'),
     )
 
 
 def downgrade() -> None:
     """Remove decay columns from decision_traces."""
-    op.drop_column('decision_traces', 'status')
+    op.drop_column('decision_traces', 'abeyance_status')
     op.drop_column('decision_traces', 'corroboration_count')
     op.drop_column('decision_traces', 'decay_score')
