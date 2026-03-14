@@ -122,7 +122,7 @@ class AbeyanceDecayService:
         """
         stmt = select(DecisionTraceORM).where(
             DecisionTraceORM.tenant_id == tenant_id,
-            DecisionTraceORM.status == "ACTIVE",  # type: ignore[attr-defined]
+            DecisionTraceORM.abeyance_status == "ACTIVE",  # type: ignore[attr-defined]
         )
         rows = session.execute(stmt).scalars().all()
 
@@ -172,10 +172,10 @@ class AbeyanceDecayService:
             update(DecisionTraceORM)
             .where(
                 DecisionTraceORM.tenant_id == tenant_id,
-                DecisionTraceORM.status == "ACTIVE",  # type: ignore[attr-defined]
+                DecisionTraceORM.abeyance_status == "ACTIVE",  # type: ignore[attr-defined]
                 DecisionTraceORM.decay_score < threshold,  # type: ignore[attr-defined]
             )
-            .values(status="STALE")
+            .values(abeyance_status="STALE")
             .execution_options(synchronize_session="fetch")
         )
         result = session.execute(stmt)

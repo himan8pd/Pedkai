@@ -148,3 +148,39 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
         yield c
     
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function")
+async def client_real_auth(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """
+    Test client with database dependency overridden but auth NOT mocked.
+    Use for RBAC and authentication tests that need real JWT validation.
+    """
+    from backend.app.events.bus import initialize_event_bus
+    initialize_event_bus(maxsize=10000)
+
+    async def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    async def override_get_metrics_db():
+        async with TestingSessionLocal() as session:
+            try:
+                yield session
+                await session.commit()
+            finally:
+                await session.close()
+
+    from backend.app.core.database import get_db, get_metrics_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_metrics_db] = override_get_metrics_db
+    # NOTE: get_current_user and oauth2_scheme are intentionally NOT overridden here,
+    # so real JWT validation and scope checking applies.
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+
+    app.dependency_overrides.clear()

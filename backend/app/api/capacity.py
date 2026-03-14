@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import get_db
+from backend.app.core.database import async_session_maker, get_db
 from backend.app.core.security import (
     CAPACITY_READ,
     CAPACITY_WRITE,
@@ -70,9 +70,10 @@ async def create_densification_request(
     await db.commit()
     await db.refresh(db_request)
 
-    # Trigger background optimization
-    engine = CapacityEngine(db)
-    await engine.optimize_densification(db_request.id)
+    # Trigger background optimization (pass factory + current session to avoid
+    # creating a second connection from within the same request)
+    engine = CapacityEngine(async_session_maker)
+    await engine.optimize_densification(db_request.id, session=db)
 
     return db_request
 

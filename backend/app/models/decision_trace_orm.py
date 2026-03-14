@@ -73,7 +73,12 @@ class DecisionTraceORM(Base):
     # Phase 15.3: Semantic Context Graph (Recursive Reasoning)
     parent_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     derivation_type = Column(String(50), nullable=True) # FOLLOW_UP | DIRECT_CAUSE | SIMILAR_PATTERN
-    
+
+    # Abeyance Memory decay columns (migration 008)
+    decay_score = Column(Float, nullable=False, default=1.0, server_default='1.0')
+    corroboration_count = Column(Integer, nullable=False, default=0, server_default='0')
+    abeyance_status = Column(String(20), nullable=False, default='ACTIVE', server_default='ACTIVE')  # ACTIVE | STALE
+
     __table_args__ = (
         Index("ix_decision_traces_tenant_domain", "tenant_id", "domain"),
         Index("ix_decision_traces_tenant_created", "tenant_id", "created_at"),

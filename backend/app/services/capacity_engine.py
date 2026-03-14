@@ -23,8 +23,11 @@ class CapacityEngine:
 
     @asynccontextmanager
     async def _get_session(self, session: Optional[AsyncSession] = None):
-        if session:
+        if session is not None:
             yield session
+        elif isinstance(self.session_factory, AsyncSession):
+            # Caller passed a bare session instead of a factory (e.g. in tests)
+            yield self.session_factory
         else:
             async with self.session_factory() as new_session:
                 try:
