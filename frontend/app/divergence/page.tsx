@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
-  GitMerge,
   Layers,
   Link2,
   Link2Off,
@@ -13,6 +12,8 @@ import {
   RefreshCw,
   Shield,
   TrendingUp,
+  Activity,
+  FlaskConical,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -38,9 +39,9 @@ const TYPE_META: Record<
   },
   identity_mutation: {
     label: "Identity Mutations",
-    colour: "text-purple-400",
-    colourBg: "bg-purple-500/15 border-purple-500/30",
-    icon: GitMerge,
+    colour: "text-violet-400",
+    colourBg: "bg-violet-500/15 border-violet-500/30",
+    icon: Shield,
   },
   dark_attribute: {
     label: "Dark Attributes",
@@ -117,14 +118,14 @@ function StatCard({
     >
       <div className="flex items-center gap-2">
         <Icon className={`w-4 h-4 ${colour}`} />
-        <span className="text-xs text-gray-900 uppercase tracking-wider font-semibold">
+        <span className="text-xs text-white/60 uppercase tracking-wider font-semibold">
           {label}
         </span>
       </div>
       <span className={`text-2xl font-bold ${colour}`}>
         {typeof value === "number" ? value.toLocaleString() : value}
       </span>
-      {sub && <span className="text-xs text-gray-500">{sub}</span>}
+      {sub && <span className="text-xs text-white/60">{sub}</span>}
     </div>
   );
 }
@@ -160,6 +161,7 @@ export default function DivergencePage() {
   const [page, setPage] = useState(1);
   const [filterType, setFilterType] = useState<string>("");
   const [filterDomain, setFilterDomain] = useState<string>("");
+  const [showEval, setShowEval] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -168,23 +170,16 @@ export default function DivergencePage() {
 
   const PAGE_SIZE = 25;
 
-  // ── Fetch summary + score ──────────────────────────────────────────────
-  const fetchSummaryAndScore = useCallback(async () => {
+  // ── Fetch summary ──────────────────────────────────────────────────
+  const fetchSummary = useCallback(async () => {
     if (!tenantId || !token) return;
     setError(null);
     try {
-      const [s, sc] = await Promise.all([
-        apiFetch(
-          `/api/v1/reports/divergence/summary?tenant_id=${encodeURIComponent(tenantId)}`,
-          token
-        ),
-        apiFetch(
-          `/api/v1/reports/divergence/score/${encodeURIComponent(tenantId)}`,
-          token
-        ).catch(() => null),
-      ]);
+      const s = await apiFetch(
+        `/api/v1/reports/divergence/summary?tenant_id=${encodeURIComponent(tenantId)}`,
+        token
+      );
       setSummary(s);
-      setScore(sc);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -192,7 +187,21 @@ export default function DivergencePage() {
     }
   }, [tenantId, token]);
 
-  // ── Fetch records page ─────────────────────────────────────────────────
+  // ── Fetch evaluation score (separate, on-demand) ───────────────────
+  const fetchScore = useCallback(async () => {
+    if (!tenantId || !token) return;
+    try {
+      const sc = await apiFetch(
+        `/api/v1/reports/divergence/score/${encodeURIComponent(tenantId)}`,
+        token
+      );
+      setScore(sc);
+    } catch {
+      setScore(null);
+    }
+  }, [tenantId, token]);
+
+  // ── Fetch records page ─────────────────────────────────────────────
   const fetchRecords = useCallback(async () => {
     if (!tenantId || !token) return;
     let path = `/api/v1/reports/divergence/records?tenant_id=${encodeURIComponent(tenantId)}&page=${page}&page_size=${PAGE_SIZE}`;
@@ -208,14 +217,14 @@ export default function DivergencePage() {
   }, [tenantId, token, page, filterType, filterDomain]);
 
   useEffect(() => {
-    fetchSummaryAndScore();
-  }, [fetchSummaryAndScore]);
+    fetchSummary();
+  }, [fetchSummary]);
 
   useEffect(() => {
     if (summary) fetchRecords();
   }, [summary, fetchRecords]);
 
-  // ── Run reconciliation ────────────────────────────────────────────────
+  // ── Run reconciliation ────────────────────────────────────────────
   async function handleRun() {
     if (!tenantId || !token) return;
     setRunning(true);
@@ -229,7 +238,9 @@ export default function DivergencePage() {
       setPage(1);
       setFilterType("");
       setFilterDomain("");
-      await fetchSummaryAndScore();
+      setScore(null);
+      setShowEval(false);
+      await fetchSummary();
     } catch (e: any) {
       setRunError(e.message);
     } finally {
@@ -241,6 +252,8 @@ export default function DivergencePage() {
   const domains = summary
     ? Object.keys(summary.summary?.by_domain ?? {})
     : [];
+
+  const inv = summary?.operational_inventory;
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -254,8 +267,8 @@ export default function DivergencePage() {
               Dark Graph Reconciliation
             </h1>
             <p className="mt-1 text-white/80 text-sm">
-              CMDB intent vs ground truth reality — detecting divergences
-              across entities, relationships, attributes, and identities.
+              CMDB declarations vs operational signals — detecting divergences
+              from KPI telemetry, alarms, and neighbour relations.
             </p>
           </div>
           <button
@@ -268,7 +281,7 @@ export default function DivergencePage() {
             ) : (
               <Play className="w-4 h-4" />
             )}
-            {running ? "Running…" : "Run Reconciliation"}
+            {running ? "Running..." : "Run Reconciliation"}
           </button>
         </div>
 
@@ -282,10 +295,10 @@ export default function DivergencePage() {
         {!loading && error && (
           <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
             <AlertTriangle className="w-12 h-12 text-amber-400" />
-            <p className="text-gray-900 text-lg">No reconciliation run found.</p>
-            <p className="text-gray-500 text-sm">
-              Click <strong className="text-white">Run Reconciliation</strong> to compare
-              the CMDB against ground truth and discover divergences.
+            <p className="text-white text-lg">No reconciliation run found.</p>
+            <p className="text-white/60 text-sm">
+              Click <strong className="text-white">Run Reconciliation</strong> to analyse
+              operational signals against the CMDB and discover divergences.
             </p>
           </div>
         )}
@@ -335,148 +348,45 @@ export default function DivergencePage() {
               })}
             </div>
 
-            {/* CMDB accuracy + scoring */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* CMDB accuracy */}
+            {/* Operational inventory */}
+            {inv && (
               <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-4">
                 <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-blue-400" />
-                  <h2 className="font-semibold text-white">CMDB Accuracy</h2>
+                  <Activity className="w-5 h-5 text-blue-400" />
+                  <h2 className="font-semibold text-white">Operational Inventory</h2>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                   {[
                     [
-                      "Entity coverage",
-                      `${summary.cmdb_accuracy?.entity_accuracy_pct?.toFixed(1)}%`,
-                      "CMDB entities / Ground truth",
-                    ],
-                    [
-                      "Edge coverage",
-                      `${summary.cmdb_accuracy?.edge_accuracy_pct?.toFixed(1)}%`,
-                      "CMDB edges / Ground truth",
-                    ],
-                    [
                       "CMDB entities",
-                      summary.cmdb_accuracy?.entity_count_cmdb?.toLocaleString(),
-                      "Declared",
+                      inv.cmdb_entity_count?.toLocaleString(),
+                      "Declared in CMDB",
                     ],
                     [
-                      "Reality entities",
-                      summary.cmdb_accuracy?.entity_count_reality?.toLocaleString(),
-                      "Ground truth",
+                      "Observed entities",
+                      inv.observed_entity_count?.toLocaleString(),
+                      "Seen in signals",
                     ],
                     [
                       "CMDB edges",
-                      summary.cmdb_accuracy?.edge_count_cmdb?.toLocaleString(),
-                      "Declared",
+                      inv.cmdb_edge_count?.toLocaleString(),
+                      "Declared in CMDB",
                     ],
                     [
-                      "Reality edges",
-                      summary.cmdb_accuracy?.edge_count_reality?.toLocaleString(),
-                      "Ground truth",
+                      "Observed edges",
+                      inv.observed_edge_count?.toLocaleString(),
+                      "Neighbour relations",
                     ],
                   ].map(([lbl, val, sub]) => (
                     <div key={lbl} className="bg-white/5 rounded-lg p-3">
-                      <div className="text-gray-700 text-xs">{lbl}</div>
+                      <div className="text-white/60 text-xs">{lbl}</div>
                       <div className="text-white font-bold mt-0.5">{val}</div>
-                      <div className="text-gray-700 text-xs">{sub}</div>
+                      <div className="text-white/60 text-xs">{sub}</div>
                     </div>
                   ))}
                 </div>
               </div>
-
-              {/* Detection score vs manifest */}
-              {score && (
-                <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-green-400" />
-                    <h2 className="font-semibold text-white">
-                      Detection Score vs Ground Truth Labels
-                    </h2>
-                  </div>
-                  <p className="text-xs text-white/80">
-                    Scoring engine findings against the pre-seeded{" "}
-                    <code className="text-gray-900">divergence_manifest</code>{" "}
-                    ({score.overall?.manifest_count?.toLocaleString()} labelled
-                    ground truth divergences).
-                  </p>
-                  <div className="flex gap-4 justify-center">
-                    <ScoreBadge
-                      label="Recall"
-                      value={score.overall?.recall}
-                    />
-                    <ScoreBadge
-                      label="Precision"
-                      value={score.overall?.precision}
-                    />
-                    <ScoreBadge label="F1" value={score.overall?.f1} />
-                  </div>
-                  {/* Per-type scoring table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-gray-700 text-left border-b border-cyan-900/30">
-                          <th className="pb-1 pr-3">Type</th>
-                          <th className="pb-1 pr-3 text-right">Labels</th>
-                          <th className="pb-1 pr-3 text-right">Found</th>
-                          <th className="pb-1 pr-3 text-right">Recall</th>
-                          <th className="pb-1 text-right">F1</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(score.by_type ?? []).map((row: any) => {
-                          const meta = TYPE_META[row.type];
-                          return (
-                            <tr
-                              key={row.type}
-                              className="border-b border-cyan-900/20"
-                            >
-                              <td
-                                className={`py-1 pr-3 font-medium ${meta?.colour ?? "text-gray-700"}`}
-                              >
-                                {meta?.label ?? row.type}
-                              </td>
-                              <td className="py-1 pr-3 text-right text-gray-700">
-                                {row.manifest_count?.toLocaleString()}
-                              </td>
-                              <td className="py-1 pr-3 text-right text-gray-700">
-                                {row.engine_detected?.toLocaleString()}
-                              </td>
-                              <td className="py-1 pr-3 text-right">
-                                <span
-                                  className={
-                                    row.recall >= 0.8
-                                      ? "text-green-400"
-                                      : row.recall >= 0.5
-                                        ? "text-amber-400"
-                                        : "text-red-400"
-                                  }
-                                >
-                                  {Math.round(row.recall * 100)}%
-                                </span>
-                              </td>
-                              <td className="py-1 text-right">
-                                <span
-                                  className={
-                                    row.f1 >= 0.8
-                                      ? "text-green-400"
-                                      : row.f1 >= 0.5
-                                        ? "text-amber-400"
-                                        : "text-red-400"
-                                  }
-                                >
-                                  {Math.round(row.f1 * 100)}%
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Domain breakdown bar */}
             {domains.length > 0 && (
@@ -526,7 +436,7 @@ export default function DivergencePage() {
                       setFilterType(e.target.value);
                       setPage(1);
                     }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-gray-700 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
                   >
                     <option value="">All types</option>
                     {TYPE_ORDER.map((t) => (
@@ -542,7 +452,7 @@ export default function DivergencePage() {
                       setFilterDomain(e.target.value);
                       setPage(1);
                     }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-gray-700 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
                   >
                     <option value="">All domains</option>
                     {domains.map((d) => (
@@ -557,11 +467,12 @@ export default function DivergencePage() {
               {/* Table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="border-b border-cyan-900/40 text-xs text-gray-700 uppercase tracking-wider">
+                  <thead className="border-b border-cyan-900/40 text-xs text-white/60 uppercase tracking-wider">
                     <tr>
                       <th className="text-left px-4 py-2">Type</th>
                       <th className="text-left px-4 py-2">Entity/Rel Type</th>
                       <th className="text-left px-4 py-2">Domain</th>
+                      <th className="text-left px-4 py-2">Confidence</th>
                       <th className="text-left px-4 py-2 max-w-xs">
                         Description
                       </th>
@@ -572,6 +483,7 @@ export default function DivergencePage() {
                     {records.map((r) => {
                       const meta = TYPE_META[r.divergence_type];
                       const Icon = meta?.icon ?? AlertTriangle;
+                      const confPct = Math.round((r.confidence ?? 0) * 100);
                       return (
                         <tr
                           key={r.result_id}
@@ -579,7 +491,7 @@ export default function DivergencePage() {
                         >
                           <td className="px-4 py-2 whitespace-nowrap">
                             <span
-                              className={`inline-flex items-center gap-1.5 text-xs font-medium ${meta?.colour ?? "text-gray-900"}`}
+                              className={`inline-flex items-center gap-1.5 text-xs font-medium ${meta?.colour ?? "text-white"}`}
                             >
                               <Icon className="w-3.5 h-3.5" />
                               {meta?.label ?? r.divergence_type}
@@ -588,16 +500,29 @@ export default function DivergencePage() {
                           <td className="px-4 py-2 text-white text-xs font-mono">
                             {r.target_type ?? "—"}
                           </td>
-                          <td className="px-4 py-2 text-gray-700 text-xs">
+                          <td className="px-4 py-2 text-white/80 text-xs">
                             {DOMAIN_LABELS[r.domain] ?? r.domain ?? "—"}
+                          </td>
+                          <td className="px-4 py-2 text-xs">
+                            <span
+                              className={
+                                confPct >= 80
+                                  ? "text-green-400"
+                                  : confPct >= 60
+                                    ? "text-amber-400"
+                                    : "text-red-400"
+                              }
+                            >
+                              {confPct}%
+                            </span>
                           </td>
                           <td className="px-4 py-2 text-white text-xs max-w-xs truncate">
                             {r.description}
                           </td>
-                          <td className="px-4 py-2 text-xs text-gray-700 font-mono">
+                          <td className="px-4 py-2 text-xs text-white/80 font-mono">
                             {r.attribute_name && (
                               <span>
-                                <span className="text-gray-900">
+                                <span className="text-white">
                                   {r.attribute_name}
                                 </span>
                                 {": "}
@@ -606,18 +531,7 @@ export default function DivergencePage() {
                                 </span>{" "}
                                 →{" "}
                                 <span className="text-green-400">
-                                  {r.ground_truth_value}
-                                </span>
-                              </span>
-                            )}
-                            {r.cmdb_external_id && (
-                              <span>
-                                <span className="text-red-400 line-through">
-                                  {r.cmdb_external_id?.slice(0, 30)}
-                                </span>{" "}
-                                →{" "}
-                                <span className="text-green-400">
-                                  {r.gt_external_id?.slice(0, 30)}
+                                  {r.observed_value}
                                 </span>
                               </span>
                             )}
@@ -628,8 +542,8 @@ export default function DivergencePage() {
                     {records.length === 0 && (
                       <tr>
                         <td
-                          colSpan={5}
-                          className="px-4 py-8 text-center text-white"
+                          colSpan={6}
+                          className="px-4 py-8 text-center text-white/60"
                         >
                           No records found.
                         </td>
@@ -651,7 +565,7 @@ export default function DivergencePage() {
                       disabled={page === 1}
                       className="px-3 py-1 rounded bg-[#06203b] hover:bg-[#0d3b5e] text-slate-200 disabled:opacity-40"
                     >
-                      ← Prev
+                      Prev
                     </button>
                     <button
                       onClick={() =>
@@ -662,9 +576,128 @@ export default function DivergencePage() {
                       disabled={page >= Math.ceil(totalRecords / PAGE_SIZE)}
                       className="px-3 py-1 rounded bg-[#06203b] hover:bg-[#0d3b5e] text-slate-200 disabled:opacity-40"
                     >
-                      Next →
+                      Next
                     </button>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── Evaluation Section (collapsed by default) ─────────── */}
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 overflow-hidden">
+              <button
+                onClick={() => {
+                  setShowEval(!showEval);
+                  if (!showEval && !score) fetchScore();
+                }}
+                className="w-full p-4 flex items-center gap-2 text-sm font-medium text-violet-300 hover:text-violet-200 transition-colors"
+              >
+                <FlaskConical className="w-4 h-4" />
+                <span>Evaluation: Score against ground-truth labels</span>
+                <span className="text-xs text-violet-400 ml-2">
+                  (Development / benchmarking only — not part of operational pipeline)
+                </span>
+                <span className="ml-auto text-violet-400">
+                  {showEval ? "▲" : "▼"}
+                </span>
+              </button>
+
+              {showEval && (
+                <div className="p-5 border-t border-violet-500/20 space-y-4">
+                  {!score && (
+                    <div className="flex justify-center py-8">
+                      <RefreshCw className="w-6 h-6 text-violet-400 animate-spin" />
+                    </div>
+                  )}
+
+                  {score?.error && (
+                    <p className="text-sm text-violet-300">{score.error}</p>
+                  )}
+
+                  {score && !score.error && (
+                    <>
+                      <p className="text-xs text-white/80">
+                        Comparing engine output against the pre-seeded{" "}
+                        <code className="text-violet-300">divergence_manifest</code>{" "}
+                        ({score.overall?.manifest_count?.toLocaleString()} labelled
+                        divergences). This data is never used during detection.
+                      </p>
+                      <div className="flex gap-4 justify-center">
+                        <ScoreBadge
+                          label="Recall"
+                          value={score.overall?.recall}
+                        />
+                        <ScoreBadge
+                          label="Precision"
+                          value={score.overall?.precision}
+                        />
+                        <ScoreBadge label="F1" value={score.overall?.f1} />
+                      </div>
+                      {/* Per-type scoring table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-white/60 text-left border-b border-violet-500/20">
+                              <th className="pb-1 pr-3">Type</th>
+                              <th className="pb-1 pr-3 text-right">Labels</th>
+                              <th className="pb-1 pr-3 text-right">Found</th>
+                              <th className="pb-1 pr-3 text-right">Recall</th>
+                              <th className="pb-1 text-right">F1</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(score.by_type ?? []).map((row: any) => {
+                              const meta = TYPE_META[row.type];
+                              return (
+                                <tr
+                                  key={row.type}
+                                  className="border-b border-violet-500/10"
+                                >
+                                  <td
+                                    className={`py-1 pr-3 font-medium ${meta?.colour ?? "text-white/80"}`}
+                                  >
+                                    {meta?.label ?? row.type}
+                                  </td>
+                                  <td className="py-1 pr-3 text-right text-white/80">
+                                    {row.manifest_count?.toLocaleString()}
+                                  </td>
+                                  <td className="py-1 pr-3 text-right text-white/80">
+                                    {row.engine_detected?.toLocaleString()}
+                                  </td>
+                                  <td className="py-1 pr-3 text-right">
+                                    <span
+                                      className={
+                                        row.recall >= 0.8
+                                          ? "text-green-400"
+                                          : row.recall >= 0.5
+                                            ? "text-amber-400"
+                                            : "text-red-400"
+                                      }
+                                    >
+                                      {Math.round(row.recall * 100)}%
+                                    </span>
+                                  </td>
+                                  <td className="py-1 text-right">
+                                    <span
+                                      className={
+                                        row.f1 >= 0.8
+                                          ? "text-green-400"
+                                          : row.f1 >= 0.5
+                                            ? "text-amber-400"
+                                            : "text-red-400"
+                                      }
+                                    >
+                                      {Math.round(row.f1 * 100)}%
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

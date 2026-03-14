@@ -1,8 +1,9 @@
 """
 ORM model for reconciliation_results table.
 
-Stores divergences discovered by the ReconciliationEngine when comparing
-CMDB declared state against ground truth reality.
+Stores divergences discovered by the signal-based ReconciliationEngine
+when comparing CMDB declared state against operational signals
+(KPI telemetry, alarms, neighbour relations).
 """
 
 from datetime import datetime, timezone
@@ -18,14 +19,13 @@ class ReconciliationResultORM(Base):
 
     __tablename__ = "reconciliation_results"
 
-    result_id = Column(String, primary_key=True)          # SHA256 hash of (tenant+from+to+type)
+    result_id = Column(String, primary_key=True)          # SHA256 hash of (tenant+type+target)
     tenant_id = Column(String, nullable=False, index=True)
     run_id = Column(String, nullable=False, index=True)   # Groups results per run
 
     # Divergence classification
     divergence_type = Column(String, nullable=False, index=True)
-    # dark_node | phantom_node | identity_mutation | dark_attribute
-    # dark_edge | phantom_edge
+    # dark_node | phantom_node | dark_attribute | dark_edge | phantom_edge
 
     entity_or_relationship = Column(String)               # 'entity' | 'relationship'
     target_id = Column(String, index=True)                # entity/edge ID
@@ -37,15 +37,11 @@ class ReconciliationResultORM(Base):
 
     # Attribute-level divergence details
     attribute_name = Column(String)
-    cmdb_value = Column(Text)
-    ground_truth_value = Column(Text)
-
-    # Identity mutation details
-    cmdb_external_id = Column(Text)
-    gt_external_id = Column(Text)
+    cmdb_value = Column(Text)                             # What the CMDB declares
+    observed_value = Column(Text)                         # What operational signals report
 
     # Evidence / scoring
-    confidence = Column(Float, default=1.0)               # 0.0–1.0
+    confidence = Column(Float, default=1.0)               # 0.0–1.0 (signal-derived)
     extra = Column(JSONB)                                  # Additional context
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
@@ -62,28 +58,19 @@ class ReconciliationRunORM(Base):
     status = Column(String, default="running")            # 'running' | 'complete' | 'error'
 
     # Summary counts
-    total_divergences = Column(String)                    # Store as str to avoid None issues
+    total_divergences = Column(String)
     dark_nodes = Column(String, default="0")
     phantom_nodes = Column(String, default="0")
-    identity_mutations = Column(String, default="0")
+    identity_mutations = Column(String, default="0")      # Kept for schema compat, always "0"
     dark_attributes = Column(String, default="0")
     dark_edges = Column(String, default="0")
     phantom_edges = Column(String, default="0")
 
-    # Entity accuracy metrics
+    # Operational inventory
     cmdb_entity_count = Column(String, default="0")
-    gt_entity_count = Column(String, default="0")
-    confirmed_entity_count = Column(String, default="0")
+    observed_entity_count = Column(String, default="0")   # Distinct entities in signals
     cmdb_edge_count = Column(String, default="0")
-    gt_edge_count = Column(String, default="0")
-    confirmed_edge_count = Column(String, default="0")
-
-    # Scoring against pre-seeded manifest
-    manifest_count = Column(String, default="0")
-    detected_in_manifest = Column(String, default="0")
-    recall_score = Column(Float)                          # detected / manifest
-    precision_score = Column(Float)                       # manifest_hits / engine_total
-    f1_score = Column(Float)
+    observed_edge_count = Column(String, default="0")     # Neighbour relations count
 
     error_message = Column(Text)
     started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
