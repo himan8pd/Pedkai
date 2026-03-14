@@ -438,3 +438,68 @@ async def get_detection_score(
             "indicate the engine found additional divergences not covered by the seeded labels."
         ),
     }
+
+
+# -- TASK-301: File-based Divergence Analysis endpoints --
+
+import asyncio
+import tempfile
+import os as _os
+from fastapi import UploadFile, File, BackgroundTasks
+
+_analysis_jobs: dict = {}
+
+
+@router.post("/dark-graph/analyze")
+async def analyze_divergence(
+    background_tasks: BackgroundTasks,
+    cmdb_file: UploadFile = File(...),
+    telemetry_file: UploadFile = File(...),
+    ticket_file: UploadFile = File(...),
+    tenant_id: str = "default",
+):
+    """Upload 3 files, trigger file-based divergence analysis. Returns job_id."""
+    from backend.app.services.dark_graph.divergence_reporter import DivergenceReporter
+
+    job_id = str(__import__("uuid").uuid4())
+    _analysis_jobs[job_id] = {"status": "processing", "report": None}
+
+    # Save uploaded files to temp
+    tmp_dir = tempfile.mkdtemp()
+    cmdb_path = _os.path.join(tmp_dir, cmdb_file.filename or "cmdb.csv")
+    tel_path = _os.path.join(tmp_dir, telemetry_file.filename or "telemetry.csv")
+    tick_path = _os.path.join(tmp_dir, ticket_file.filename or "tickets.csv")
+
+    with open(cmdb_path, "wb") as f:
+        f.write(await cmdb_file.read())
+    with open(tel_path, "wb") as f:
+        f.write(await telemetry_file.read())
+    with open(tick_path, "wb") as f:
+        f.write(await ticket_file.read())
+
+    async def _run():
+        try:
+            reporter = DivergenceReporter()
+            report = reporter.generate_report(
+                tenant_id=tenant_id,
+                cmdb_path=cmdb_path,
+                telemetry_path=tel_path,
+                ticket_path=tick_path,
+            )
+            _analysis_jobs[job_id]["status"] = "complete"
+            _analysis_jobs[job_id]["report"] = report.to_dict()
+        except Exception as e:
+            _analysis_jobs[job_id]["status"] = "failed"
+            _analysis_jobs[job_id]["error"] = str(e)
+
+    background_tasks.add_task(_run)
+    return {"job_id": job_id, "status": "processing"}
+
+
+@router.get("/dark-graph/report/{job_id}")
+async def get_file_divergence_report(job_id: str):
+    """Get divergence report by job_id."""
+    job = _analysis_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    return job

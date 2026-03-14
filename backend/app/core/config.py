@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     # 1=Assisted (shadow), 2=Supervised (advisory, current target), 3=Autonomous (not in v1)
     ai_maturity_level: int = 2
 
+    # Evidence Fusion (TASK-104)
+    # Selects the default fusion methodology used by FusionMethodologyFactory.create()
+    # Options: "noisy_or" (default)
+    fusion_methodology: str = "noisy_or"
+
     # Drift Detection Calibration (Task 7.2 — Amendment #24)
     drift_threshold_pct: float = 15.0  # Configurable via DRIFT_THRESHOLD_PCT env var
     drift_false_positive_window_days: int = 30  # Track FP rate over this window
@@ -99,6 +104,11 @@ class Settings(BaseSettings):
     # Sleeping Cell Detector (Task P2.4)
     sleeping_cell_enabled: bool = True
     sleeping_cell_scan_interval_seconds: int = 300  # 5 minutes
+    sleeping_cell_interval_minutes: int = 15  # Alias for interval in minutes (converts to seconds)
+
+    # Abeyance Memory Decay (TASK-102)
+    abeyance_decay_interval_hours: int = 6  # How often the decay pass runs
+    abeyance_decay_lambda: float = 0.05     # λ in exp(-λ × days); override via ABEYANCE_DECAY_LAMBDA
 
 
 @lru_cache

@@ -12,6 +12,9 @@ import {
   Building2,
   Clock,
   GitCompare,
+  Radio,
+  MessageSquare,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
@@ -64,6 +67,9 @@ export default function Navigation() {
     { href: "/scorecard", label: "Scorecard", icon: BarChart3 },
     { href: "/divergence", label: "Divergence", icon: GitCompare },
     { href: "/topology", label: "Topology", icon: Network },
+    { href: "/sleeping-cells", label: "Sleeping Cells", icon: Radio },
+    { href: "/feedback", label: "Feedback", icon: MessageSquare },
+    { href: "/settings", label: "Settings", icon: Settings },
   ];
 
   return (

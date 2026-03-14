@@ -5,6 +5,11 @@ from pydantic import BaseModel
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_user, User
 from backend.app.models.decision_trace_orm import DecisionFeedbackORM, DecisionTraceORM
+from backend.app.services.structured_feedback import (
+    StructuredFeedbackRequest,
+    StructuredFeedbackResponse,
+    get_structured_feedback_service,
+)
 
 router = APIRouter()
 
@@ -94,3 +99,23 @@ async def submit_feedback(
         raise HTTPException(status_code=500, detail=f"Failed to update decision trace: {e}")
 
     return {"ok": True, "decision_id": payload.decision_id, "aggregate_score": int(agg)}
+
+
+@router.post("/structured", response_model=StructuredFeedbackResponse)
+async def submit_structured_feedback(
+    request: StructuredFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    service = get_structured_feedback_service()
+    return await service.record_feedback(request, db)
+
+
+@router.get("/structured/{decision_id}/summary")
+async def get_structured_feedback_summary(
+    decision_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    service = get_structured_feedback_service()
+    return await service.get_feedback_summary(decision_id, db)

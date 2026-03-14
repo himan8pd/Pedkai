@@ -1,0 +1,7 @@
+{
+  "exercise_id": 1,
+  "trainee_id": "trainee_demo",
+  "sleeping_cells": ["JKTBND001-SEC1", "BDGDGO003-SEC2"],
+  "evidence": ["prb_utilisation_below_5pct", "sinr_degraded", "handover_success_below_80pct"],
+  "domain_identified": "RAN"
+}
