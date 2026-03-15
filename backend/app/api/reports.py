@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import get_db
+from backend.app.core.database import get_db, get_metrics_db
 from backend.app.services.reconciliation_engine import ReconciliationEngine
 
 logger = logging.getLogger(__name__)
@@ -45,19 +45,20 @@ class RunReconciliationRequest(BaseModel):
 async def run_reconciliation(
     body: RunReconciliationRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
+    metrics_db: Annotated[AsyncSession, Depends(get_metrics_db)],
 ) -> dict:
     """
     Trigger signal-based divergence detection for a tenant.
 
     Analyses CMDB (network_entities, topology_relationships) against
-    operational signals (kpi_metrics, telco_events_alarms, neighbour_relations)
-    to detect: dark nodes, phantom nodes, dark attributes,
-    dark edges, and phantom edges.
+    operational signals (kpi_metrics on TimescaleDB, telco_events_alarms,
+    neighbour_relations) to detect: dark nodes, phantom nodes,
+    identity mutations, dark attributes, dark edges, and phantom edges.
 
     No ground-truth data is used during detection.
     """
     try:
-        engine = ReconciliationEngine(db)
+        engine = ReconciliationEngine(db, metrics_db)
         result = await engine.run(body.tenant_id)
         return result
     except Exception as exc:
@@ -160,6 +161,147 @@ async def get_divergence_summary(
 
 
 # ---------------------------------------------------------------------------
+# GET /divergence/aggregations
+# ---------------------------------------------------------------------------
+
+
+@router.get("/divergence/aggregations")
+async def get_divergence_aggregations(
+    tenant_id: Annotated[str, Query()],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """
+    Multi-dimensional aggregations for the executive summary dashboard.
+    Returns breakdowns by type+domain, type+target_type, confidence buckets,
+    and top affected entities — all computed server-side to avoid shipping
+    millions of rows to the browser.
+    """
+    # -- By type x domain (heatmap data) --
+    type_domain_rows = await db.execute(
+        text(
+            """
+            SELECT divergence_type, domain, COUNT(*) AS cnt
+            FROM reconciliation_results
+            WHERE tenant_id = :tid AND domain IS NOT NULL
+            GROUP BY divergence_type, domain
+            ORDER BY cnt DESC
+            """
+        ),
+        {"tid": tenant_id},
+    )
+    type_domain = [
+        {"type": r[0], "domain": r[1], "count": r[2]}
+        for r in type_domain_rows.fetchall()
+    ]
+
+    # -- By type x target_type (top entity types per divergence) --
+    type_target_rows = await db.execute(
+        text(
+            """
+            SELECT divergence_type, target_type, COUNT(*) AS cnt
+            FROM reconciliation_results
+            WHERE tenant_id = :tid AND target_type IS NOT NULL
+            GROUP BY divergence_type, target_type
+            ORDER BY cnt DESC
+            """
+        ),
+        {"tid": tenant_id},
+    )
+    type_target = [
+        {"type": r[0], "target_type": r[1], "count": r[2]}
+        for r in type_target_rows.fetchall()
+    ]
+
+    # -- Confidence distribution (buckets) --
+    confidence_rows = await db.execute(
+        text(
+            """
+            SELECT
+              divergence_type,
+              CASE
+                WHEN confidence >= 0.9 THEN 'critical'
+                WHEN confidence >= 0.7 THEN 'high'
+                WHEN confidence >= 0.5 THEN 'medium'
+                ELSE 'low'
+              END AS bucket,
+              COUNT(*) AS cnt
+            FROM reconciliation_results
+            WHERE tenant_id = :tid
+            GROUP BY divergence_type, bucket
+            ORDER BY divergence_type, bucket
+            """
+        ),
+        {"tid": tenant_id},
+    )
+    confidence_buckets = [
+        {"type": r[0], "bucket": r[1], "count": r[2]}
+        for r in confidence_rows.fetchall()
+    ]
+
+    # -- Top affected entities (most divergences per entity) --
+    top_entities_rows = await db.execute(
+        text(
+            """
+            SELECT rr.target_id, rr.target_type, rr.domain,
+                   COUNT(*) AS divergence_count,
+                   AVG(rr.confidence) AS avg_confidence,
+                   ne.name AS entity_name, ne.external_id
+            FROM reconciliation_results rr
+            LEFT JOIN network_entities ne
+              ON CAST(ne.id AS TEXT) = rr.target_id AND ne.tenant_id = :tid
+            WHERE rr.tenant_id = :tid
+              AND rr.entity_or_relationship = 'entity'
+            GROUP BY rr.target_id, rr.target_type, rr.domain, ne.name, ne.external_id
+            ORDER BY divergence_count DESC
+            LIMIT 20
+            """
+        ),
+        {"tid": tenant_id},
+    )
+    top_entities = [
+        {
+            "target_id": r[0],
+            "target_type": r[1],
+            "domain": r[2],
+            "divergence_count": r[3],
+            "avg_confidence": round(float(r[4]), 3) if r[4] else None,
+            "entity_name": r[5],
+            "external_id": r[6],
+        }
+        for r in top_entities_rows.fetchall()
+    ]
+
+    # -- Key divergences: highest-confidence, most impactful --
+    key_rows = await db.execute(
+        text(
+            """
+            SELECT rr.result_id, rr.divergence_type, rr.target_id, rr.target_type,
+                   rr.domain, rr.description, rr.confidence,
+                   rr.attribute_name, rr.cmdb_value, rr.observed_value,
+                   ne.name AS entity_name, ne.external_id
+            FROM reconciliation_results rr
+            LEFT JOIN network_entities ne
+              ON CAST(ne.id AS TEXT) = rr.target_id AND ne.tenant_id = :tid
+            WHERE rr.tenant_id = :tid AND rr.confidence >= 0.8
+            ORDER BY rr.confidence DESC, rr.divergence_type
+            LIMIT 50
+            """
+        ),
+        {"tid": tenant_id},
+    )
+    key_divergences = [dict(r) for r in key_rows.mappings().fetchall()]
+
+    return {
+        "tenant_id": tenant_id,
+        "type_domain": type_domain,
+        "type_target": type_target,
+        "confidence_buckets": confidence_buckets,
+        "top_entities": top_entities,
+        "key_divergences": key_divergences,
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /divergence/records
 # ---------------------------------------------------------------------------
 
@@ -171,31 +313,49 @@ async def get_divergence_records(
     divergence_type: Annotated[Optional[str], Query()] = None,
     domain: Annotated[Optional[str], Query()] = None,
     target_type: Annotated[Optional[str], Query()] = None,
+    confidence_min: Annotated[Optional[float], Query(ge=0, le=1)] = None,
+    sort_by: Annotated[Optional[str], Query()] = None,
+    sort_dir: Annotated[Optional[str], Query()] = "desc",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> dict:
     """
-    Paginated list of individual divergences from the latest reconciliation run.
-    Filter by divergence_type, domain, and/or target_type.
+    Paginated list of individual divergences with entity name resolution.
+    JOINs network_entities to resolve target_id UUIDs into human-readable
+    names and external_ids for entity traceability.
     """
     offset = (page - 1) * page_size
-    filters = ["tenant_id = :tid"]
+    filters = ["rr.tenant_id = :tid"]
     params: dict = {"tid": tenant_id, "limit": page_size, "offset": offset}
 
     if divergence_type:
-        filters.append("divergence_type = :div_type")
+        filters.append("rr.divergence_type = :div_type")
         params["div_type"] = divergence_type
     if domain:
-        filters.append("domain = :domain")
+        filters.append("rr.domain = :domain")
         params["domain"] = domain
     if target_type:
-        filters.append("target_type = :target_type")
+        filters.append("rr.target_type = :target_type")
         params["target_type"] = target_type
+    if confidence_min is not None:
+        filters.append("rr.confidence >= :conf_min")
+        params["conf_min"] = confidence_min
 
     where = " AND ".join(filters)
 
+    # Sortable columns whitelist
+    sort_columns = {
+        "divergence_type": "rr.divergence_type",
+        "domain": "rr.domain",
+        "target_type": "rr.target_type",
+        "confidence": "rr.confidence",
+        "entity_name": "ne.name",
+    }
+    order_col = sort_columns.get(sort_by or "", "rr.confidence")
+    order_dir = "ASC" if sort_dir == "asc" else "DESC"
+
     count_row = await db.execute(
-        text(f"SELECT COUNT(*) FROM reconciliation_results WHERE {where}"),  # nosec
+        text(f"SELECT COUNT(*) FROM reconciliation_results rr WHERE {where}"),  # nosec
         params,
     )
     total = count_row.scalar() or 0
@@ -203,13 +363,16 @@ async def get_divergence_records(
     rows_result = await db.execute(
         text(
             f"""
-            SELECT result_id, divergence_type, entity_or_relationship,
-                   target_id, target_type, domain, description,
-                   attribute_name, cmdb_value, observed_value,
-                   confidence, created_at
-            FROM reconciliation_results
+            SELECT rr.result_id, rr.divergence_type, rr.entity_or_relationship,
+                   rr.target_id, rr.target_type, rr.domain, rr.description,
+                   rr.attribute_name, rr.cmdb_value, rr.observed_value,
+                   rr.confidence, rr.created_at,
+                   ne.name AS entity_name, ne.external_id AS entity_external_id
+            FROM reconciliation_results rr
+            LEFT JOIN network_entities ne
+              ON CAST(ne.id AS TEXT) = rr.target_id AND ne.tenant_id = :tid
             WHERE {where}
-            ORDER BY divergence_type, domain, target_type
+            ORDER BY {order_col} {order_dir}
             LIMIT :limit OFFSET :offset
             """  # nosec
         ),
@@ -308,6 +471,300 @@ async def get_divergence_report(
             f"no change management oversight."
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /divergence/evidence/{result_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get("/divergence/evidence/{result_id}")
+async def get_divergence_evidence(
+    result_id: str,
+    tenant_id: Annotated[str, Query()],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    metrics_db: Annotated[AsyncSession, Depends(get_metrics_db)],
+) -> dict:
+    """
+    Fetch contextual telemetry + CMDB evidence for a specific divergence record.
+
+    Returns structured evidence based on divergence type:
+    - dark_attribute: KPI sample stats + CMDB entity details
+    - dark_edge: neighbour relation stats + CMDB absence confirmation
+    - phantom_node: signal sources checked, all zero
+    - dark_node: signal source summary from KPI metadata
+    """
+    # Fetch the divergence record
+    row = await db.execute(
+        text(
+            """
+            SELECT rr.*, ne.name AS entity_name, ne.external_id AS entity_external_id,
+                   ne.attributes AS entity_attributes, ne.entity_type AS cmdb_entity_type
+            FROM reconciliation_results rr
+            LEFT JOIN network_entities ne
+              ON CAST(ne.id AS TEXT) = rr.target_id AND ne.tenant_id = :tid
+            WHERE rr.result_id = :rid AND rr.tenant_id = :tid
+            """
+        ),
+        {"rid": result_id, "tid": tenant_id},
+    )
+    record = row.mappings().fetchone()
+    if not record:
+        raise HTTPException(status_code=404, detail="Divergence record not found")
+
+    evidence: dict = {
+        "result_id": result_id,
+        "divergence_type": record["divergence_type"],
+        "target_id": record["target_id"],
+        "description": record["description"],
+    }
+
+    div_type = record["divergence_type"]
+
+    if div_type == "dark_attribute":
+        # Fetch KPI telemetry evidence for this entity + attribute
+        attr_name = record["attribute_name"]
+        # Safety: only allow known crosscheck attributes in SQL interpolation
+        SAFE_ATTRS = {"vendor", "band", "rat_type"}
+        if attr_name not in SAFE_ATTRS:
+            raise HTTPException(status_code=400, detail=f"Unsupported attribute: {attr_name}")
+        target_id = record["target_id"]
+
+        # Get sample distribution from metrics DB
+        kpi_stats = await metrics_db.execute(
+            text(
+                f"""
+                SELECT
+                    metadata->>'{attr_name}' AS observed_value,
+                    COUNT(*) AS sample_count,
+                    MIN(time) AS first_seen,
+                    MAX(time) AS last_seen
+                FROM kpi_metrics
+                WHERE tenant_id = :tid
+                  AND entity_id = :eid
+                  AND metadata->>'{attr_name}' IS NOT NULL
+                GROUP BY metadata->>'{attr_name}'
+                ORDER BY sample_count DESC
+                LIMIT 10
+                """  # nosec — attr_name from DB record, not user input
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        telemetry_samples = [
+            {
+                "value": r[0],
+                "sample_count": r[1],
+                "first_seen": str(r[2]) if r[2] else None,
+                "last_seen": str(r[3]) if r[3] else None,
+            }
+            for r in kpi_stats.fetchall()
+        ]
+
+        # Also try resolving via external_id
+        if not telemetry_samples and record["entity_external_id"]:
+            kpi_stats2 = await metrics_db.execute(
+                text(
+                    f"""
+                    SELECT
+                        metadata->>'{attr_name}' AS observed_value,
+                        COUNT(*) AS sample_count,
+                        MIN(time) AS first_seen,
+                        MAX(time) AS last_seen
+                    FROM kpi_metrics
+                    WHERE tenant_id = :tid
+                      AND entity_id = :eid
+                      AND metadata->>'{attr_name}' IS NOT NULL
+                    GROUP BY metadata->>'{attr_name}'
+                    ORDER BY sample_count DESC
+                    LIMIT 10
+                    """  # nosec
+                ),
+                {"tid": tenant_id, "eid": record["entity_external_id"]},
+            )
+            telemetry_samples = [
+                {
+                    "value": r[0],
+                    "sample_count": r[1],
+                    "first_seen": str(r[2]) if r[2] else None,
+                    "last_seen": str(r[3]) if r[3] else None,
+                }
+                for r in kpi_stats2.fetchall()
+            ]
+
+        # Build CMDB panel
+        cmdb_attrs = record["entity_attributes"] or {}
+        if isinstance(cmdb_attrs, str):
+            import json as _json
+            cmdb_attrs = _json.loads(cmdb_attrs)
+
+        evidence["cmdb"] = {
+            "entity_name": record["entity_name"],
+            "external_id": record["entity_external_id"],
+            "entity_type": record["cmdb_entity_type"],
+            "configured_value": record["cmdb_value"],
+            "attribute": attr_name,
+            "vendor": cmdb_attrs.get("vendor"),
+            "band": cmdb_attrs.get("band"),
+            "rat_type": cmdb_attrs.get("rat_type"),
+            "domain": cmdb_attrs.get("domain"),
+        }
+        evidence["telemetry"] = {
+            "observed_value": record["observed_value"],
+            "samples": telemetry_samples,
+            "total_samples": sum(s["sample_count"] for s in telemetry_samples),
+        }
+
+    elif div_type == "dark_edge":
+        # Fetch neighbour relation details
+        target_id = record["target_id"]
+        nr_row = await db.execute(
+            text(
+                """
+                SELECT nr.*,
+                       ne_from.name AS from_name, ne_from.external_id AS from_ext_id,
+                       ne_to.name AS to_name, ne_to.external_id AS to_ext_id
+                FROM neighbour_relations nr
+                LEFT JOIN network_entities ne_from
+                  ON CAST(ne_from.id AS TEXT) = nr.from_cell_id AND ne_from.tenant_id = :tid
+                LEFT JOIN network_entities ne_to
+                  ON CAST(ne_to.id AS TEXT) = nr.to_cell_id AND ne_to.tenant_id = :tid
+                WHERE nr.relation_id = :rid AND nr.tenant_id = :tid
+                """
+            ),
+            {"rid": target_id, "tid": tenant_id},
+        )
+        nr = nr_row.mappings().fetchone()
+        if nr:
+            evidence["neighbour_relation"] = {
+                "from_cell": nr.get("from_name") or nr.get("from_ext_id") or nr["from_cell_id"],
+                "from_cell_id": nr["from_cell_id"],
+                "to_cell": nr.get("to_name") or nr.get("to_ext_id") or nr["to_cell_id"],
+                "to_cell_id": nr["to_cell_id"],
+                "neighbour_type": nr.get("neighbour_type"),
+                "handover_attempts": nr.get("handover_attempts"),
+                "handover_success_rate": nr.get("handover_success_rate"),
+            }
+
+        # Confirm CMDB absence
+        cmdb_edge = await db.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM topology_relationships
+                WHERE tenant_id = :tid
+                  AND (
+                    (from_entity_id = :from_id AND to_entity_id = :to_id)
+                    OR
+                    (from_entity_id = :to_id AND to_entity_id = :from_id)
+                  )
+                """
+            ),
+            {
+                "tid": tenant_id,
+                "from_id": nr["from_cell_id"] if nr else "",
+                "to_id": nr["to_cell_id"] if nr else "",
+            },
+        )
+        evidence["cmdb_edge_exists"] = (cmdb_edge.scalar() or 0) > 0
+
+    elif div_type == "phantom_node":
+        target_id = record["target_id"]
+        # Check each signal source
+        kpi_count = await metrics_db.execute(
+            text(
+                "SELECT COUNT(*) FROM kpi_metrics WHERE tenant_id = :tid AND entity_id = :eid"
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        alarm_count = await db.execute(
+            text(
+                "SELECT COUNT(*) FROM telco_events_alarms WHERE tenant_id = :tid AND entity_id = :eid"
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        nr_count = await db.execute(
+            text(
+                """
+                SELECT COUNT(*) FROM neighbour_relations
+                WHERE tenant_id = :tid
+                  AND (from_cell_id = :eid OR to_cell_id = :eid)
+                """
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+
+        evidence["signal_check"] = {
+            "kpi_samples": kpi_count.scalar() or 0,
+            "alarm_events": alarm_count.scalar() or 0,
+            "neighbour_relations": nr_count.scalar() or 0,
+            "detection_method": "signal_absence",
+            "entity_name_used": False,
+        }
+        evidence["cmdb"] = {
+            "entity_name": record["entity_name"],
+            "external_id": record["entity_external_id"],
+            "entity_type": record["cmdb_entity_type"],
+        }
+
+    elif div_type == "dark_node":
+        target_id = record["target_id"]
+        # Get signal summary from KPI metadata
+        kpi_summary = await metrics_db.execute(
+            text(
+                """
+                SELECT
+                    metadata->>'domain' AS domain,
+                    metadata->>'vendor' AS vendor,
+                    metadata->>'rat_type' AS rat_type,
+                    COUNT(*) AS sample_count,
+                    MIN(time) AS first_seen,
+                    MAX(time) AS last_seen
+                FROM kpi_metrics
+                WHERE tenant_id = :tid AND entity_id = :eid
+                GROUP BY metadata->>'domain', metadata->>'vendor', metadata->>'rat_type'
+                ORDER BY sample_count DESC
+                LIMIT 5
+                """
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        signal_profiles = [
+            {
+                "domain": r[0],
+                "vendor": r[1],
+                "rat_type": r[2],
+                "sample_count": r[3],
+                "first_seen": str(r[4]) if r[4] else None,
+                "last_seen": str(r[5]) if r[5] else None,
+            }
+            for r in kpi_summary.fetchall()
+        ]
+
+        # Also check alarms
+        alarm_summary = await db.execute(
+            text(
+                """
+                SELECT domain, severity, COUNT(*) AS cnt
+                FROM telco_events_alarms
+                WHERE tenant_id = :tid AND entity_id = :eid
+                GROUP BY domain, severity
+                ORDER BY cnt DESC
+                LIMIT 5
+                """
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        alarm_profiles = [
+            {"domain": r[0], "severity": r[1], "count": r[2]}
+            for r in alarm_summary.fetchall()
+        ]
+
+        evidence["signal_summary"] = {
+            "kpi_profiles": signal_profiles,
+            "alarm_profiles": alarm_profiles,
+            "signal_id": target_id,
+        }
+
+    return evidence
 
 
 # ---------------------------------------------------------------------------

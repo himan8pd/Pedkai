@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   AlertTriangle,
   Eye,
@@ -11,9 +11,21 @@ import {
   Play,
   RefreshCw,
   Shield,
-  TrendingUp,
   Activity,
   FlaskConical,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
+  ExternalLink,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  BarChart3,
+  Target,
+  TrendingUp,
+  X,
+  ChevronLeft,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -23,43 +35,62 @@ const API_BASE_URL =
 // ── Type colours ────────────────────────────────────────────────────────────
 const TYPE_META: Record<
   string,
-  { label: string; colour: string; colourBg: string; icon: React.ElementType }
+  {
+    label: string;
+    colour: string;
+    colourBg: string;
+    hex: string;
+    icon: React.ElementType;
+    desc: string;
+  }
 > = {
   dark_node: {
     label: "Dark Nodes",
     colour: "text-red-400",
     colourBg: "bg-red-500/15 border-red-500/30",
+    hex: "#f87171",
     icon: Eye,
+    desc: "Entities seen in signals but absent from CMDB",
   },
   phantom_node: {
     label: "Phantom Nodes",
     colour: "text-amber-400",
     colourBg: "bg-amber-500/15 border-amber-500/30",
+    hex: "#fbbf24",
     icon: EyeOff,
+    desc: "CMDB entities with zero operational footprint",
   },
   identity_mutation: {
     label: "Identity Mutations",
     colour: "text-violet-400",
     colourBg: "bg-violet-500/15 border-violet-500/30",
+    hex: "#a78bfa",
     icon: Shield,
+    desc: "Hardware fingerprint swap or identity collision",
   },
   dark_attribute: {
     label: "Dark Attributes",
     colour: "text-blue-400",
     colourBg: "bg-blue-500/15 border-blue-500/30",
+    hex: "#60a5fa",
     icon: Layers,
+    desc: "KPI metadata contradicts CMDB-declared attributes",
   },
   dark_edge: {
     label: "Dark Edges",
     colour: "text-cyan-400",
     colourBg: "bg-cyan-500/15 border-cyan-500/30",
+    hex: "#22d3ee",
     icon: Link2,
+    desc: "Neighbour relations not in CMDB topology",
   },
   phantom_edge: {
     label: "Phantom Edges",
     colour: "text-orange-400",
     colourBg: "bg-orange-500/15 border-orange-500/30",
+    hex: "#fb923c",
     icon: Link2Off,
+    desc: "CMDB topology edges where neither endpoint shows activity",
   },
 };
 
@@ -82,7 +113,20 @@ const DOMAIN_LABELS: Record<string, string> = {
   cross_domain: "Cross-Domain",
 };
 
-// ── API helpers ───────────────────────────────────────────────────────────
+const DOMAIN_COLOURS: Record<string, string> = {
+  mobile_ran: "#22d3ee",
+  fixed_access: "#a78bfa",
+  transport: "#60a5fa",
+  logical_service: "#34d399",
+  core: "#f87171",
+  power_environment: "#fbbf24",
+  cross_domain: "#fb923c",
+};
+
+// ── Views ───────────────────────────────────────────────────────────────────
+type ViewMode = "summary" | "explore" | "table";
+
+// ── API helpers ─────────────────────────────────────────────────────────────
 async function apiFetch(path: string, token: string, opts?: RequestInit) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...opts,
@@ -96,41 +140,146 @@ async function apiFetch(path: string, token: string, opts?: RequestInit) {
   return res.json();
 }
 
-// ── Stat card ─────────────────────────────────────────────────────────────
-function StatCard({
-  label,
-  value,
-  sub,
-  colour,
-  colourBg,
-  icon: Icon,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  colour: string;
-  colourBg: string;
-  icon: React.ElementType;
-}) {
+// ── Copy button ─────────────────────────────────────────────────────────────
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
   return (
-    <div
-      className={`rounded-xl border p-4 flex flex-col gap-1 ${colourBg}`}
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className="inline-flex items-center text-white/40 hover:text-white/80 transition-colors"
+      title="Copy to clipboard"
     >
-      <div className="flex items-center gap-2">
-        <Icon className={`w-4 h-4 ${colour}`} />
-        <span className="text-xs text-white/60 uppercase tracking-wider font-semibold">
-          {label}
-        </span>
-      </div>
-      <span className={`text-2xl font-bold ${colour}`}>
-        {typeof value === "number" ? value.toLocaleString() : value}
-      </span>
-      {sub && <span className="text-xs text-white/60">{sub}</span>}
+      {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+    </button>
+  );
+}
+
+// ── Horizontal bar (reusable) ───────────────────────────────────────────────
+function HBar({
+  items,
+  onItemClick,
+}: {
+  items: { label: string; value: number; colour: string; key: string }[];
+  onItemClick?: (key: string) => void;
+}) {
+  const total = items.reduce((s, i) => s + i.value, 0) || 1;
+  return (
+    <div className="space-y-1.5">
+      {items.map((item) => {
+        const pct = Math.round((item.value / total) * 100);
+        return (
+          <button
+            key={item.key}
+            onClick={() => onItemClick?.(item.key)}
+            className="w-full flex items-center gap-3 text-sm group hover:bg-white/5 rounded-lg px-2 py-1 transition-colors"
+          >
+            <span className="w-36 text-right text-white/80 text-xs shrink-0 truncate">
+              {item.label}
+            </span>
+            <div className="flex-1 bg-[#06203b] rounded-full h-2.5 overflow-hidden">
+              <div
+                className="h-2.5 rounded-full transition-all group-hover:brightness-125"
+                style={{ width: `${Math.max(pct, 1)}%`, backgroundColor: item.colour }}
+              />
+            </div>
+            <span className="w-24 text-white text-xs text-right tabular-nums">
+              {item.value.toLocaleString()}{" "}
+              <span className="text-white/50">({pct}%)</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-// ── Score badge ───────────────────────────────────────────────────────────
+// ── Donut chart (pure CSS) ──────────────────────────────────────────────────
+function DonutChart({
+  segments,
+  total,
+  label,
+  onClick,
+}: {
+  segments: { key: string; value: number; colour: string; label: string }[];
+  total: number;
+  label: string;
+  onClick?: (key: string) => void;
+}) {
+  const size = 160;
+  const stroke = 24;
+  const radius = (size - stroke) / 2;
+  const circ = 2 * Math.PI * radius;
+  let offset = 0;
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <svg width={size} height={size} className="transform -rotate-90">
+        {segments
+          .filter((s) => s.value > 0)
+          .map((seg) => {
+            const pct = seg.value / (total || 1);
+            const dash = pct * circ;
+            const el = (
+              <circle
+                key={seg.key}
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                fill="none"
+                stroke={seg.colour}
+                strokeWidth={stroke}
+                strokeDasharray={`${dash} ${circ - dash}`}
+                strokeDashoffset={-offset}
+                className="cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => onClick?.(seg.key)}
+              />
+            );
+            offset += dash;
+            return el;
+          })}
+        {total === 0 && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#1e3a5f"
+            strokeWidth={stroke}
+          />
+        )}
+      </svg>
+      <div className="text-center -mt-[104px] mb-[60px]">
+        <div className="text-xl font-bold text-white">{total.toLocaleString()}</div>
+        <div className="text-[10px] text-white/50 uppercase tracking-wider">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Confidence badge ────────────────────────────────────────────────────────
+function ConfBadge({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
+  const cls =
+    pct >= 90
+      ? "text-red-400 bg-red-500/15"
+      : pct >= 70
+        ? "text-amber-400 bg-amber-500/15"
+        : pct >= 50
+          ? "text-blue-400 bg-blue-500/15"
+          : "text-white/60 bg-white/5";
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${cls}`}>
+      {pct}%
+    </span>
+  );
+}
+
+// ── Score badge (evaluation) ────────────────────────────────────────────────
 function ScoreBadge({ label, value }: { label: string; value: number | null }) {
   if (value === null || value === undefined) return null;
   const pct = Math.round(value * 100);
@@ -141,43 +290,116 @@ function ScoreBadge({ label, value }: { label: string; value: number | null }) {
         ? "text-amber-400 bg-amber-500/15 border-amber-500/30"
         : "text-red-400 bg-red-500/15 border-red-500/30";
   return (
-    <div
-      className={`flex flex-col items-center rounded-xl border px-5 py-3 ${colour}`}
-    >
+    <div className={`flex flex-col items-center rounded-xl border px-5 py-3 ${colour}`}>
       <span className="text-2xl font-bold">{pct}%</span>
       <span className="text-xs opacity-75 mt-0.5">{label}</span>
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────
+// ── Entity link ─────────────────────────────────────────────────────────────
+function EntityLink({
+  targetId,
+  entityName,
+  externalId,
+}: {
+  targetId: string;
+  entityName?: string | null;
+  externalId?: string | null;
+}) {
+  const displayName = entityName || externalId || targetId;
+  const href = `/topology?entity_id=${encodeURIComponent(targetId)}`;
+  const openTopology = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.open(href, "pedkai_workspace");
+  };
+  return (
+    <span className="inline-flex items-center gap-1.5 max-w-[280px]">
+      <a
+        href={href}
+        onClick={openTopology}
+        className="text-cyan-400 hover:text-cyan-300 hover:underline underline-offset-2 transition-colors truncate text-xs font-medium"
+        title={`Open in topology: ${entityName || targetId}`}
+      >
+        {displayName}
+      </a>
+      <CopyButton text={entityName || externalId || targetId} />
+      <a
+        href={href}
+        onClick={openTopology}
+        className="text-white/30 hover:text-cyan-400 transition-colors shrink-0"
+        title="Open in topology"
+      >
+        <ExternalLink className="w-3 h-3" />
+      </a>
+    </span>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ═════════════════════════════════════════════════════════════════════════════
 export default function DivergencePage() {
   const { tenantId, token } = useAuth();
 
+  // Data state
   const [summary, setSummary] = useState<any>(null);
+  const [aggregations, setAggregations] = useState<any>(null);
   const [score, setScore] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
+
+  // UI state
+  const [view, setView] = useState<ViewMode>("summary");
   const [page, setPage] = useState(1);
   const [filterType, setFilterType] = useState<string>("");
   const [filterDomain, setFilterDomain] = useState<string>("");
+  const [filterTargetType, setFilterTargetType] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("confidence");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showEval, setShowEval] = useState(false);
 
+  // Evidence panel state
+  const [evidence, setEvidence] = useState<Record<string, any>>({});
+  const [loadingEvidence, setLoadingEvidence] = useState<string | null>(null);
+
+  // Loading state
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const PAGE_SIZE = 25;
+  const PAGE_SIZE = 50;
 
-  // ── Fetch summary ──────────────────────────────────────────────────
+  // ── Fetch evidence for a specific divergence record ─────────────────────
+  const fetchEvidence = useCallback(
+    async (resultId: string) => {
+      if (!tenantId || !token || evidence[resultId]) return;
+      setLoadingEvidence(resultId);
+      try {
+        const data = await apiFetch(
+          `/api/v1/reports/divergence/evidence/${encodeURIComponent(resultId)}?tenant_id=${encodeURIComponent(tenantId)}`,
+          token,
+        );
+        setEvidence((prev) => ({ ...prev, [resultId]: data }));
+      } catch (e) {
+        console.error("Evidence fetch failed:", e);
+      } finally {
+        setLoadingEvidence(null);
+      }
+    },
+    [tenantId, token, evidence],
+  );
+
+  // ── Fetch summary ──────────────────────────────────────────────────────
   const fetchSummary = useCallback(async () => {
     if (!tenantId || !token) return;
     setError(null);
     try {
       const s = await apiFetch(
         `/api/v1/reports/divergence/summary?tenant_id=${encodeURIComponent(tenantId)}`,
-        token
+        token,
       );
       setSummary(s);
     } catch (e: any) {
@@ -187,13 +409,27 @@ export default function DivergencePage() {
     }
   }, [tenantId, token]);
 
-  // ── Fetch evaluation score (separate, on-demand) ───────────────────
+  // ── Fetch aggregations ─────────────────────────────────────────────────
+  const fetchAggregations = useCallback(async () => {
+    if (!tenantId || !token) return;
+    try {
+      const a = await apiFetch(
+        `/api/v1/reports/divergence/aggregations?tenant_id=${encodeURIComponent(tenantId)}`,
+        token,
+      );
+      setAggregations(a);
+    } catch {
+      setAggregations(null);
+    }
+  }, [tenantId, token]);
+
+  // ── Fetch evaluation score ─────────────────────────────────────────────
   const fetchScore = useCallback(async () => {
     if (!tenantId || !token) return;
     try {
       const sc = await apiFetch(
         `/api/v1/reports/divergence/score/${encodeURIComponent(tenantId)}`,
-        token
+        token,
       );
       setScore(sc);
     } catch {
@@ -201,12 +437,14 @@ export default function DivergencePage() {
     }
   }, [tenantId, token]);
 
-  // ── Fetch records page ─────────────────────────────────────────────
+  // ── Fetch records page ─────────────────────────────────────────────────
   const fetchRecords = useCallback(async () => {
     if (!tenantId || !token) return;
     let path = `/api/v1/reports/divergence/records?tenant_id=${encodeURIComponent(tenantId)}&page=${page}&page_size=${PAGE_SIZE}`;
     if (filterType) path += `&divergence_type=${encodeURIComponent(filterType)}`;
     if (filterDomain) path += `&domain=${encodeURIComponent(filterDomain)}`;
+    if (filterTargetType) path += `&target_type=${encodeURIComponent(filterTargetType)}`;
+    path += `&sort_by=${sortBy}&sort_dir=${sortDir}`;
     try {
       const data = await apiFetch(path, token);
       setRecords(data.records ?? []);
@@ -214,17 +452,23 @@ export default function DivergencePage() {
     } catch {
       setRecords([]);
     }
-  }, [tenantId, token, page, filterType, filterDomain]);
+  }, [tenantId, token, page, filterType, filterDomain, filterTargetType, sortBy, sortDir]);
 
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
 
   useEffect(() => {
-    if (summary) fetchRecords();
-  }, [summary, fetchRecords]);
+    if (summary) {
+      fetchAggregations();
+    }
+  }, [summary, fetchAggregations]);
 
-  // ── Run reconciliation ────────────────────────────────────────────
+  useEffect(() => {
+    if (summary && view === "table") fetchRecords();
+  }, [summary, view, fetchRecords]);
+
+  // ── Run reconciliation ─────────────────────────────────────────────────
   async function handleRun() {
     if (!tenantId || !token) return;
     setRunning(true);
@@ -238,8 +482,11 @@ export default function DivergencePage() {
       setPage(1);
       setFilterType("");
       setFilterDomain("");
+      setFilterTargetType("");
       setScore(null);
       setShowEval(false);
+      setAggregations(null);
+      setView("summary");
       await fetchSummary();
     } catch (e: any) {
       setRunError(e.message);
@@ -248,33 +495,99 @@ export default function DivergencePage() {
     }
   }
 
-  // ── Domains ─────────────────────────────────────────────────────────
-  const domains = summary
-    ? Object.keys(summary.summary?.by_domain ?? {})
-    : [];
+  // ── Drill-down handlers ────────────────────────────────────────────────
+  function drillToType(type: string) {
+    setFilterType(type);
+    setFilterDomain("");
+    setFilterTargetType("");
+    setPage(1);
+    setView("table");
+  }
 
+  function drillToDomain(domain: string) {
+    setFilterDomain(domain);
+    setPage(1);
+    setView("table");
+  }
+
+  function drillToTargetType(targetType: string) {
+    setFilterTargetType(targetType);
+    setPage(1);
+    setView("table");
+  }
+
+  // ── Sort handler ───────────────────────────────────────────────────────
+  function handleSort(col: string) {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir("desc");
+    }
+    setPage(1);
+  }
+
+  function SortIcon({ col }: { col: string }) {
+    if (sortBy !== col) return <ArrowUpDown className="w-3 h-3 text-white/30" />;
+    return sortDir === "asc" ? (
+      <ArrowUp className="w-3 h-3 text-cyan-400" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-cyan-400" />
+    );
+  }
+
+  // ── Derived data ───────────────────────────────────────────────────────
+  const domains = summary ? Object.keys(summary.summary?.by_domain ?? {}) : [];
   const inv = summary?.operational_inventory;
+  const byType = summary?.summary?.by_type ?? {};
+  const totalDiv = summary?.summary?.total_divergences ?? 0;
 
-  // ── Render ────────────────────────────────────────────────────────────
+  // Aggregate target types for filter dropdown
+  const targetTypes = useMemo(() => {
+    if (!aggregations?.type_target) return [];
+    const types = new Map<string, number>();
+    for (const row of aggregations.type_target) {
+      types.set(row.target_type, (types.get(row.target_type) || 0) + row.count);
+    }
+    return Array.from(types.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 30)
+      .map(([t, c]) => ({ type: t, count: c }));
+  }, [aggregations]);
+
+  // Top entity types per divergence type (for explore view)
+  const typeTargetMap = useMemo(() => {
+    if (!aggregations?.type_target) return {};
+    const map: Record<string, { target_type: string; count: number }[]> = {};
+    for (const row of aggregations.type_target) {
+      if (!map[row.type]) map[row.type] = [];
+      map[row.type].push({ target_type: row.target_type, count: row.count });
+    }
+    return map;
+  }, [aggregations]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════════
   return (
     <div className="min-h-screen text-white">
-      <div className="max-w-screen-2xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* ── Header ──────────────────────────────────────────────────── */}
+        <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
               Dark Graph Reconciliation
             </h1>
             <p className="mt-1 text-white/80 text-sm">
-              CMDB declarations vs operational signals — detecting divergences
+              CMDB declarations vs operational signals -- detecting divergences
               from KPI telemetry, alarms, and neighbour relations.
             </p>
           </div>
           <button
             onClick={handleRun}
             disabled={running}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 transition-colors text-sm font-bold text-gray-950"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 transition-colors text-sm font-bold text-gray-950 shrink-0"
           >
             {running ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -291,14 +604,14 @@ export default function DivergencePage() {
           </div>
         )}
 
-        {/* No run yet */}
+        {/* ── Empty state ─────────────────────────────────────────────── */}
         {!loading && error && (
           <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
             <AlertTriangle className="w-12 h-12 text-amber-400" />
             <p className="text-white text-lg">No reconciliation run found.</p>
             <p className="text-white/60 text-sm">
-              Click <strong className="text-white">Run Reconciliation</strong> to analyse
-              operational signals against the CMDB and discover divergences.
+              Click <strong className="text-white">Run Reconciliation</strong> to
+              analyse operational signals against the CMDB.
             </p>
           </div>
         )}
@@ -311,279 +624,859 @@ export default function DivergencePage() {
 
         {summary && !error && (
           <>
-            {/* Run metadata bar */}
-            <div className="flex items-center gap-4 text-xs text-white/70">
-              <span>
-                Run:{" "}
-                <span className="font-mono text-white">
-                  {summary.run_id?.slice(0, 8)}
-                </span>
-              </span>
-              {summary.run_at && (
+            {/* ── Run metadata + view tabs ─────────────────────────────── */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-4 text-xs text-white/70">
                 <span>
-                  Completed:{" "}
-                  {new Date(summary.run_at).toLocaleString("en-GB")}
+                  Run:{" "}
+                  <span className="font-mono text-white">
+                    {summary.run_id?.slice(0, 8)}
+                  </span>
                 </span>
-              )}
-              {summary.duration_seconds != null && (
-                <span>Duration: {summary.duration_seconds}s</span>
-              )}
+                {summary.run_at && (
+                  <span>
+                    {new Date(summary.run_at).toLocaleString("en-GB")}
+                  </span>
+                )}
+                {summary.duration_seconds != null && (
+                  <span>{Math.round(summary.duration_seconds)}s</span>
+                )}
+              </div>
+              <div className="flex gap-1 bg-[#06203b] rounded-lg p-0.5">
+                {[
+                  { key: "summary" as ViewMode, label: "Summary", icon: BarChart3 },
+                  { key: "explore" as ViewMode, label: "Explore", icon: Target },
+                  { key: "table" as ViewMode, label: "Records", icon: Layers },
+                ].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setView(key)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      view === key
+                        ? "bg-cyan-400/15 text-cyan-400"
+                        : "text-white/60 hover:text-white/80 hover:bg-white/5"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Type stat cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-              {TYPE_ORDER.map((t) => {
-                const meta = TYPE_META[t];
-                const count = summary.summary?.by_type?.[t] ?? 0;
-                return (
-                  <StatCard
-                    key={t}
-                    label={meta.label}
-                    value={count}
-                    colour={meta.colour}
-                    colourBg={meta.colourBg}
-                    icon={meta.icon}
-                  />
-                );
-              })}
-            </div>
+            {/* ════════════════════════════════════════════════════════════
+                SUMMARY VIEW (Executive Dashboard)
+                ════════════════════════════════════════════════════════════ */}
+            {view === "summary" && (
+              <div className="space-y-6">
 
-            {/* Operational inventory */}
-            {inv && (
-              <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-4">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-blue-400" />
-                  <h2 className="font-semibold text-white">Operational Inventory</h2>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                  {[
-                    [
-                      "CMDB entities",
-                      inv.cmdb_entity_count?.toLocaleString(),
-                      "Declared in CMDB",
-                    ],
-                    [
-                      "Observed entities",
-                      inv.observed_entity_count?.toLocaleString(),
-                      "Seen in signals",
-                    ],
-                    [
-                      "CMDB edges",
-                      inv.cmdb_edge_count?.toLocaleString(),
-                      "Declared in CMDB",
-                    ],
-                    [
-                      "Observed edges",
-                      inv.observed_edge_count?.toLocaleString(),
-                      "Neighbour relations",
-                    ],
-                  ].map(([lbl, val, sub]) => (
-                    <div key={lbl} className="bg-white/5 rounded-lg p-3">
-                      <div className="text-white/60 text-xs">{lbl}</div>
-                      <div className="text-white font-bold mt-0.5">{val}</div>
-                      <div className="text-white/60 text-xs">{sub}</div>
+                {/* Hero number + type distribution donut */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                  {/* Left: total + donut */}
+                  <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-6 flex flex-col items-center justify-center gap-4">
+                    <DonutChart
+                      segments={TYPE_ORDER.filter((t) => (byType[t] ?? 0) > 0).map((t) => ({
+                        key: t,
+                        value: byType[t] ?? 0,
+                        colour: TYPE_META[t].hex,
+                        label: TYPE_META[t].label,
+                      }))}
+                      total={totalDiv}
+                      label="Total Divergences"
+                      onClick={drillToType}
+                    />
+                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+                      {TYPE_ORDER.filter((t) => (byType[t] ?? 0) > 0).map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => drillToType(t)}
+                          className="flex items-center gap-1.5 text-xs hover:brightness-125 transition-all"
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{ backgroundColor: TYPE_META[t].hex }}
+                          />
+                          <span className="text-white/80">{TYPE_META[t].label}</span>
+                          <span className="text-white/50">
+                            {(byType[t] ?? 0).toLocaleString()}
+                          </span>
+                        </button>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Center: type stat cards */}
+                  <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {TYPE_ORDER.map((t) => {
+                      const meta = TYPE_META[t];
+                      const count = byType[t] ?? 0;
+                      const pct = totalDiv ? Math.round((count / totalDiv) * 100) : 0;
+                      const Icon = meta.icon;
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => drillToType(t)}
+                          className={`rounded-xl border p-4 flex flex-col gap-1 text-left transition-all hover:brightness-110 hover:scale-[1.02] ${meta.colourBg}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className={`w-4 h-4 ${meta.colour}`} />
+                            <span className="text-xs text-white/60 uppercase tracking-wider font-semibold">
+                              {meta.label}
+                            </span>
+                          </div>
+                          <span className={`text-2xl font-bold ${meta.colour}`}>
+                            {count.toLocaleString()}
+                          </span>
+                          <span className="text-xs text-white/50">
+                            {pct}% of total -- {meta.desc}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* Operational inventory */}
+                {inv && (
+                  <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-blue-400" />
+                      <h2 className="font-semibold text-white">Operational Inventory</h2>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      {([
+                        ["CMDB entities", inv.cmdb_entity_count, "Declared in CMDB"],
+                        ["Observed entities", inv.observed_entity_count, "Seen in signals"],
+                        ["CMDB edges", inv.cmdb_edge_count, "Declared topology"],
+                        ["Observed edges", inv.observed_edge_count, "Neighbour relations"],
+                      ] as [string, number, string][]).map(([lbl, val, sub]) => (
+                        <div key={lbl} className="bg-white/5 rounded-lg p-3">
+                          <div className="text-white/60 text-xs">{lbl}</div>
+                          <div className="text-white font-bold mt-0.5">{val?.toLocaleString()}</div>
+                          <div className="text-white/60 text-xs">{sub}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Domain breakdown */}
+                {domains.length > 0 && (
+                  <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-3">
+                    <h2 className="font-semibold text-white text-sm">Divergences by Domain</h2>
+                    <HBar
+                      items={domains
+                        .sort((a, b) => (summary.summary.by_domain[b] ?? 0) - (summary.summary.by_domain[a] ?? 0))
+                        .map((d) => ({
+                          key: d,
+                          label: DOMAIN_LABELS[d] ?? d,
+                          value: summary.summary.by_domain[d] ?? 0,
+                          colour: DOMAIN_COLOURS[d] ?? "#60a5fa",
+                        }))}
+                      onItemClick={drillToDomain}
+                    />
+                  </div>
+                )}
+
+                {/* Key divergences */}
+                {aggregations?.key_divergences?.length > 0 && (
+                  <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-red-400" />
+                      <h2 className="font-semibold text-white text-sm">
+                        Key Divergences
+                      </h2>
+                      <span className="text-xs text-white/50 ml-1">
+                        Highest confidence findings
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {aggregations.key_divergences.slice(0, 10).map((d: any) => {
+                        const meta = TYPE_META[d.divergence_type];
+                        const Icon = meta?.icon ?? AlertTriangle;
+                        return (
+                          <div
+                            key={d.result_id}
+                            className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.03] hover:bg-white/5 transition-colors"
+                          >
+                            <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${meta?.colour ?? "text-white"}`} />
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-xs font-medium ${meta?.colour}`}>
+                                  {meta?.label}
+                                </span>
+                                <ConfBadge value={d.confidence} />
+                                {d.entity_name && (
+                                  <EntityLink
+                                    targetId={d.target_id}
+                                    entityName={d.entity_name}
+                                    externalId={d.external_id}
+                                  />
+                                )}
+                              </div>
+                              <p className="text-xs text-white/70 leading-relaxed">
+                                {d.description}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Top affected entities */}
+                {aggregations?.top_entities?.length > 0 && (
+                  <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-3">
+                    <h2 className="font-semibold text-white text-sm">
+                      Most Affected Entities
+                    </h2>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-white/50 text-left border-b border-cyan-900/40">
+                            <th className="pb-2 pr-3">Entity</th>
+                            <th className="pb-2 pr-3">Type</th>
+                            <th className="pb-2 pr-3">Domain</th>
+                            <th className="pb-2 pr-3 text-right">Divergences</th>
+                            <th className="pb-2 text-right">Avg Confidence</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aggregations.top_entities.slice(0, 10).map((e: any, i: number) => (
+                            <tr key={i} className="border-b border-cyan-900/20 hover:bg-white/5 transition-colors">
+                              <td className="py-2 pr-3">
+                                <EntityLink
+                                  targetId={e.target_id}
+                                  entityName={e.entity_name}
+                                  externalId={e.external_id}
+                                />
+                              </td>
+                              <td className="py-2 pr-3 text-white/80 font-mono">{e.target_type}</td>
+                              <td className="py-2 pr-3 text-white/80">
+                                {DOMAIN_LABELS[e.domain] ?? e.domain}
+                              </td>
+                              <td className="py-2 pr-3 text-right text-white font-medium">
+                                {e.divergence_count}
+                              </td>
+                              <td className="py-2 text-right">
+                                {e.avg_confidence != null && <ConfBadge value={e.avg_confidence} />}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Domain breakdown bar */}
-            {domains.length > 0 && (
-              <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-3">
-                <h2 className="font-semibold text-white text-sm">
-                  Divergences by Domain
-                </h2>
-                <div className="space-y-2">
-                  {domains.map((d) => {
-                    const cnt = summary.summary.by_domain[d];
-                    const total = summary.summary.total_divergences || 1;
-                    const pct = Math.round((cnt / total) * 100);
+            {/* ════════════════════════════════════════════════════════════
+                EXPLORE VIEW (Aggregation drill-down)
+                ════════════════════════════════════════════════════════════ */}
+            {view === "explore" && aggregations && (
+              <div className="space-y-6">
+
+                {/* Type x Domain heatmap / breakdown */}
+                <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-4">
+                  <h2 className="font-semibold text-white text-sm">
+                    Divergence Type by Domain
+                  </h2>
+                  {TYPE_ORDER.filter((t) => (byType[t] ?? 0) > 0).map((t) => {
+                    const meta = TYPE_META[t];
+                    const Icon = meta.icon;
+                    const domainItems = (aggregations.type_domain ?? [])
+                      .filter((r: any) => r.type === t)
+                      .sort((a: any, b: any) => b.count - a.count);
+                    if (domainItems.length === 0) return null;
                     return (
-                      <div key={d} className="flex items-center gap-3 text-sm">
-                        <span className="w-32 text-right text-white text-xs shrink-0">
-                          {DOMAIN_LABELS[d] ?? d}
-                        </span>
-                        <div className="flex-1 bg-[#06203b] rounded-full h-2 overflow-hidden">
-                          <div
-                            className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-violet-500"
-                            style={{ width: `${pct}%` }}
-                          />
+                      <div key={t} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Icon className={`w-4 h-4 ${meta.colour}`} />
+                          <span className={`text-sm font-medium ${meta.colour}`}>
+                            {meta.label}
+                          </span>
+                          <span className="text-xs text-white/50">
+                            {(byType[t] ?? 0).toLocaleString()}
+                          </span>
                         </div>
-                        <span className="w-20 text-white text-xs">
-                          {cnt.toLocaleString()}{" "}
-                          <span className="text-white/60">({pct}%)</span>
-                        </span>
+                        <HBar
+                          items={domainItems.map((r: any) => ({
+                            key: `${t}-${r.domain}`,
+                            label: DOMAIN_LABELS[r.domain] ?? r.domain,
+                            value: r.count,
+                            colour: meta.hex,
+                          }))}
+                          onItemClick={() => drillToType(t)}
+                        />
                       </div>
                     );
                   })}
                 </div>
+
+                {/* Type x target_type breakdown */}
+                <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-4">
+                  <h2 className="font-semibold text-white text-sm">
+                    Top Affected Entity Types per Divergence
+                  </h2>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {TYPE_ORDER.filter((t) => typeTargetMap[t]?.length).map((t) => {
+                      const meta = TYPE_META[t];
+                      const Icon = meta.icon;
+                      const items = (typeTargetMap[t] || []).slice(0, 8);
+                      return (
+                        <div key={t} className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Icon className={`w-4 h-4 ${meta.colour}`} />
+                            <span className={`text-sm font-medium ${meta.colour}`}>
+                              {meta.label}
+                            </span>
+                          </div>
+                          <HBar
+                            items={items.map((r) => ({
+                              key: r.target_type,
+                              label: r.target_type,
+                              value: r.count,
+                              colour: meta.hex,
+                            }))}
+                            onItemClick={(key) => {
+                              setFilterType(t);
+                              drillToTargetType(key);
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Confidence distribution */}
+                {aggregations.confidence_buckets?.length > 0 && (
+                  <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] p-5 space-y-4">
+                    <h2 className="font-semibold text-white text-sm">Confidence Distribution</h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {["critical", "high", "medium", "low"].map((bucket) => {
+                        const total = (aggregations.confidence_buckets ?? [])
+                          .filter((b: any) => b.bucket === bucket)
+                          .reduce((s: number, b: any) => s + b.count, 0);
+                        const bucketColour =
+                          bucket === "critical"
+                            ? "text-red-400 bg-red-500/15 border-red-500/30"
+                            : bucket === "high"
+                              ? "text-amber-400 bg-amber-500/15 border-amber-500/30"
+                              : bucket === "medium"
+                                ? "text-blue-400 bg-blue-500/15 border-blue-500/30"
+                                : "text-white/60 bg-white/5 border-white/10";
+                        const label =
+                          bucket === "critical"
+                            ? "90-100%"
+                            : bucket === "high"
+                              ? "70-89%"
+                              : bucket === "medium"
+                                ? "50-69%"
+                                : "< 50%";
+                        return (
+                          <div key={bucket} className={`rounded-xl border p-4 ${bucketColour}`}>
+                            <div className="text-xs uppercase tracking-wider font-semibold">
+                              {bucket}
+                            </div>
+                            <div className="text-2xl font-bold mt-1">{total.toLocaleString()}</div>
+                            <div className="text-xs opacity-60 mt-0.5">{label} confidence</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Records table */}
-            <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] overflow-hidden">
-              {/* Filters */}
-              <div className="p-4 border-b border-cyan-900/40 flex flex-wrap gap-3 items-center">
-                <span className="text-sm text-white font-medium">
-                  {totalRecords.toLocaleString()} divergences
-                </span>
-                <div className="flex gap-2 flex-wrap ml-auto">
-                  {/* Type filter */}
-                  <select
-                    value={filterType}
-                    onChange={(e) => {
-                      setFilterType(e.target.value);
-                      setPage(1);
-                    }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                  >
-                    <option value="">All types</option>
-                    {TYPE_ORDER.map((t) => (
-                      <option key={t} value={t}>
-                        {TYPE_META[t].label}
-                      </option>
-                    ))}
-                  </select>
-                  {/* Domain filter */}
-                  <select
-                    value={filterDomain}
-                    onChange={(e) => {
-                      setFilterDomain(e.target.value);
-                      setPage(1);
-                    }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
-                  >
-                    <option value="">All domains</option>
-                    {domains.map((d) => (
-                      <option key={d} value={d}>
-                        {DOMAIN_LABELS[d] ?? d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+            {/* ════════════════════════════════════════════════════════════
+                TABLE VIEW (Records with entity traceability)
+                ════════════════════════════════════════════════════════════ */}
+            {view === "table" && (
+              <div className="rounded-xl border border-cyan-900/40 bg-[#0a2d4a] overflow-hidden">
 
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-cyan-900/40 text-xs text-white/60 uppercase tracking-wider">
-                    <tr>
-                      <th className="text-left px-4 py-2">Type</th>
-                      <th className="text-left px-4 py-2">Entity/Rel Type</th>
-                      <th className="text-left px-4 py-2">Domain</th>
-                      <th className="text-left px-4 py-2">Confidence</th>
-                      <th className="text-left px-4 py-2 max-w-xs">
-                        Description
-                      </th>
-                      <th className="text-left px-4 py-2">Detail</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {records.map((r) => {
-                      const meta = TYPE_META[r.divergence_type];
-                      const Icon = meta?.icon ?? AlertTriangle;
-                      const confPct = Math.round((r.confidence ?? 0) * 100);
-                      return (
-                        <tr
-                          key={r.result_id}
-                          className="border-b border-cyan-900/20 hover:bg-white/5 transition-colors"
-                        >
-                          <td className="px-4 py-2 whitespace-nowrap">
-                            <span
-                              className={`inline-flex items-center gap-1.5 text-xs font-medium ${meta?.colour ?? "text-white"}`}
-                            >
-                              <Icon className="w-3.5 h-3.5" />
-                              {meta?.label ?? r.divergence_type}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-white text-xs font-mono">
-                            {r.target_type ?? "—"}
-                          </td>
-                          <td className="px-4 py-2 text-white/80 text-xs">
-                            {DOMAIN_LABELS[r.domain] ?? r.domain ?? "—"}
-                          </td>
-                          <td className="px-4 py-2 text-xs">
-                            <span
-                              className={
-                                confPct >= 80
-                                  ? "text-green-400"
-                                  : confPct >= 60
-                                    ? "text-amber-400"
-                                    : "text-red-400"
-                              }
-                            >
-                              {confPct}%
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-white text-xs max-w-xs truncate">
-                            {r.description}
-                          </td>
-                          <td className="px-4 py-2 text-xs text-white/80 font-mono">
-                            {r.attribute_name && (
-                              <span>
-                                <span className="text-white">
-                                  {r.attribute_name}
-                                </span>
-                                {": "}
-                                <span className="text-red-400 line-through">
-                                  {r.cmdb_value}
-                                </span>{" "}
-                                →{" "}
-                                <span className="text-green-400">
-                                  {r.observed_value}
-                                </span>
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {records.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="px-4 py-8 text-center text-white/60"
-                        >
-                          No records found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {totalRecords > PAGE_SIZE && (
-                <div className="p-4 border-t border-cyan-900/40 flex items-center justify-between text-xs text-white/80">
-                  <span>
-                    Page {page} of {Math.ceil(totalRecords / PAGE_SIZE)}
+                {/* Filters bar */}
+                <div className="p-4 border-b border-cyan-900/40 flex flex-wrap gap-3 items-center">
+                  <span className="text-sm text-white font-medium tabular-nums">
+                    {totalRecords.toLocaleString()} divergences
                   </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="px-3 py-1 rounded bg-[#06203b] hover:bg-[#0d3b5e] text-slate-200 disabled:opacity-40"
+
+                  {/* Active filter pills */}
+                  <div className="flex gap-1.5 flex-wrap">
+                    {filterType && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-400/15 text-cyan-400 text-xs">
+                        {TYPE_META[filterType]?.label ?? filterType}
+                        <button onClick={() => { setFilterType(""); setPage(1); }}>
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {filterDomain && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-400/15 text-cyan-400 text-xs">
+                        {DOMAIN_LABELS[filterDomain] ?? filterDomain}
+                        <button onClick={() => { setFilterDomain(""); setPage(1); }}>
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {filterTargetType && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-400/15 text-cyan-400 text-xs">
+                        {filterTargetType}
+                        <button onClick={() => { setFilterTargetType(""); setPage(1); }}>
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {(filterType || filterDomain || filterTargetType) && (
+                      <button
+                        onClick={() => {
+                          setFilterType("");
+                          setFilterDomain("");
+                          setFilterTargetType("");
+                          setPage(1);
+                        }}
+                        className="text-xs text-white/50 hover:text-white/80 underline"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 flex-wrap ml-auto">
+                    <select
+                      value={filterType}
+                      onChange={(e) => {
+                        setFilterType(e.target.value);
+                        setPage(1);
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
                     >
-                      Prev
-                    </button>
-                    <button
-                      onClick={() =>
-                        setPage((p) =>
-                          Math.min(Math.ceil(totalRecords / PAGE_SIZE), p + 1)
-                        )
-                      }
-                      disabled={page >= Math.ceil(totalRecords / PAGE_SIZE)}
-                      className="px-3 py-1 rounded bg-[#06203b] hover:bg-[#0d3b5e] text-slate-200 disabled:opacity-40"
+                      <option value="">All types</option>
+                      {TYPE_ORDER.map((t) => (
+                        <option key={t} value={t}>
+                          {TYPE_META[t].label}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={filterDomain}
+                      onChange={(e) => {
+                        setFilterDomain(e.target.value);
+                        setPage(1);
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
                     >
-                      Next
-                    </button>
+                      <option value="">All domains</option>
+                      {domains.map((d) => (
+                        <option key={d} value={d}>
+                          {DOMAIN_LABELS[d] ?? d}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={filterTargetType}
+                      onChange={(e) => {
+                        setFilterTargetType(e.target.value);
+                        setPage(1);
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                    >
+                      <option value="">All entity types</option>
+                      {targetTypes.map((t) => (
+                        <option key={t.type} value={t.type}>
+                          {t.type} ({t.count.toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* ── Evaluation Section (collapsed by default) ─────────── */}
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-cyan-900/40 text-xs text-white/60 uppercase tracking-wider bg-[#06203b] sticky top-0 z-10">
+                      <tr>
+                        <th className="w-8 px-2 py-2" />
+                        <th
+                          className="text-left px-4 py-2 cursor-pointer hover:text-white/80 select-none"
+                          onClick={() => handleSort("divergence_type")}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            Type <SortIcon col="divergence_type" />
+                          </span>
+                        </th>
+                        <th className="text-left px-4 py-2">Entity</th>
+                        <th
+                          className="text-left px-4 py-2 cursor-pointer hover:text-white/80 select-none"
+                          onClick={() => handleSort("target_type")}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            Entity Type <SortIcon col="target_type" />
+                          </span>
+                        </th>
+                        <th
+                          className="text-left px-4 py-2 cursor-pointer hover:text-white/80 select-none"
+                          onClick={() => handleSort("domain")}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            Domain <SortIcon col="domain" />
+                          </span>
+                        </th>
+                        <th
+                          className="text-left px-4 py-2 cursor-pointer hover:text-white/80 select-none"
+                          onClick={() => handleSort("confidence")}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            Confidence <SortIcon col="confidence" />
+                          </span>
+                        </th>
+                        <th className="text-left px-4 py-2">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {records.map((r) => {
+                        const meta = TYPE_META[r.divergence_type];
+                        const Icon = meta?.icon ?? AlertTriangle;
+                        const isExpanded = expandedRow === r.result_id;
+                        return (
+                          <React.Fragment key={r.result_id}>
+                            <tr
+                              onClick={() => {
+                                const newId = isExpanded ? null : r.result_id;
+                                setExpandedRow(newId);
+                                if (newId) fetchEvidence(newId);
+                              }}
+                              className={`border-b border-cyan-900/20 cursor-pointer transition-colors ${
+                                isExpanded ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
+                              }`}
+                            >
+                              <td className="px-2 py-2 text-center text-white/40">
+                                {isExpanded ? (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                )}
+                              </td>
+                              <td className="px-4 py-2 whitespace-nowrap">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 text-xs font-medium ${meta?.colour ?? "text-white"}`}
+                                >
+                                  <Icon className="w-3.5 h-3.5" />
+                                  {meta?.label ?? r.divergence_type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2">
+                                <EntityLink
+                                  targetId={r.target_id}
+                                  entityName={r.entity_name}
+                                  externalId={r.entity_external_id}
+                                />
+                              </td>
+                              <td className="px-4 py-2 text-white/80 text-xs font-mono">
+                                {r.target_type ?? "--"}
+                              </td>
+                              <td className="px-4 py-2 text-white/80 text-xs">
+                                {DOMAIN_LABELS[r.domain] ?? r.domain ?? "--"}
+                              </td>
+                              <td className="px-4 py-2 text-xs">
+                                <ConfBadge value={r.confidence ?? 0} />
+                              </td>
+                              <td className="px-4 py-2 text-white/80 text-xs max-w-md">
+                                <span className="line-clamp-2 leading-relaxed">
+                                  {r.description}
+                                </span>
+                              </td>
+                            </tr>
+                            {/* Expanded detail row */}
+                            {isExpanded && (
+                              <tr className="bg-white/[0.04]">
+                                <td colSpan={7} className="px-8 py-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                    {/* Left column: description + identifiers */}
+                                    <div className="space-y-2">
+                                      <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                        Description
+                                      </h4>
+                                      <p className="text-white/80 leading-relaxed whitespace-pre-wrap">
+                                        {r.description}
+                                      </p>
+                                      <div className="flex gap-4 flex-wrap pt-1">
+                                        {r.entity_name || r.entity_external_id ? (
+                                          <>
+                                            {r.entity_external_id && (
+                                              <div>
+                                                <span className="text-white/40">External ID: </span>
+                                                <span className="font-mono text-white/70">
+                                                  {r.entity_external_id}
+                                                </span>
+                                                <CopyButton text={r.entity_external_id} />
+                                              </div>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <div>
+                                            <span className="text-white/40">Signal ID: </span>
+                                            <span className="font-mono text-white/70">
+                                              {r.target_id}
+                                            </span>
+                                            <CopyButton text={r.target_id} />
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Right column: evidence panel */}
+                                    <div className="space-y-3">
+                                      {/* Attribute mismatch (for dark_attribute / identity_mutation) */}
+                                      {r.attribute_name && (
+                                        <div>
+                                          <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold mb-1">
+                                            Attribute Mismatch
+                                          </h4>
+                                          <div className="bg-white/5 rounded-lg p-3 font-mono">
+                                            <span className="text-white">
+                                              {r.attribute_name}
+                                            </span>
+                                            <div className="mt-1 space-y-0.5">
+                                              <div>
+                                                <span className="text-white/40">CMDB: </span>
+                                                <span className="text-red-400 line-through">
+                                                  {r.cmdb_value}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                <span className="text-white/40">Signal: </span>
+                                                <span className="text-green-400">
+                                                  {r.observed_value}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Evidence panel — loaded from API */}
+                                      {loadingEvidence === r.result_id && (
+                                        <div className="text-white/40 animate-pulse py-2">
+                                          Loading evidence...
+                                        </div>
+                                      )}
+                                      {evidence[r.result_id] && (() => {
+                                        const ev = evidence[r.result_id];
+
+                                        // Dark Attribute: CMDB + Telemetry evidence
+                                        if (r.divergence_type === "dark_attribute" && ev.cmdb && ev.telemetry) {
+                                          return (
+                                            <div className="space-y-2">
+                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                                Source Evidence
+                                              </h4>
+                                              <div className="grid grid-cols-2 gap-2">
+                                                <div className="bg-white/5 rounded-lg p-3">
+                                                  <div className="text-white/40 text-[10px] uppercase mb-1">CMDB Record</div>
+                                                  <div className="space-y-0.5">
+                                                    {ev.cmdb.entity_name && <div><span className="text-white/40">Name: </span><span className="text-white">{ev.cmdb.entity_name}</span></div>}
+                                                    {ev.cmdb.entity_type && <div><span className="text-white/40">Type: </span><span className="text-white font-mono">{ev.cmdb.entity_type}</span></div>}
+                                                    {ev.cmdb.vendor && <div><span className="text-white/40">Vendor: </span><span className="text-white">{ev.cmdb.vendor}</span></div>}
+                                                    {ev.cmdb.band && <div><span className="text-white/40">Band: </span><span className="text-white">{ev.cmdb.band}</span></div>}
+                                                    {ev.cmdb.configured_value && <div><span className="text-white/40">Configured {ev.cmdb.attribute}: </span><span className="text-red-400">{ev.cmdb.configured_value}</span></div>}
+                                                  </div>
+                                                </div>
+                                                <div className="bg-white/5 rounded-lg p-3">
+                                                  <div className="text-white/40 text-[10px] uppercase mb-1">Telemetry Evidence</div>
+                                                  <div className="space-y-0.5">
+                                                    <div><span className="text-white/40">Observed: </span><span className="text-green-400">{ev.telemetry.observed_value}</span></div>
+                                                    <div><span className="text-white/40">Samples: </span><span className="text-white">{ev.telemetry.total_samples?.toLocaleString()}</span></div>
+                                                    {ev.telemetry.samples?.[0]?.first_seen && (
+                                                      <div><span className="text-white/40">First seen: </span><span className="text-white/70">{ev.telemetry.samples[0].first_seen?.split("T")[0]}</span></div>
+                                                    )}
+                                                    {ev.telemetry.samples?.[0]?.last_seen && (
+                                                      <div><span className="text-white/40">Last seen: </span><span className="text-white/70">{ev.telemetry.samples[0].last_seen?.split("T")[0]}</span></div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+
+                                        // Dark Edge: neighbour relation + CMDB absence
+                                        if (r.divergence_type === "dark_edge" && ev.neighbour_relation) {
+                                          const nr = ev.neighbour_relation;
+                                          return (
+                                            <div className="space-y-2">
+                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                                Traffic Evidence
+                                              </h4>
+                                              <div className="bg-white/5 rounded-lg p-3 space-y-1">
+                                                <div><span className="text-white/40">From: </span><span className="text-white">{nr.from_cell}</span></div>
+                                                <div><span className="text-white/40">To: </span><span className="text-white">{nr.to_cell}</span></div>
+                                                {nr.neighbour_type && <div><span className="text-white/40">Type: </span><span className="text-white font-mono">{nr.neighbour_type}</span></div>}
+                                                {nr.handover_attempts != null && <div><span className="text-white/40">Handover attempts: </span><span className="text-white">{nr.handover_attempts?.toLocaleString()}</span></div>}
+                                                {nr.handover_success_rate != null && <div><span className="text-white/40">Success rate: </span><span className="text-white">{(nr.handover_success_rate * 100).toFixed(1)}%</span></div>}
+                                              </div>
+                                              <div className="bg-white/5 rounded-lg p-3">
+                                                <div className="text-white/40 text-[10px] uppercase mb-1">CMDB Status</div>
+                                                <span className={ev.cmdb_edge_exists ? "text-amber-400" : "text-red-400"}>
+                                                  {ev.cmdb_edge_exists ? "Edge exists in CMDB" : "No matching edge in CMDB topology"}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+
+                                        // Phantom Node: signal absence proof
+                                        if (r.divergence_type === "phantom_node" && ev.signal_check) {
+                                          const sc = ev.signal_check;
+                                          return (
+                                            <div className="space-y-2">
+                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                                Signal Absence Proof
+                                              </h4>
+                                              <div className="bg-white/5 rounded-lg p-3 space-y-1">
+                                                <div><span className="text-white/40">KPI samples: </span><span className={sc.kpi_samples === 0 ? "text-red-400" : "text-green-400"}>{sc.kpi_samples}</span></div>
+                                                <div><span className="text-white/40">Alarm events: </span><span className={sc.alarm_events === 0 ? "text-red-400" : "text-green-400"}>{sc.alarm_events}</span></div>
+                                                <div><span className="text-white/40">Neighbour relations: </span><span className={sc.neighbour_relations === 0 ? "text-red-400" : "text-green-400"}>{sc.neighbour_relations}</span></div>
+                                                <div className="pt-1 border-t border-white/10 mt-1">
+                                                  <span className="text-white/40">Detection: </span>
+                                                  <span className="text-white/70">{sc.detection_method} (entity name not used)</span>
+                                                </div>
+                                              </div>
+                                              {ev.cmdb && (
+                                                <div className="bg-white/5 rounded-lg p-3">
+                                                  <div className="text-white/40 text-[10px] uppercase mb-1">CMDB Record</div>
+                                                  {ev.cmdb.entity_name && <div><span className="text-white/40">Name: </span><span className="text-white">{ev.cmdb.entity_name}</span></div>}
+                                                  {ev.cmdb.entity_type && <div><span className="text-white/40">Type: </span><span className="text-white font-mono">{ev.cmdb.entity_type}</span></div>}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+
+                                        // Dark Node: signal source summary
+                                        if (r.divergence_type === "dark_node" && ev.signal_summary) {
+                                          const ss = ev.signal_summary;
+                                          return (
+                                            <div className="space-y-2">
+                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                                Signal Source
+                                              </h4>
+                                              {ss.kpi_profiles?.length > 0 && (
+                                                <div className="bg-white/5 rounded-lg p-3 space-y-1">
+                                                  <div className="text-white/40 text-[10px] uppercase mb-1">KPI Telemetry</div>
+                                                  {ss.kpi_profiles.map((p: any, i: number) => (
+                                                    <div key={i} className="flex gap-3 text-white/80">
+                                                      {p.domain && <span>{p.domain}</span>}
+                                                      {p.vendor && <span className="text-white/40">{p.vendor}</span>}
+                                                      {p.rat_type && <span className="text-white/40">{p.rat_type}</span>}
+                                                      <span className="text-white/40 ml-auto">{p.sample_count?.toLocaleString()} samples</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                              {ss.alarm_profiles?.length > 0 && (
+                                                <div className="bg-white/5 rounded-lg p-3 space-y-1">
+                                                  <div className="text-white/40 text-[10px] uppercase mb-1">Alarms</div>
+                                                  {ss.alarm_profiles.map((p: any, i: number) => (
+                                                    <div key={i} className="flex gap-3 text-white/80">
+                                                      {p.domain && <span>{p.domain}</span>}
+                                                      <span className="text-white/40">{p.severity}</span>
+                                                      <span className="text-white/40 ml-auto">{p.count} events</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+
+                                        return null;
+                                      })()}
+
+                                      {/* Topology link — for node-based types only */}
+                                      {(r.divergence_type === "dark_node" || r.divergence_type === "phantom_node" || r.divergence_type === "identity_mutation") && (
+                                        <a
+                                          href={`/topology?entity_id=${encodeURIComponent(r.target_id)}`}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            window.open(`/topology?entity_id=${encodeURIComponent(r.target_id)}`, "pedkai_workspace");
+                                          }}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-400/15 text-cyan-400 text-xs font-medium hover:bg-cyan-400/25 transition-colors"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                          Open in Topology
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                      {records.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={7}
+                            className="px-4 py-8 text-center text-white/60"
+                          >
+                            No records found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {totalRecords > PAGE_SIZE && (
+                  <div className="p-4 border-t border-cyan-900/40 flex items-center justify-between text-xs text-white/80">
+                    <span className="tabular-nums">
+                      Page {page} of {Math.ceil(totalRecords / PAGE_SIZE).toLocaleString()}
+                      <span className="text-white/50 ml-2">
+                        ({((page - 1) * PAGE_SIZE + 1).toLocaleString()} - {Math.min(page * PAGE_SIZE, totalRecords).toLocaleString()} of {totalRecords.toLocaleString()})
+                      </span>
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setPage(1)}
+                        disabled={page === 1}
+                        className="px-2 py-1 rounded bg-[#06203b] hover:bg-[#0d3b5e] text-slate-200 disabled:opacity-40"
+                        title="First page"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <ChevronLeft className="w-3.5 h-3.5 -ml-2" />
+                      </button>
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="px-3 py-1 rounded bg-[#06203b] hover:bg-[#0d3b5e] text-slate-200 disabled:opacity-40"
+                      >
+                        Prev
+                      </button>
+                      <button
+                        onClick={() =>
+                          setPage((p) =>
+                            Math.min(Math.ceil(totalRecords / PAGE_SIZE), p + 1),
+                          )
+                        }
+                        disabled={page >= Math.ceil(totalRecords / PAGE_SIZE)}
+                        className="px-3 py-1 rounded bg-[#06203b] hover:bg-[#0d3b5e] text-slate-200 disabled:opacity-40"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Evaluation Section (collapsed) ──────────────────────── */}
             <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 overflow-hidden">
               <button
                 onClick={() => {
@@ -595,10 +1488,10 @@ export default function DivergencePage() {
                 <FlaskConical className="w-4 h-4" />
                 <span>Evaluation: Score against ground-truth labels</span>
                 <span className="text-xs text-violet-400 ml-2">
-                  (Development / benchmarking only — not part of operational pipeline)
+                  (Development / benchmarking only)
                 </span>
                 <span className="ml-auto text-violet-400">
-                  {showEval ? "▲" : "▼"}
+                  {showEval ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </span>
               </button>
 
@@ -609,11 +1502,9 @@ export default function DivergencePage() {
                       <RefreshCw className="w-6 h-6 text-violet-400 animate-spin" />
                     </div>
                   )}
-
                   {score?.error && (
                     <p className="text-sm text-violet-300">{score.error}</p>
                   )}
-
                   {score && !score.error && (
                     <>
                       <p className="text-xs text-white/80">
@@ -623,17 +1514,10 @@ export default function DivergencePage() {
                         divergences). This data is never used during detection.
                       </p>
                       <div className="flex gap-4 justify-center">
-                        <ScoreBadge
-                          label="Recall"
-                          value={score.overall?.recall}
-                        />
-                        <ScoreBadge
-                          label="Precision"
-                          value={score.overall?.precision}
-                        />
+                        <ScoreBadge label="Recall" value={score.overall?.recall} />
+                        <ScoreBadge label="Precision" value={score.overall?.precision} />
                         <ScoreBadge label="F1" value={score.overall?.f1} />
                       </div>
-                      {/* Per-type scoring table */}
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
@@ -649,13 +1533,8 @@ export default function DivergencePage() {
                             {(score.by_type ?? []).map((row: any) => {
                               const meta = TYPE_META[row.type];
                               return (
-                                <tr
-                                  key={row.type}
-                                  className="border-b border-violet-500/10"
-                                >
-                                  <td
-                                    className={`py-1 pr-3 font-medium ${meta?.colour ?? "text-white/80"}`}
-                                  >
+                                <tr key={row.type} className="border-b border-violet-500/10">
+                                  <td className={`py-1 pr-3 font-medium ${meta?.colour ?? "text-white/80"}`}>
                                     {meta?.label ?? row.type}
                                   </td>
                                   <td className="py-1 pr-3 text-right text-white/80">

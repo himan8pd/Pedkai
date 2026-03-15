@@ -637,9 +637,6 @@ export default function TopologyPage() {
                     </>
                   )}
 
-                  <span className="text-white/60">Node DB ID</span>
-                  <span className="text-white/80 font-mono text-[10px] truncate">{selectedEntity.id}</span>
-
                   <span className="text-white/60">Edges in view</span>
                   <span className="text-white">
                     {relationships.filter((r) => r.source_entity_id === selectedEntity.id || r.target_entity_id === selectedEntity.id).length}

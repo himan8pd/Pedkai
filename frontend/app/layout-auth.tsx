@@ -1,8 +1,43 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Navigation from "./components/Navigation";
 import { AuthProvider } from "./context/AuthContext";
+
+// ── Session persistence helpers ─────────────────────────────────
+const SESSION_KEYS = {
+  token: "pedkai_token",
+  tenantId: "pedkai_tenant_id",
+  tenantName: "pedkai_tenant_name",
+} as const;
+
+function persistSession(tok: string, tid: string, tname: string) {
+  try {
+    sessionStorage.setItem(SESSION_KEYS.token, tok);
+    sessionStorage.setItem(SESSION_KEYS.tenantId, tid);
+    sessionStorage.setItem(SESSION_KEYS.tenantName, tname);
+  } catch {
+    // sessionStorage unavailable (SSR, private browsing edge cases)
+  }
+}
+
+function clearSession() {
+  try {
+    Object.values(SESSION_KEYS).forEach((k) => sessionStorage.removeItem(k));
+  } catch {}
+}
+
+function loadSession(): { token: string; tenantId: string; tenantName: string } | null {
+  try {
+    const token = sessionStorage.getItem(SESSION_KEYS.token);
+    const tenantId = sessionStorage.getItem(SESSION_KEYS.tenantId);
+    const tenantName = sessionStorage.getItem(SESSION_KEYS.tenantName);
+    if (token && tenantId && tenantName) {
+      return { token, tenantId, tenantName };
+    }
+  } catch {}
+  return null;
+}
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -33,12 +68,24 @@ export default function AuthLayout({
   const [tenantError, setTenantError] = useState("");
   const [isTenantLoading, setIsTenantLoading] = useState(false);
 
+  // ── Rehydrate from sessionStorage on mount ─────────────────────
+  useEffect(() => {
+    const saved = loadSession();
+    if (saved) {
+      setToken(saved.token);
+      setSelectedTenantId(saved.tenantId);
+      setTenantName(saved.tenantName);
+      setTenantBound(true);
+    }
+  }, []);
+
   // ── Phase: 'login' | 'tenant-select' | 'app' ───────────────────
   // Derived from state rather than stored separately to avoid drift.
   const phase = !token ? "login" : !tenantBound ? "tenant-select" : "app";
 
   // ── Logout (full reset) ─────────────────────────────────────────
   const handleLogout = () => {
+    clearSession();
     setToken(null);
     setTenants([]);
     setSelectedTenantId(null);
@@ -97,6 +144,7 @@ export default function AuthLayout({
         setSelectedTenantId(returnedTenants[0].id);
         setTenantName(returnedTenants[0].display_name);
         setTenantBound(true);
+        persistSession(data.access_token, returnedTenants[0].id, returnedTenants[0].display_name);
         return;
       }
 
@@ -141,6 +189,7 @@ export default function AuthLayout({
       setSelectedTenantId(data.tenant_id);
       setTenantName(data.tenant_name);
       setTenantBound(true);
+      persistSession(data.access_token, data.tenant_id, data.tenant_name);
     } catch (err: any) {
       setTenantError(err.message ?? "Failed to select tenant.");
     } finally {
