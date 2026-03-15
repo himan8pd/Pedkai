@@ -20,6 +20,16 @@ from backend.app.models.kpi_sample_orm import KpiSampleORM
 from backend.app.models.network_entity_orm import NetworkEntityORM
 from backend.app.models.tenant_orm import TenantORM
 from backend.app.models.user_tenant_access_orm import UserTenantAccessORM
+from backend.app.models.abeyance_orm import (
+    AbeyanceFragmentORM,
+    AccumulationEdgeORM,
+    CmdbExportLogORM,
+    DiscoveryLedgerORM,
+    FragmentEntityRefORM,
+    ShadowEntityORM,
+    ShadowRelationshipORM,
+    ValueEventORM,
+)
 
 __all__ = [
     "DecisionTrace",
@@ -40,4 +50,12 @@ __all__ = [
     "TenantORM",
     "CustomerORM",
     "UserTenantAccessORM",
+    "AbeyanceFragmentORM",
+    "FragmentEntityRefORM",
+    "AccumulationEdgeORM",
+    "ShadowEntityORM",
+    "ShadowRelationshipORM",
+    "CmdbExportLogORM",
+    "DiscoveryLedgerORM",
+    "ValueEventORM",
 ]

@@ -110,6 +110,17 @@ class Settings(BaseSettings):
     abeyance_decay_interval_hours: int = 6  # How often the decay pass runs
     abeyance_decay_lambda: float = 0.05     # λ in exp(-λ × days); override via ABEYANCE_DECAY_LAMBDA
 
+    # Abeyance Memory Snap Engine (LLD §9)
+    abeyance_snap_threshold: float = 0.75        # Score ≥ this → SNAP
+    abeyance_near_miss_threshold: float = 0.55   # Score ≥ this → NEAR_MISS (boost relevance)
+    abeyance_affinity_threshold: float = 0.40    # Score ≥ this → create accumulation edge
+    abeyance_near_miss_boost: float = 1.15       # Relevance multiplier for near-misses
+    abeyance_temporal_gamma: float = 0.5         # γ in temporal weight formula
+
+    # Abeyance Memory Accumulation Graph (LLD §10)
+    abeyance_cluster_snap_threshold: float = 0.70  # Noisy-OR cluster score ≥ this → cluster snap
+    abeyance_cluster_min_members: int = 3           # Minimum fragments for a valid cluster
+
 
 @lru_cache
 def get_settings() -> Settings:

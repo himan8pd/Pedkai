@@ -300,6 +300,37 @@ app.include_router(
 )
 
 
+# Abeyance Memory API
+from backend.app.api import abeyance as abeyance_router
+
+app.include_router(
+    abeyance_router.router,
+    prefix=f"{settings.api_prefix}/abeyance",
+    tags=["Abeyance Memory"],
+    dependencies=[Depends(oauth2_scheme)],
+)
+
+# Shadow Topology API
+from backend.app.api import shadow_topology
+
+app.include_router(
+    shadow_topology.router,
+    prefix=f"{settings.api_prefix}/shadow-topology",
+    tags=["Shadow Topology"],
+    dependencies=[Depends(oauth2_scheme)],
+)
+
+# Value Attribution API
+from backend.app.api import value
+
+app.include_router(
+    value.router,
+    prefix=f"{settings.api_prefix}/value",
+    tags=["Value Attribution"],
+    dependencies=[Depends(oauth2_scheme)],
+)
+
+
 @app.get("/")
 async def root():
     """Root endpoint."""

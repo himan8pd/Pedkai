@@ -571,6 +571,35 @@ async def get_audit_trail(
     return {"incident_id": incident_id, "audit_trail": trail}
 
 
+@router.get("/{incident_id}/reconstruct")
+async def reconstruct_incident(
+    incident_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Reconstruct an incident timeline from Abeyance Memory fragments.
+
+    Assembles time-ordered fragments, cluster context, snap events,
+    and enriched entity context into a coherent narrative.
+
+    LLD ref: Incident Reconstruction
+    """
+    from backend.app.services.abeyance.incident_reconstruction import (
+        IncidentReconstructionService,
+    )
+
+    tid = current_user.tenant_id
+    if not tid:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+
+    # Verify incident exists
+    await _get_or_404(db, incident_id, tid)
+
+    service = IncidentReconstructionService(async_session_maker)
+    reconstruction = await service.reconstruct(tid, incident_id, session=db)
+    return reconstruction
+
+
 @router.get("/{incident_id}/audit-trail/csv")
 async def get_audit_trail_csv(
     incident_id: str,
