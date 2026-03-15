@@ -1,330 +1,371 @@
 """
-Accumulation Graph — combines fragments into compound discoveries.
+Accumulation Graph — Log-Mean-Exp scoring replacing Noisy-OR.
 
-Implements ABEYANCE_MEMORY_LLD.md §10 (The Accumulation Graph).
+Remediation targets:
+- Audit §4.1: Noisy-OR overconfident → replaced with LME + correlation discount
+- Audit §5.3: Recursive CTE no cycle guard → Python-side union-find
+- Audit §7.3: Cluster formation unobservable → ClusterSnapshot persisted
+- Audit §9.2: No tenant check on edge queries → tenant_id on all queries
 
-Captures weak inter-fragment relationships and detects when a cluster of
-weakly-connected fragments collectively constitutes strong evidence.
-This solves the multi-fragment accumulation problem where no pairwise snap
-score crosses the threshold, but the cluster as a whole is compelling.
+Invariants enforced:
+- INV-4: Cluster membership is monotonic convergent
+- INV-8: Cluster scores in [0.0, 1.0]
+- INV-9: MAX_EDGES_PER_FRAGMENT bounds graph growth
+- INV-10: Cluster evaluation persisted to ClusterSnapshot
 """
 
+from __future__ import annotations
+
+import logging
+import math
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import select, delete, func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.logging import get_logger
 from backend.app.models.abeyance_orm import (
-    AbeyanceFragmentORM,
     AccumulationEdgeORM,
+    AbeyanceFragmentORM,
 )
-from backend.app.schemas.abeyance import (
-    AccumulationClusterResponse,
-    AccumulationEdgeResponse,
+from backend.app.services.abeyance.events import (
+    ClusterEvaluation,
+    ProvenanceLogger,
+    RedisNotifier,
 )
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
-# Cluster snap threshold (LLD §10) — lower than pairwise because
-# multi-fragment corroboration provides structural confidence
+# Bounds (INV-9)
+MAX_EDGES_PER_FRAGMENT = 20
+MAX_CLUSTER_SIZE = 50
+MIN_CLUSTER_SIZE = 3
+
+# LME parameters (Phase 4, §4.3)
+LME_TEMPERATURE = 0.3
 CLUSTER_SNAP_THRESHOLD = 0.70
-CLUSTER_MIN_MEMBERS = 3
 
 
-class AccumulationGraphService:
-    """Manages the accumulation graph for multi-fragment cluster detection (LLD §10).
+def _log_mean_exp(scores: list[float], temperature: float = LME_TEMPERATURE) -> float:
+    """Log-Mean-Exp scoring (replaces Noisy-OR, Audit §4.1).
 
-    Affinity edges are created when two fragments score above the affinity
-    threshold (0.40) but below the snap threshold (0.75). Periodically or
-    on edge creation, connected components are evaluated for cluster snaps.
+    Properties:
+    - tau -> 0: converges to max(scores)
+    - tau -> inf: converges to mean(scores)
+    - At tau=0.3: strong edges dominate, weak edges contribute, no independence assumption
+    - Output bounded by [min(scores), max(scores)] ⊂ [0, 1] when inputs in [0, 1]
+    """
+    if not scores:
+        return 0.0
+
+    # Numerically stable computation
+    max_s = max(scores)
+    if max_s <= 0:
+        return 0.0
+
+    inv_tau = 1.0 / temperature
+    # Shift for numerical stability: log(mean(exp((s - max_s) / tau)))
+    shifted = [math.exp((s - max_s) * inv_tau) for s in scores]
+    mean_shifted = sum(shifted) / len(shifted)
+
+    if mean_shifted <= 0:
+        return 0.0
+
+    result = max_s + temperature * math.log(mean_shifted)
+    return max(0.0, min(1.0, result))
+
+
+def _correlation_discount(num_nodes: int, num_edges: int) -> float:
+    """Discount factor based on cluster density (Phase 4, §4.3).
+
+    Dense clusters (every node connects to every other) → higher correlation
+    → larger discount.  Sparse chains → lower correlation → less discount.
+
+    Returns value in [0.5, 1.0].
+    """
+    if num_nodes < 2:
+        return 1.0
+    max_edges = num_nodes * (num_nodes - 1) / 2
+    if max_edges == 0:
+        return 1.0
+    density = num_edges / max_edges
+    return max(0.5, 1.0 - 0.5 * density)
+
+
+class AccumulationGraph:
+    """Manages affinity edges and detects clusters for multi-fragment snaps.
+
+    Uses union-find for connected component detection (no recursive CTE,
+    fixing Audit §5.3).  Cluster scoring uses Log-Mean-Exp instead of
+    Noisy-OR (fixing Audit §4.1).
     """
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
-        self.session_factory = session_factory
+    def __init__(
+        self,
+        provenance: ProvenanceLogger,
+        notifier: Optional[RedisNotifier] = None,
+    ):
+        self._provenance = provenance
+        self._notifier = notifier or RedisNotifier()
 
     async def add_or_update_edge(
         self,
+        session: AsyncSession,
         tenant_id: str,
         fragment_a_id: UUID,
         fragment_b_id: UUID,
         affinity_score: float,
         failure_mode: str,
-        session: Optional[AsyncSession] = None,
-    ) -> AccumulationEdgeORM:
-        """Create or update an affinity edge between two fragments (LLD §10).
+    ) -> Optional[UUID]:
+        """Create or update an affinity edge between two fragments.
 
-        If an edge already exists, updates to the higher score.
+        Enforces MAX_EDGES_PER_FRAGMENT (INV-9): if the limit is reached,
+        evicts the weakest edge before adding the new one.
+        Score clamped to [0.0, 1.0] (INV-8).
         """
-        # Normalise order so (a,b) and (b,a) map to the same edge
+        affinity_score = max(0.0, min(1.0, affinity_score))
+
+        # Canonical ordering to prevent duplicate edges
         a_id, b_id = sorted([fragment_a_id, fragment_b_id], key=str)
 
-        async with self._get_session(session) as s:
-            # Check for existing edge
-            result = await s.execute(
-                select(AccumulationEdgeORM).where(
-                    AccumulationEdgeORM.fragment_a_id == a_id,
-                    AccumulationEdgeORM.fragment_b_id == b_id,
-                )
+        # Check for existing edge (tenant-scoped, Audit §9.2)
+        existing_stmt = (
+            select(AccumulationEdgeORM)
+            .where(
+                AccumulationEdgeORM.tenant_id == tenant_id,
+                AccumulationEdgeORM.fragment_a_id == a_id,
+                AccumulationEdgeORM.fragment_b_id == b_id,
             )
-            existing = result.scalars().first()
+        )
+        result = await session.execute(existing_stmt)
+        existing = result.scalar_one_or_none()
 
-            if existing:
-                if affinity_score > existing.affinity_score:
-                    existing.affinity_score = affinity_score
-                    existing.strongest_failure_mode = failure_mode
-                    existing.last_updated = datetime.now(timezone.utc)
-                return existing
+        if existing:
+            # Update only if new score is higher (monotonic convergence, INV-4)
+            if affinity_score > existing.affinity_score:
+                existing.affinity_score = affinity_score
+                existing.strongest_failure_mode = failure_mode
+                existing.last_updated = datetime.now(timezone.utc)
+            await session.flush()
+            return existing.id
 
-            edge = AccumulationEdgeORM(
-                id=uuid4(),
-                tenant_id=tenant_id,
-                fragment_a_id=a_id,
-                fragment_b_id=b_id,
-                affinity_score=affinity_score,
-                strongest_failure_mode=failure_mode,
-            )
-            s.add(edge)
-            await s.flush()
+        # Enforce edge count limit (INV-9)
+        await self._enforce_edge_limit(session, tenant_id, fragment_a_id)
+        await self._enforce_edge_limit(session, tenant_id, fragment_b_id)
 
-            logger.info(
-                f"Accumulation edge created: {a_id} <-> {b_id}, "
-                f"score={affinity_score:.3f}, mode={failure_mode}"
-            )
-            return edge
+        edge_id = uuid4()
+        edge = AccumulationEdgeORM(
+            id=edge_id,
+            tenant_id=tenant_id,
+            fragment_a_id=a_id,
+            fragment_b_id=b_id,
+            affinity_score=affinity_score,
+            strongest_failure_mode=failure_mode,
+        )
+        session.add(edge)
+        await session.flush()
+        return edge_id
 
-    async def get_edges(
-        self,
-        tenant_id: str,
-        fragment_id: Optional[UUID] = None,
-        session: Optional[AsyncSession] = None,
-    ) -> list[AccumulationEdgeResponse]:
-        """Query accumulation graph edges."""
-        async with self._get_session(session) as s:
-            query = select(AccumulationEdgeORM).where(
-                AccumulationEdgeORM.tenant_id == tenant_id
-            )
-            if fragment_id:
-                query = query.where(
+    async def _enforce_edge_limit(
+        self, session: AsyncSession, tenant_id: str, fragment_id: UUID,
+    ) -> None:
+        """Evict weakest edge if fragment exceeds MAX_EDGES_PER_FRAGMENT."""
+        count_stmt = (
+            select(func.count())
+            .select_from(AccumulationEdgeORM)
+            .where(
+                AccumulationEdgeORM.tenant_id == tenant_id,
+                (
                     (AccumulationEdgeORM.fragment_a_id == fragment_id)
                     | (AccumulationEdgeORM.fragment_b_id == fragment_id)
-                )
-            query = query.order_by(AccumulationEdgeORM.affinity_score.desc()).limit(500)
-
-            result = await s.execute(query)
-            return [
-                AccumulationEdgeResponse.model_validate(e)
-                for e in result.scalars().all()
-            ]
-
-    async def detect_clusters(
-        self,
-        tenant_id: str,
-        min_members: int = CLUSTER_MIN_MEMBERS,
-        session: Optional[AsyncSession] = None,
-    ) -> list[AccumulationClusterResponse]:
-        """Detect connected components in the accumulation graph (LLD §10).
-
-        Uses recursive CTE to find clusters with >= min_members fragments.
-        """
-        async with self._get_session(session) as s:
-            # Recursive CTE for connected components (LLD §10)
-            sql = text("""
-                WITH RECURSIVE component AS (
-                    SELECT fragment_a_id AS node, fragment_a_id AS component_root
-                    FROM accumulation_edge
-                    WHERE tenant_id = :tid
-
-                    UNION
-
-                    SELECT ae.fragment_b_id, c.component_root
-                    FROM accumulation_edge ae
-                    JOIN component c ON ae.fragment_a_id = c.node
-                    WHERE ae.tenant_id = :tid
-
-                    UNION
-
-                    SELECT ae.fragment_a_id, c.component_root
-                    FROM accumulation_edge ae
-                    JOIN component c ON ae.fragment_b_id = c.node
-                    WHERE ae.tenant_id = :tid
-                )
-                SELECT component_root,
-                       array_agg(DISTINCT node) AS members,
-                       count(DISTINCT node) AS size
-                FROM component
-                GROUP BY component_root
-                HAVING count(DISTINCT node) >= :min_members
-                ORDER BY count(DISTINCT node) DESC
-            """)
-
-            result = await s.execute(sql, {"tid": tenant_id, "min_members": min_members})
-            rows = result.fetchall()
-
-            clusters = []
-            seen_members = set()  # Avoid reporting the same cluster under multiple roots
-
-            for row in rows:
-                member_ids = [UUID(str(m)) for m in row.members]
-                member_key = frozenset(str(m) for m in member_ids)
-                if member_key in seen_members:
-                    continue
-                seen_members.add(member_key)
-
-                # Score the cluster
-                cluster_score, dominant_mode = await self._score_cluster(
-                    tenant_id, member_ids, s
-                )
-
-                clusters.append(AccumulationClusterResponse(
-                    cluster_id=str(row.component_root),
-                    member_fragment_ids=member_ids,
-                    member_count=row.size,
-                    cluster_score=cluster_score,
-                    strongest_failure_mode=dominant_mode,
-                ))
-
-            return clusters
-
-    async def _score_cluster(
-        self,
-        tenant_id: str,
-        member_ids: list[UUID],
-        session: AsyncSession,
-    ) -> tuple[float, Optional[str]]:
-        """Score a cluster using Noisy-OR fusion (LLD §10).
-
-        P(hypothesis | cluster) = 1 - ∏(1 - affinity_score_i) for all edges.
-        """
-        from backend.app.services.fusion.noisy_or import NoisyORFusion
-
-        # Fetch all edges within this cluster
-        str_ids = [str(m) for m in member_ids]
-        result = await session.execute(
-            select(AccumulationEdgeORM).where(
-                AccumulationEdgeORM.tenant_id == tenant_id,
-                AccumulationEdgeORM.fragment_a_id.in_(member_ids),
-                AccumulationEdgeORM.fragment_b_id.in_(member_ids),
+                ),
             )
         )
-        edges = result.scalars().all()
+        count_result = await session.execute(count_stmt)
+        count = count_result.scalar() or 0
 
-        if not edges:
-            return 0.0, None
+        if count >= MAX_EDGES_PER_FRAGMENT:
+            # Find and remove the weakest edge
+            weakest_stmt = (
+                select(AccumulationEdgeORM.id)
+                .where(
+                    AccumulationEdgeORM.tenant_id == tenant_id,
+                    (
+                        (AccumulationEdgeORM.fragment_a_id == fragment_id)
+                        | (AccumulationEdgeORM.fragment_b_id == fragment_id)
+                    ),
+                )
+                .order_by(AccumulationEdgeORM.affinity_score.asc())
+                .limit(1)
+            )
+            weakest_result = await session.execute(weakest_stmt)
+            weakest_id = weakest_result.scalar_one_or_none()
+            if weakest_id:
+                await session.execute(
+                    delete(AccumulationEdgeORM)
+                    .where(AccumulationEdgeORM.id == weakest_id)
+                )
 
-        scores = [e.affinity_score for e in edges]
-        fusion = NoisyORFusion()
-        cluster_score = fusion.combine(scores)
-
-        # Dominant failure mode — most common among edges
-        mode_counts: dict[str, int] = {}
-        for e in edges:
-            mode = e.strongest_failure_mode or "DARK_EDGE"
-            mode_counts[mode] = mode_counts.get(mode, 0) + 1
-        dominant_mode = max(mode_counts, key=mode_counts.get) if mode_counts else None
-
-        return cluster_score, dominant_mode
-
-    async def evaluate_clusters(
+    async def detect_and_evaluate_clusters(
         self,
+        session: AsyncSession,
         tenant_id: str,
         trigger_fragment_id: Optional[UUID] = None,
-        session: Optional[AsyncSession] = None,
-    ) -> list[AccumulationClusterResponse]:
-        """Detect and evaluate clusters for snap (LLD §10).
+    ) -> list[dict]:
+        """Detect connected components and evaluate for cluster snaps.
 
-        Called when a new affinity edge is created. If a cluster's
-        aggregate score exceeds CLUSTER_SNAP_THRESHOLD (0.70), all
-        members snap as a multi-fragment hypothesis.
+        Uses Python-side union-find (not recursive CTE, fixing Audit §5.3).
+        Evaluates with LME scoring (not Noisy-OR, fixing Audit §4.1).
+        Persists evaluation to ClusterSnapshot (fixing Audit §7.3).
         """
-        async with self._get_session(session) as s:
-            clusters = await self.detect_clusters(
+        # Load all edges for this tenant
+        edge_stmt = (
+            select(AccumulationEdgeORM)
+            .where(AccumulationEdgeORM.tenant_id == tenant_id)
+        )
+        result = await session.execute(edge_stmt)
+        edges = list(result.scalars().all())
+
+        if not edges:
+            return []
+
+        # Union-Find for connected components
+        parent: dict[UUID, UUID] = {}
+
+        def find(x: UUID) -> UUID:
+            while parent.get(x, x) != x:
+                parent[x] = parent.get(parent[x], parent[x])
+                x = parent[x]
+            return x
+
+        def union(x: UUID, y: UUID) -> None:
+            rx, ry = find(x), find(y)
+            if rx != ry:
+                parent[rx] = ry
+
+        # Build union-find from edges
+        for edge in edges:
+            parent.setdefault(edge.fragment_a_id, edge.fragment_a_id)
+            parent.setdefault(edge.fragment_b_id, edge.fragment_b_id)
+            union(edge.fragment_a_id, edge.fragment_b_id)
+
+        # Group fragments by component root
+        components: dict[UUID, set[UUID]] = {}
+        for node_id in parent:
+            root = find(node_id)
+            components.setdefault(root, set()).add(node_id)
+
+        # Evaluate clusters that meet minimum size
+        snap_results = []
+        for root, members in components.items():
+            if len(members) < MIN_CLUSTER_SIZE:
+                continue
+            if len(members) > MAX_CLUSTER_SIZE:
+                # Cap cluster size (INV-9) — take highest-affinity subgraph
+                members = await self._prune_cluster(session, tenant_id, members, edges)
+
+            # If trigger fragment is specified, only evaluate clusters containing it
+            if trigger_fragment_id and trigger_fragment_id not in members:
+                continue
+
+            # Collect edge scores within this cluster
+            member_set = set(members)
+            cluster_edges = []
+            cluster_scores = []
+            for edge in edges:
+                if edge.fragment_a_id in member_set and edge.fragment_b_id in member_set:
+                    cluster_edges.append({
+                        "a": str(edge.fragment_a_id),
+                        "b": str(edge.fragment_b_id),
+                        "score": edge.affinity_score,
+                    })
+                    cluster_scores.append(edge.affinity_score)
+
+            if not cluster_scores:
+                continue
+
+            # LME scoring (replaces Noisy-OR)
+            cluster_score = _log_mean_exp(cluster_scores)
+            discount = _correlation_discount(len(member_set), len(cluster_edges))
+            adjusted_score = max(0.0, min(1.0, cluster_score * discount))
+
+            decision = "SNAP" if adjusted_score >= CLUSTER_SNAP_THRESHOLD else "NO_SNAP"
+
+            # Persist evaluation (INV-10, Audit §7.3)
+            evaluation = ClusterEvaluation(
                 tenant_id=tenant_id,
-                min_members=CLUSTER_MIN_MEMBERS,
-                session=s,
+                member_fragment_ids=list(member_set),
+                edges=cluster_edges,
+                cluster_score=cluster_score,
+                correlation_discount=discount,
+                adjusted_score=adjusted_score,
+                threshold=CLUSTER_SNAP_THRESHOLD,
+                decision=decision,
             )
+            snapshot_id = await self._provenance.log_cluster_evaluation(session, evaluation)
 
-            snapped_clusters = []
-            for cluster in clusters:
-                if cluster.cluster_score >= CLUSTER_SNAP_THRESHOLD:
-                    # Cluster snap — mark all members as SNAPPED
-                    await self._snap_cluster(cluster, tenant_id, s)
-                    snapped_clusters.append(cluster)
-
-            if snapped_clusters:
-                logger.info(
-                    f"Cluster snaps: {len(snapped_clusters)} clusters snapped "
-                    f"for tenant={tenant_id}"
+            if decision == "SNAP":
+                await self._notifier.notify_cluster_snap(
+                    tenant_id, snapshot_id, len(member_set), adjusted_score,
                 )
 
-            return snapped_clusters
+            snap_results.append({
+                "snapshot_id": str(snapshot_id),
+                "members": [str(m) for m in member_set],
+                "member_count": len(member_set),
+                "cluster_score": round(cluster_score, 4),
+                "correlation_discount": round(discount, 4),
+                "adjusted_score": round(adjusted_score, 4),
+                "decision": decision,
+            })
 
-    async def _snap_cluster(
+        await session.flush()
+        return snap_results
+
+    async def _prune_cluster(
         self,
-        cluster: AccumulationClusterResponse,
-        tenant_id: str,
         session: AsyncSession,
-    ) -> None:
-        """Mark all fragments in a cluster as SNAPPED (LLD §10)."""
-        now = datetime.now(timezone.utc)
-        hypothesis_id = uuid4()  # Shared hypothesis ID for all cluster members
-
-        for frag_id in cluster.member_fragment_ids:
-            fragment = await session.get(AbeyanceFragmentORM, frag_id)
-            if fragment and fragment.snap_status == "ABEYANCE":
-                fragment.snap_status = "SNAPPED"
-                fragment.snapped_hypothesis_id = hypothesis_id
-                fragment.updated_at = now
-
-        logger.info(
-            f"Cluster snapped: {len(cluster.member_fragment_ids)} fragments, "
-            f"score={cluster.cluster_score:.3f}, "
-            f"mode={cluster.strongest_failure_mode}, "
-            f"hypothesis={hypothesis_id}"
-        )
-
-    async def remove_expired_edges(
-        self,
         tenant_id: str,
-        session: Optional[AsyncSession] = None,
+        members: set[UUID],
+        all_edges: list[AccumulationEdgeORM],
+    ) -> set[UUID]:
+        """Prune oversized cluster to MAX_CLUSTER_SIZE by keeping strongest edges."""
+        # Collect edges within cluster, sorted by score descending
+        member_set = set(members)
+        cluster_edges = [
+            e for e in all_edges
+            if e.fragment_a_id in member_set and e.fragment_b_id in member_set
+        ]
+        cluster_edges.sort(key=lambda e: e.affinity_score, reverse=True)
+
+        # Rebuild cluster from strongest edges until size limit
+        pruned: set[UUID] = set()
+        for edge in cluster_edges:
+            pruned.add(edge.fragment_a_id)
+            pruned.add(edge.fragment_b_id)
+            if len(pruned) >= MAX_CLUSTER_SIZE:
+                break
+
+        return pruned
+
+    async def remove_fragment_edges(
+        self,
+        session: AsyncSession,
+        tenant_id: str,
+        fragment_id: UUID,
     ) -> int:
-        """Remove edges for expired/stale fragments (LLD §11)."""
-        async with self._get_session(session) as s:
-            sql = text("""
-                DELETE FROM accumulation_edge ae
-                USING abeyance_fragment af
-                WHERE ae.tenant_id = :tid
-                  AND (
-                      (ae.fragment_a_id = af.id AND af.snap_status IN ('EXPIRED', 'COLD'))
-                      OR
-                      (ae.fragment_b_id = af.id AND af.snap_status IN ('EXPIRED', 'COLD'))
-                  )
-            """)
-            result = await s.execute(sql, {"tid": tenant_id})
-            count = result.rowcount or 0
-            if count:
-                logger.info(f"Removed {count} expired accumulation edges for tenant={tenant_id}")
-            return count
-
-    def _get_session(self, session: Optional[AsyncSession] = None):
-        """Support both external session (reuse) and internal session creation."""
-        from contextlib import asynccontextmanager
-
-        @asynccontextmanager
-        async def _ctx():
-            if session:
-                yield session
-            else:
-                async with self.session_factory() as new_session:
-                    try:
-                        yield new_session
-                        await new_session.commit()
-                    except Exception:
-                        await new_session.rollback()
-                        raise
-                    finally:
-                        await new_session.close()
-
-        return _ctx()
+        """Remove all edges involving a fragment (used on expiration)."""
+        stmt = (
+            delete(AccumulationEdgeORM)
+            .where(
+                AccumulationEdgeORM.tenant_id == tenant_id,
+                (
+                    (AccumulationEdgeORM.fragment_a_id == fragment_id)
+                    | (AccumulationEdgeORM.fragment_b_id == fragment_id)
+                ),
+            )
+        )
+        result = await session.execute(stmt)
+        await session.flush()
+        return result.rowcount or 0

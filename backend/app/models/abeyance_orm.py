@@ -1,9 +1,19 @@
 """
 SQLAlchemy ORM models for the Abeyance Memory subsystem.
 
-Implements the data model specified in ABEYANCE_MEMORY_LLD.md §5, §8, §10, §13, §14.
-Maps to PostgreSQL with pgvector for semantic search and JSONB for flexible
-enrichment storage.
+Remediated per Forensic Audit findings:
+- Unified fragment model (eliminates split-brain, Audit §3.1)
+- Fragment history for provenance (Audit §7.1, §7.2, §7.3)
+- Snap decision records (Audit §7.1)
+- Cluster snapshots (Audit §7.3)
+- GIN indexes on JSONB columns (Audit §5.1)
+- Tenant isolation on all tables (Audit §9.1, §9.2, §9.3)
+
+Invariants enforced:
+- INV-1: Fragment lifecycle via SnapStatus enum (deterministic state machine)
+- INV-6: raw_content size bounded (64KB check at application layer)
+- INV-7: tenant_id on every table, every index
+- INV-10: fragment_history and snap_decision_record are append-only
 """
 
 from datetime import datetime, timezone
@@ -13,45 +23,78 @@ from uuid import uuid4
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, Index, Integer, String, Text,
-    func,
+    UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from backend.app.core.database import Base
 
 
-class AbeyanceFragmentORM(Base):
-    """Core fragment storage — the atomic unit of abeyance evidence.
+# ---------------------------------------------------------------------------
+# Fragment Lifecycle State Machine (INV-1)
+# ---------------------------------------------------------------------------
+# Valid transitions:
+#   INGESTED  -> ACTIVE        (enrichment complete)
+#   ACTIVE    -> NEAR_MISS     (near-miss threshold crossed)
+#   ACTIVE    -> SNAPPED       (snap threshold crossed)
+#   NEAR_MISS -> SNAPPED       (snap threshold crossed)
+#   NEAR_MISS -> ACTIVE        (decay resets near-miss status)
+#   ACTIVE    -> STALE         (decay_score < stale_threshold)
+#   NEAR_MISS -> STALE         (decay_score < stale_threshold)
+#   STALE     -> EXPIRED       (decay_score < expiration_threshold)
+#   EXPIRED   -> COLD          (archived to cold storage)
+#   SNAPPED is terminal for automated processes (INV-5)
+#
+VALID_TRANSITIONS = {
+    "INGESTED":  {"ACTIVE"},
+    "ACTIVE":    {"NEAR_MISS", "SNAPPED", "STALE"},
+    "NEAR_MISS": {"SNAPPED", "ACTIVE", "STALE"},
+    "STALE":     {"EXPIRED"},
+    "EXPIRED":   {"COLD"},
+    "SNAPPED":   set(),  # Terminal — no automated exit (INV-5)
+    "COLD":      set(),  # Terminal
+}
 
-    Implements LLD §5 (The Fragment Model) and §14 (Class Design).
-    Each fragment represents a piece of evidence that enters Abeyance Memory,
-    normalised with three faces: what it says, what it touches, and what was
-    happening around it.
+# Maximum raw content size in bytes (INV-6)
+MAX_RAW_CONTENT_BYTES = 65536
+
+
+class AbeyanceFragmentORM(Base):
+    """Core fragment storage — the sole canonical fragment model.
+
+    Eliminates split-brain (Audit §3.1) by serving as the single source
+    of truth for all abeyance state.  DecisionTraceORM abeyance fields
+    are deprecated and must not be used for abeyance logic.
     """
 
     __tablename__ = "abeyance_fragment"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id = Column(String(100), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False)
 
-    # Source identification (LLD §5 Source Type Characteristics)
-    source_type = Column(String(50), nullable=False)  # TICKET_TEXT, ALARM, TELEMETRY_EVENT, CLI_OUTPUT, CHANGE_RECORD, CMDB_DELTA
-    source_ref = Column(String(500), nullable=True)  # Back-reference to originating record
+    # Source identification (LLD §5)
+    source_type = Column(String(50), nullable=False)
+    source_ref = Column(String(500), nullable=True)
     source_engineer_id = Column(String(255), nullable=True)
 
-    # Raw content (Face 1 — what it says)
+    # Raw content — bounded by MAX_RAW_CONTENT_BYTES (INV-6)
     raw_content = Column(Text, nullable=True)
 
-    # Enrichment fields (LLD §6 Enrichment Chain outputs)
+    # Enrichment fields (LLD §6)
     extracted_entities = Column(JSONB, nullable=False, default=list, server_default='[]')
     topological_neighbourhood = Column(JSONB, nullable=False, default=dict, server_default='{}')
     operational_fingerprint = Column(JSONB, nullable=False, default=dict, server_default='{}')
     failure_mode_tags = Column(JSONB, nullable=False, default=list, server_default='[]')
     temporal_context = Column(JSONB, nullable=False, default=dict, server_default='{}')
 
+    # Embedding validity mask — which sub-vector dimensions are valid (INV-11)
+    # 4-element list: [semantic_valid, topo_valid, temporal_valid, operational_valid]
+    embedding_mask = Column(JSONB, nullable=False, default=lambda: [True, False, True, False],
+                            server_default='[true, false, true, false]')
+
     # Embeddings (LLD §6 Step 4 + §7)
-    enriched_embedding = Column(Vector(1536), nullable=True)  # 512 semantic + 384 topo + 256 temporal + 384 operational
-    raw_embedding = Column(Vector(768), nullable=True)  # Raw content only
+    enriched_embedding = Column(Vector(1536), nullable=True)
+    raw_embedding = Column(Vector(768), nullable=True)
 
     # Timestamps
     event_timestamp = Column(DateTime(timezone=True), nullable=True)
@@ -69,56 +112,69 @@ class AbeyanceFragmentORM(Base):
     )
     updated_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Decay and relevance (LLD §11)
+    # Decay and relevance (LLD §11, remediated per Audit §2.2)
     base_relevance = Column(Float, nullable=False, default=1.0, server_default='1.0')
     current_decay_score = Column(Float, nullable=False, default=1.0, server_default='1.0')
     near_miss_count = Column(Integer, nullable=False, default=0, server_default='0')
 
-    # Snap status (LLD §5, §9)
-    snap_status = Column(String(20), nullable=False, default='ABEYANCE', server_default='ABEYANCE')  # ABEYANCE | SNAPPED | EXPIRED | COLD
+    # Fragment lifecycle (INV-1)
+    snap_status = Column(
+        String(20), nullable=False, default='INGESTED', server_default='INGESTED'
+    )
     snapped_hypothesis_id = Column(UUID(as_uuid=True), nullable=True)
+
+    # Hard lifetime bound (INV-6)
+    max_lifetime_days = Column(Integer, nullable=False, default=730, server_default='730')
+
+    # Deduplication key (Phase 7, §7.3)
+    dedup_key = Column(String(500), nullable=True)
 
     __table_args__ = (
         Index("ix_abeyance_fragment_tenant_status", "tenant_id", "snap_status"),
         Index("ix_abeyance_fragment_tenant_created", "tenant_id", "created_at"),
+        Index("ix_abeyance_fragment_tenant_decay", "tenant_id", "current_decay_score",
+              postgresql_where="snap_status IN ('ACTIVE', 'NEAR_MISS')"),
+        # GIN indexes for targeted retrieval (Audit §5.1, LLD §9)
+        Index("ix_abeyance_fragment_failure_modes", "failure_mode_tags",
+              postgresql_using="gin", postgresql_ops={"failure_mode_tags": "jsonb_path_ops"}),
+        Index("ix_abeyance_fragment_entities", "extracted_entities",
+              postgresql_using="gin", postgresql_ops={"extracted_entities": "jsonb_path_ops"}),
+        # Deduplication (Phase 7, §7.3)
+        UniqueConstraint("tenant_id", "dedup_key", name="uq_fragment_dedup"),
     )
 
 
 class FragmentEntityRefORM(Base):
-    """Entity references with topological distance.
-
-    Implements LLD §5 (FRAGMENT_ENTITY_REF schema).
-    Links fragments to network entities at varying topological distances
-    (0 = directly referenced, 1 = 1-hop, 2 = 2-hop from Shadow Topology).
-    """
+    """Entity references with topological distance."""
 
     __tablename__ = "fragment_entity_ref"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    fragment_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    fragment_id = Column(UUID(as_uuid=True), nullable=False)
     entity_id = Column(UUID(as_uuid=True), nullable=True)
-    entity_identifier = Column(String(500), nullable=False)  # Human-readable: LTE-8842-A
-    entity_domain = Column(String(50), nullable=True)  # RAN, TRANSPORT, CORE, IP, VNF, SITE
+    entity_identifier = Column(String(500), nullable=False)
+    entity_domain = Column(String(50), nullable=True)
     topological_distance = Column(Integer, nullable=False, default=0, server_default='0')
-    tenant_id = Column(String(100), nullable=False)
+    tenant_id = Column(String(100), nullable=False)  # INV-7
 
     __table_args__ = (
         Index("ix_fer_entity_identifier_tenant", "entity_identifier", "tenant_id"),
+        Index("ix_fer_fragment_tenant", "fragment_id", "tenant_id"),
+        Index("ix_fer_entity_id_tenant", "entity_id", "tenant_id"),
     )
 
 
 class AccumulationEdgeORM(Base):
-    """Weak affinity links between fragments in the Accumulation Graph.
+    """Weak affinity links between fragments (LLD §10).
 
-    Implements LLD §10 (The Accumulation Graph) data model.
-    Captures pairwise affinity scores that are below the snap threshold
-    but above the affinity threshold, enabling multi-fragment cluster detection.
+    Bounded per INV-9: MAX_EDGES_PER_FRAGMENT enforced at application layer.
+    Tenant isolation per INV-7: tenant_id in pair uniqueness constraint.
     """
 
     __tablename__ = "accumulation_edge"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id = Column(String(100), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False)  # INV-7
     fragment_a_id = Column(UUID(as_uuid=True), nullable=False)
     fragment_b_id = Column(UUID(as_uuid=True), nullable=False)
     affinity_score = Column(Float, nullable=False)
@@ -135,25 +191,127 @@ class AccumulationEdgeORM(Base):
     )
 
     __table_args__ = (
-        Index("ix_accum_edge_pair", "fragment_a_id", "fragment_b_id", unique=True),
+        # Tenant-scoped uniqueness (Audit §9.2)
+        Index("ix_accum_edge_pair", "tenant_id", "fragment_a_id", "fragment_b_id", unique=True),
+        Index("ix_accum_edge_frag_a", "tenant_id", "fragment_a_id"),
+        Index("ix_accum_edge_frag_b", "tenant_id", "fragment_b_id"),
     )
 
 
-class ShadowEntityORM(Base):
-    """PedkAI's private topology node.
+# ---------------------------------------------------------------------------
+# Provenance Tables (INV-10: append-only)
+# ---------------------------------------------------------------------------
 
-    Implements LLD §8 (The Shadow Topology) SHADOW_ENTITY schema.
-    Contains both CMDB-declared and PedkAI-discovered entities with
-    enrichment metadata that is never exported to customer systems.
+class FragmentHistoryORM(Base):
+    """Append-only fragment state change log (Audit §7.2).
+
+    Every mutation to a fragment's state is recorded here. Updates/deletes
+    on this table are prohibited (enforced by DB trigger + application guard).
     """
+
+    __tablename__ = "fragment_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    fragment_id = Column(UUID(as_uuid=True), nullable=False)
+    tenant_id = Column(String(100), nullable=False)
+    event_type = Column(String(30), nullable=False)
+    # CREATED, ENRICHED, DECAY_UPDATE, NEAR_MISS, SNAPPED,
+    # STALE, EXPIRED, COLD_ARCHIVED, BOOST_APPLIED
+    event_timestamp = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+    old_state = Column(JSONB, nullable=True)
+    new_state = Column(JSONB, nullable=True)
+    event_detail = Column(JSONB, nullable=True)
+
+    __table_args__ = (
+        Index("ix_fh_fragment_time", "fragment_id", "event_timestamp"),
+        Index("ix_fh_tenant_time", "tenant_id", "event_timestamp"),
+    )
+
+
+class SnapDecisionRecordORM(Base):
+    """Persisted snap evaluation record (Audit §7.1).
+
+    Stores the full scoring breakdown for every snap evaluation that
+    reaches the scoring stage, regardless of outcome.
+    """
+
+    __tablename__ = "snap_decision_record"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
+    new_fragment_id = Column(UUID(as_uuid=True), nullable=False)
+    candidate_fragment_id = Column(UUID(as_uuid=True), nullable=False)
+    evaluated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+    failure_mode_profile = Column(String(50), nullable=False)
+    component_scores = Column(JSONB, nullable=False)
+    # {semantic_sim, topological_prox, entity_overlap, operational_sim}
+    weights_used = Column(JSONB, nullable=False)
+    raw_composite = Column(Float, nullable=False)
+    temporal_modifier = Column(Float, nullable=False)
+    final_score = Column(Float, nullable=False)
+    threshold_applied = Column(Float, nullable=False)
+    decision = Column(String(20), nullable=False)  # SNAP, NEAR_MISS, AFFINITY, NONE
+    multiple_comparisons_k = Column(Integer, nullable=False, default=1)
+
+    __table_args__ = (
+        Index("ix_sdr_tenant_time", "tenant_id", "evaluated_at"),
+        Index("ix_sdr_new_frag", "new_fragment_id"),
+    )
+
+
+class ClusterSnapshotORM(Base):
+    """Persisted cluster evaluation record (Audit §7.3).
+
+    Captures cluster membership and scoring at the moment of evaluation.
+    """
+
+    __tablename__ = "cluster_snapshot"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
+    evaluated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+    member_fragment_ids = Column(JSONB, nullable=False)
+    edges = Column(JSONB, nullable=False)
+    cluster_score = Column(Float, nullable=False)
+    correlation_discount = Column(Float, nullable=False)
+    adjusted_score = Column(Float, nullable=False)
+    threshold = Column(Float, nullable=False)
+    decision = Column(String(20), nullable=False)  # SNAP, NO_SNAP
+
+    __table_args__ = (
+        Index("ix_cs_tenant_time", "tenant_id", "evaluated_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Shadow Topology (LLD §8)
+# ---------------------------------------------------------------------------
+
+class ShadowEntityORM(Base):
+    """PedkAI's private topology node."""
 
     __tablename__ = "shadow_entity"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id = Column(String(100), nullable=False)
-    entity_identifier = Column(String(500), nullable=False)  # Human-readable: LTE-8842-A
-    entity_domain = Column(String(50), nullable=True)  # RAN, TRANSPORT, CORE, IP, VNF, SITE
-    origin = Column(String(30), nullable=False, default='CMDB_DECLARED', server_default='CMDB_DECLARED')  # CMDB_DECLARED | PEDKAI_DISCOVERED | PEDKAI_CORRECTED
+    entity_identifier = Column(String(500), nullable=False)
+    entity_domain = Column(String(50), nullable=True)
+    origin = Column(String(30), nullable=False, default='CMDB_DECLARED', server_default='CMDB_DECLARED')
     discovery_hypothesis_id = Column(UUID(as_uuid=True), nullable=True)
     first_seen = Column(
         DateTime(timezone=True),
@@ -175,12 +333,7 @@ class ShadowEntityORM(Base):
 
 
 class ShadowRelationshipORM(Base):
-    """PedkAI's private topology edge.
-
-    Implements LLD §8 (The Shadow Topology) SHADOW_RELATIONSHIP schema.
-    Evidence summary and scoring metadata are NEVER exported to customer
-    CMDB — only sanitised CI/relationship data goes through the export adapter.
-    """
+    """PedkAI's private topology edge."""
 
     __tablename__ = "shadow_relationship"
 
@@ -188,7 +341,7 @@ class ShadowRelationshipORM(Base):
     tenant_id = Column(String(100), nullable=False)
     from_entity_id = Column(UUID(as_uuid=True), nullable=False)
     to_entity_id = Column(UUID(as_uuid=True), nullable=False)
-    relationship_type = Column(String(50), nullable=False)  # serves | connects_to | depends_on | backed_by
+    relationship_type = Column(String(50), nullable=False)
     origin = Column(String(30), nullable=False, default='CMDB_DECLARED', server_default='CMDB_DECLARED')
     discovery_hypothesis_id = Column(UUID(as_uuid=True), nullable=True)
     confidence = Column(Float, nullable=False, default=1.0, server_default='1.0')
@@ -197,24 +350,19 @@ class ShadowRelationshipORM(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
     )
-    evidence_summary = Column(JSONB, nullable=False, default=dict, server_default='{}')  # NEVER EXPORTED
+    evidence_summary = Column(JSONB, nullable=False, default=dict, server_default='{}')
     exported_to_cmdb = Column(Boolean, nullable=False, default=False, server_default='false')
     exported_at = Column(DateTime(timezone=True), nullable=True)
     cmdb_reference_tag = Column(String(255), nullable=True)
 
     __table_args__ = (
-        Index("ix_shadow_rel_from", "from_entity_id", "tenant_id"),
-        Index("ix_shadow_rel_to", "to_entity_id", "tenant_id"),
+        Index("ix_shadow_rel_from_tenant", "from_entity_id", "tenant_id"),
+        Index("ix_shadow_rel_to_tenant", "to_entity_id", "tenant_id"),
     )
 
 
 class CmdbExportLogORM(Base):
-    """Audit trail for Shadow Topology exports to customer CMDB.
-
-    Implements LLD §8 CMDB_EXPORT_LOG schema.
-    Records both what was sent to the CMDB (sanitised) and what was
-    retained in the Shadow Topology (proprietary).
-    """
+    """Audit trail for CMDB exports."""
 
     __tablename__ = "cmdb_export_log"
 
@@ -222,7 +370,7 @@ class CmdbExportLogORM(Base):
     tenant_id = Column(String(100), nullable=False)
     relationship_id = Column(UUID(as_uuid=True), nullable=True)
     entity_id = Column(UUID(as_uuid=True), nullable=True)
-    export_type = Column(String(30), nullable=False)  # NEW_CI | NEW_RELATIONSHIP | ATTRIBUTE_CORRECTION
+    export_type = Column(String(30), nullable=False)
     exported_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -233,20 +381,19 @@ class CmdbExportLogORM(Base):
     cmdb_reference_tag = Column(String(255), nullable=True)
 
 
-class DiscoveryLedgerORM(Base):
-    """Value Attribution: permanent record of every PedkAI discovery.
+# ---------------------------------------------------------------------------
+# Value Attribution (LLD §13)
+# ---------------------------------------------------------------------------
 
-    Implements LLD §13 (Value Attribution Methodology) DISCOVERY_LEDGER schema.
-    Every hypothesis that reaches ACCEPTED status creates a ledger entry
-    linking the discovery to affected entities and relationships.
-    """
+class DiscoveryLedgerORM(Base):
+    """Permanent record of every PedkAI discovery."""
 
     __tablename__ = "discovery_ledger"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
     hypothesis_id = Column(UUID(as_uuid=True), nullable=True)
-    discovery_type = Column(String(50), nullable=False)  # DARK_NODE | DARK_EDGE | PHANTOM_CI | IDENTITY_MUTATION | DARK_ATTRIBUTE
+    discovery_type = Column(String(50), nullable=False)
     discovered_entities = Column(JSONB, nullable=False, default=list, server_default='[]')
     discovered_relationships = Column(JSONB, nullable=False, default=list, server_default='[]')
     cmdb_reference_tag = Column(String(255), nullable=True)
@@ -257,23 +404,23 @@ class DiscoveryLedgerORM(Base):
     )
     cmdb_exported_at = Column(DateTime(timezone=True), nullable=True)
     discovery_confidence = Column(Float, nullable=False, default=0.0, server_default='0.0')
-    status = Column(String(20), nullable=False, default='ACTIVE', server_default='ACTIVE')  # ACTIVE | SUPERSEDED | INVALIDATED
+    status = Column(String(20), nullable=False, default='ACTIVE', server_default='ACTIVE')
+
+    __table_args__ = (
+        Index("ix_discovery_entities_gin", "discovered_entities",
+              postgresql_using="gin", postgresql_ops={"discovered_entities": "jsonb_path_ops"}),
+    )
 
 
 class ValueEventORM(Base):
-    """Value Attribution: individual value realization event.
-
-    Implements LLD §13 VALUE_EVENT schema.
-    Tracks the ongoing business impact of PedkAI discoveries — MTTR savings,
-    licence reclamations, outage prevention, and illumination credit.
-    """
+    """Individual value realization event."""
 
     __tablename__ = "value_event"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
     ledger_entry_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    event_type = Column(String(50), nullable=False)  # INCIDENT_RESOLUTION | MTTR_REDUCTION | LICENCE_SAVING | OUTAGE_PREVENTION | DARK_GRAPH_REDUCTION
+    event_type = Column(String(50), nullable=False)
     event_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
