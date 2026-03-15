@@ -1,27 +1,25 @@
-"""Abeyance Memory decay scoring service.
+"""DEPRECATED — Old Abeyance Memory decay scoring service.
 
-Implements exponential relevance decay for decision_traces fragments that
-serve as Abeyance Memory entries.  The formula is:
+This module operated on DecisionTraceORM (split-brain architecture, Audit §3.1).
+It is superseded by backend.app.services.abeyance.decay_engine.DecayEngine,
+which operates on AbeyanceFragmentORM with:
+- Source-type-dependent time constants (not a single global lambda)
+- Bounded near-miss boost (capped at 1.5x, not unbounded 1.15^n)
+- Monotonic decay enforcement (new_score <= old_score)
+- Hard lifetime (730 days) and idle timeout (90 days)
+- Full provenance via ProvenanceLogger (INV-10)
 
-    decay_score(t) = base_relevance
-                     × exp(-λ × days_since_created)
-                     × corroboration_multiplier
+DO NOT USE THIS MODULE FOR NEW CODE.
+Import from backend.app.services.abeyance.decay_engine instead.
 
-where:
-    λ                       = ABEYANCE_DECAY_LAMBDA (default 0.05)
-    corroboration_multiplier = 1 + (0.3 × corroboration_count)
-    base_relevance           = 1.0 (fixed — the initial score when created)
-
-A fragment whose decay_score falls below the configured threshold is
-promoted to status='STALE'.  STALE fragments are still retained in the
-database; archival/deletion is handled separately by data_retention.py.
+Kept solely for backward compatibility with tests/test_abeyance_decay.py.
 """
 
 import logging
 import math
+import warnings
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -30,6 +28,12 @@ from backend.app.core.config import get_settings
 from backend.app.models.decision_trace_orm import DecisionTraceORM
 
 logger = logging.getLogger(__name__)
+warnings.warn(
+    "abeyance_decay.AbeyanceDecayService is deprecated. "
+    "Use abeyance.decay_engine.DecayEngine instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 settings = get_settings()
 
@@ -39,11 +43,10 @@ _DEFAULT_STALE_THRESHOLD: float = 0.05
 
 
 class AbeyanceDecayService:
-    """Compute and persist relevance decay scores for Abeyance Memory fragments.
+    """DEPRECATED: Compute and persist relevance decay scores.
 
-    All public methods accept a synchronous SQLAlchemy Session so they can be
-    called from both synchronous test code and from async contexts (wrap in
-    run_in_executor if needed for async callers).
+    Use backend.app.services.abeyance.decay_engine.DecayEngine instead.
+    This class is retained only for backward compatibility with existing tests.
     """
 
     def __init__(self, decay_lambda: Optional[float] = None) -> None:
@@ -53,32 +56,12 @@ class AbeyanceDecayService:
             else settings.abeyance_decay_lambda
         )
 
-    # ------------------------------------------------------------------
-    # Core formula
-    # ------------------------------------------------------------------
-
     def compute_decay(
         self,
         days_since_created: float,
         corroboration_count: int = 0,
     ) -> float:
-        """Return the decay score for a fragment of the given age.
-
-        Parameters
-        ----------
-        days_since_created:
-            Elapsed time since the fragment was created, in fractional days.
-        corroboration_count:
-            Number of times this fragment has been reinforced by corroborating
-            evidence (each corroboration slows future decay).
-
-        Returns
-        -------
-        float
-            A value in (0, ∞) — in practice in (0, 1] for newly-created
-            fragments with reasonable corroboration counts.  Callers should
-            clamp to [0.0, 1.0] if they need a bounded score.
-        """
+        """Return the decay score for a fragment of the given age."""
         if days_since_created < 0:
             days_since_created = 0.0
 
@@ -88,38 +71,18 @@ class AbeyanceDecayService:
             * math.exp(-self._lambda * days_since_created)
             * corroboration_multiplier
         )
-        # Clamp to [0.0, 1.0] — corroboration can push above 1 for very fresh
-        # entries but we cap at 1 to keep the score interpretable.
         return min(raw, 1.0)
 
     def _days_since(self, created_at: datetime) -> float:
         """Return fractional days between created_at and now (UTC)."""
         now = datetime.now(timezone.utc)
-        # Ensure created_at is timezone-aware
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
         delta = now - created_at
         return max(delta.total_seconds() / 86400.0, 0.0)
 
-    # ------------------------------------------------------------------
-    # Batch operations (require a DB session)
-    # ------------------------------------------------------------------
-
     def run_decay_pass(self, tenant_id: str, session: Session) -> dict:
-        """Recompute and persist decay_score for all ACTIVE fragments of a tenant.
-
-        Parameters
-        ----------
-        tenant_id:
-            The tenant whose fragments should be updated.
-        session:
-            An open synchronous SQLAlchemy session.
-
-        Returns
-        -------
-        dict
-            ``{"updated": int}`` — number of rows whose decay_score was written.
-        """
+        """Recompute and persist decay_score for all ACTIVE fragments of a tenant."""
         stmt = select(DecisionTraceORM).where(
             DecisionTraceORM.tenant_id == tenant_id,
             DecisionTraceORM.abeyance_status == "ACTIVE",  # type: ignore[attr-defined]
@@ -151,23 +114,7 @@ class AbeyanceDecayService:
         session: Session,
         threshold: float = _DEFAULT_STALE_THRESHOLD,
     ) -> int:
-        """Transition fragments with decay_score below threshold to status='STALE'.
-
-        Parameters
-        ----------
-        tenant_id:
-            The tenant whose fragments should be evaluated.
-        session:
-            An open synchronous SQLAlchemy session.
-        threshold:
-            Fragments with decay_score strictly below this value are marked STALE.
-            Default is 0.05 (5 % of original relevance).
-
-        Returns
-        -------
-        int
-            Number of fragments transitioned to STALE.
-        """
+        """Transition fragments with decay_score below threshold to status='STALE'."""
         stmt = (
             update(DecisionTraceORM)
             .where(

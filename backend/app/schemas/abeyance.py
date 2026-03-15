@@ -26,9 +26,17 @@ class SourceType(str, Enum):
 
 
 class SnapStatus(str, Enum):
-    """Fragment lifecycle states (LLD §5)."""
-    ABEYANCE = "ABEYANCE"
+    """Fragment lifecycle states (LLD §5, remediated per Forensic Audit).
+
+    State machine:
+        INGESTED → ACTIVE → NEAR_MISS/SNAPPED/STALE → EXPIRED → COLD
+        SNAPPED is terminal (INV-5).
+    """
+    INGESTED = "INGESTED"
+    ACTIVE = "ACTIVE"
+    NEAR_MISS = "NEAR_MISS"
     SNAPPED = "SNAPPED"
+    STALE = "STALE"
     EXPIRED = "EXPIRED"
     COLD = "COLD"
 

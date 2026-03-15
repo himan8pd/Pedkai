@@ -2,26 +2,32 @@
 Abeyance Memory API Router.
 
 Provides endpoints for fragment ingestion, retrieval, snap history,
-and accumulation graph queries.
+accumulation graph queries, shadow topology, incident reconstruction,
+and maintenance.
 
-LLD ref: §5 (Fragment Model), §9 (Snap Engine), §10 (Accumulation Graph)
+Uses the remediated service factory (create_abeyance_services) so all
+services share ProvenanceLogger and RedisNotifier instances.
+
+LLD ref: §5 (Fragment Model), §9 (Snap Engine), §10 (Accumulation Graph),
+         §8 (Shadow Topology), §12 (Incident Reconstruction)
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import async_session_maker, get_db
+from backend.app.core.database import get_db
 from backend.app.core.logging import get_logger
 from backend.app.core.security import INCIDENT_READ, User, get_current_user
 from backend.app.models.abeyance_orm import (
     AbeyanceFragmentORM,
     AccumulationEdgeORM,
     FragmentEntityRefORM,
+    SnapDecisionRecordORM,
 )
 from backend.app.schemas.abeyance import (
     AbeyanceFragmentResponse,
@@ -30,12 +36,49 @@ from backend.app.schemas.abeyance import (
     AccumulationEdgeResponse,
     RawEvidence,
     SnapHistoryEntry,
-    SnapStatus,
 )
+from backend.app.services.abeyance import create_abeyance_services
 
 logger = get_logger(__name__)
 router = APIRouter()
 
+# ---------------------------------------------------------------------------
+# Service singleton (created once, shared across requests)
+# ---------------------------------------------------------------------------
+_services: dict | None = None
+
+
+def _get_services() -> dict:
+    """Lazy-initialise the abeyance service layer."""
+    global _services
+    if _services is None:
+        _services = create_abeyance_services()
+    return _services
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_tenant(current_user: User, query_tenant: str | None) -> str:
+    tid = current_user.tenant_id or query_tenant
+    if not tid:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+    return tid
+
+
+def _primary_failure_mode(fragment: AbeyanceFragmentORM) -> Optional[str]:
+    """Get the primary failure mode from a fragment's tags."""
+    tags = fragment.failure_mode_tags or []
+    if not tags or not isinstance(tags, list):
+        return None
+    best = max(tags, key=lambda t: t.get("confidence", 0) if isinstance(t, dict) else 0)
+    return best.get("divergence_type") if isinstance(best, dict) else None
+
+
+# ---------------------------------------------------------------------------
+# POST /ingest
+# ---------------------------------------------------------------------------
 
 @router.post("/ingest", response_model=AbeyanceFragmentResponse, status_code=201)
 async def ingest_evidence(
@@ -46,59 +89,70 @@ async def ingest_evidence(
     """Submit raw evidence for enrichment and snap evaluation.
 
     The enrichment chain processes the evidence through:
-    1. Entity resolution
-    2. Topology expansion
-    3. Operational fingerprinting
-    4. Failure mode classification + embedding generation
+    1. Entity resolution (LLM + regex fallback)
+    2. Operational fingerprinting
+    3. Failure mode classification
+    4. Temporal-semantic embedding (with validity mask)
 
     Then the snap engine evaluates the enriched fragment against existing
     abeyance fragments for potential snaps.
 
     LLD ref: §6 (Enrichment Chain), §9 (Snap Engine)
     """
-    from backend.app.services.abeyance.enrichment_chain import EnrichmentChain
-    from backend.app.services.abeyance.shadow_topology import get_shadow_topology
-    from backend.app.services.abeyance.snap_engine import SnapEngine
-    from backend.app.services.embedding_service import get_embedding_service
-
-    tenant_id = current_user.tenant_id or payload.tenant_id
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
-
-    # Build enrichment chain
-    embedding_svc = get_embedding_service()
-    shadow_topo = get_shadow_topology(async_session_maker)
-    chain = EnrichmentChain(
-        embedding_service=embedding_svc,
-        shadow_topology=shadow_topo,
-        session_factory=async_session_maker,
-    )
+    tenant_id = _resolve_tenant(current_user, getattr(payload, "tenant_id", None))
+    services = _get_services()
+    enrichment = services["enrichment"]
+    snap_engine = services["snap_engine"]
+    accumulation = services["accumulation_graph"]
 
     # Enrich the raw evidence into a fragment
-    fragment = await chain.enrich(payload, tenant_id, session=db)
-    db.add(fragment)
+    fragment = await enrichment.enrich(
+        session=db,
+        tenant_id=tenant_id,
+        raw_content=payload.content,
+        source_type=payload.source_type.value,
+        event_timestamp=payload.event_timestamp,
+        source_ref=payload.source_ref,
+        source_engineer_id=payload.source_engineer_id,
+        explicit_entity_refs=payload.entity_refs or None,
+        metadata=payload.metadata,
+    )
     await db.flush()
 
     # Run snap evaluation
     try:
-        from backend.app.services.event_bus import EventBus
-        event_bus = EventBus.get_instance()
-        snap_engine = SnapEngine(
-            session_factory=async_session_maker,
-            shadow_topology=shadow_topo,
-            event_bus=event_bus,
+        snap_result = await snap_engine.evaluate(
+            session=db,
+            new_fragment=fragment,
+            tenant_id=tenant_id,
         )
-        snap_result = await snap_engine.evaluate(fragment, tenant_id, session=db)
         logger.info(
-            f"Snap evaluation: fragment={fragment.id}, "
-            f"snaps={len(snap_result.snaps)}, "
-            f"near_misses={len(snap_result.near_misses)}"
+            "Snap evaluation complete",
+            extra={
+                "fragment_id": str(fragment.id),
+                "snaps": len(snap_result.get("snaps", [])),
+                "near_misses": len(snap_result.get("near_misses", [])),
+            },
         )
     except Exception as e:
-        logger.warning(f"Snap evaluation failed (fragment stored): {e}")
+        logger.warning("Snap evaluation failed (fragment stored): %s", e)
+
+    # Check accumulation clusters (best-effort)
+    try:
+        await accumulation.detect_and_evaluate_clusters(
+            session=db,
+            tenant_id=tenant_id,
+            trigger_fragment_id=fragment.id,
+        )
+    except Exception as e:
+        logger.warning("Cluster detection failed: %s", e)
 
     return AbeyanceFragmentResponse.model_validate(fragment)
 
+
+# ---------------------------------------------------------------------------
+# GET /fragments
+# ---------------------------------------------------------------------------
 
 @router.get("/fragments", response_model=List[AbeyanceFragmentSummary])
 async def list_fragments(
@@ -114,9 +168,7 @@ async def list_fragments(
 
     LLD ref: §5 (Fragment Model)
     """
-    tid = current_user.tenant_id or tenant_id
-    if not tid:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
+    tid = _resolve_tenant(current_user, tenant_id)
 
     query = (
         select(AbeyanceFragmentORM)
@@ -139,6 +191,10 @@ async def list_fragments(
     return [AbeyanceFragmentSummary.model_validate(f) for f in fragments]
 
 
+# ---------------------------------------------------------------------------
+# GET /fragments/{fragment_id}
+# ---------------------------------------------------------------------------
+
 @router.get("/fragments/{fragment_id}", response_model=AbeyanceFragmentResponse)
 async def get_fragment(
     fragment_id: UUID,
@@ -156,12 +212,16 @@ async def get_fragment(
     if not fragment:
         raise HTTPException(status_code=404, detail=f"Fragment {fragment_id} not found")
 
-    # Tenant check
+    # Tenant check (INV-7)
     if current_user.tenant_id and fragment.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=404, detail=f"Fragment {fragment_id} not found")
 
     return AbeyanceFragmentResponse.model_validate(fragment)
 
+
+# ---------------------------------------------------------------------------
+# GET /snap-history
+# ---------------------------------------------------------------------------
 
 @router.get("/snap-history", response_model=List[SnapHistoryEntry])
 async def get_snap_history(
@@ -171,40 +231,42 @@ async def get_snap_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
-    """Query successful snaps and near-misses.
+    """Query successful snaps with full scoring provenance.
 
-    Returns fragments that have been snapped to hypotheses, ordered by
-    most recent snap first.
+    Returns snap decision records ordered by most recent evaluation.
 
-    LLD ref: §9 (Snap Engine)
+    LLD ref: §9 (Snap Engine), INV-10 (provenance)
     """
-    tid = current_user.tenant_id or tenant_id
-    if not tid:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
+    tid = _resolve_tenant(current_user, tenant_id)
 
+    # Use snap_decision_record for provenance-backed history
     result = await db.execute(
-        select(AbeyanceFragmentORM)
+        select(SnapDecisionRecordORM)
         .where(
-            AbeyanceFragmentORM.tenant_id == tid,
-            AbeyanceFragmentORM.snap_status == SnapStatus.SNAPPED.value,
+            SnapDecisionRecordORM.tenant_id == tid,
+            SnapDecisionRecordORM.decision.in_(["SNAP", "NEAR_MISS"]),
         )
-        .order_by(AbeyanceFragmentORM.updated_at.desc())
+        .order_by(SnapDecisionRecordORM.evaluated_at.desc())
         .offset(offset)
         .limit(limit)
     )
-    fragments = result.scalars().all()
+    records = result.scalars().all()
 
     snaps = []
-    for f in fragments:
+    for r in records:
         snaps.append(SnapHistoryEntry(
-            fragment_id=f.id,
-            snapped_to=f.snapped_hypothesis_id,
-            snap_score=0.0,
-            failure_mode=_primary_failure_mode(f),
-            snapped_at=f.updated_at,
+            fragment_id=r.new_fragment_id,
+            snapped_to=r.candidate_fragment_id,
+            snap_score=r.final_score,
+            failure_mode=r.failure_mode_profile,
+            snapped_at=r.evaluated_at,
         ))
     return snaps
 
+
+# ---------------------------------------------------------------------------
+# GET /accumulation-graph
+# ---------------------------------------------------------------------------
 
 @router.get("/accumulation-graph", response_model=List[AccumulationEdgeResponse])
 async def get_accumulation_edges(
@@ -218,9 +280,7 @@ async def get_accumulation_edges(
 
     LLD ref: §10 (Accumulation Graph)
     """
-    tid = current_user.tenant_id or tenant_id
-    if not tid:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
+    tid = _resolve_tenant(current_user, tenant_id)
 
     query = select(AccumulationEdgeORM).where(
         AccumulationEdgeORM.tenant_id == tid
@@ -237,34 +297,90 @@ async def get_accumulation_edges(
     return [AccumulationEdgeResponse.model_validate(e) for e in edges]
 
 
+# ---------------------------------------------------------------------------
+# GET /accumulation-graph/clusters
+# ---------------------------------------------------------------------------
+
 @router.get("/accumulation-graph/clusters", response_model=List[AccumulationClusterResponse])
 async def get_accumulation_clusters(
     tenant_id: Optional[str] = Query(None),
-    min_members: int = Query(3, ge=2),
     db: AsyncSession = Depends(get_db),
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
-    """List current accumulation clusters above the size threshold.
+    """List current accumulation clusters.
 
-    Uses connected component detection on the accumulation graph.
+    Uses LME-scored union-find detection (remediated per Audit §4.1, §5.3).
 
     LLD ref: §10 (Accumulation Graph)
     """
-    from backend.app.services.abeyance.accumulation_graph import AccumulationGraphService
+    tid = _resolve_tenant(current_user, tenant_id)
+    services = _get_services()
 
-    tid = current_user.tenant_id or tenant_id
-    if not tid:
-        raise HTTPException(status_code=400, detail="tenant_id is required")
+    clusters = await services["accumulation_graph"].detect_and_evaluate_clusters(
+        session=db,
+        tenant_id=tid,
+    )
+    return [
+        AccumulationClusterResponse(
+            cluster_id=c.get("cluster_id", ""),
+            member_fragment_ids=c.get("member_ids", []),
+            member_count=c.get("member_count", 0),
+            cluster_score=c.get("adjusted_score", c.get("cluster_score", 0.0)),
+            strongest_failure_mode=c.get("strongest_failure_mode"),
+        )
+        for c in clusters
+    ]
 
-    service = AccumulationGraphService(async_session_maker)
-    clusters = await service.detect_clusters(tid, min_members=min_members, session=db)
-    return clusters
+
+# ---------------------------------------------------------------------------
+# GET /reconstruction
+# ---------------------------------------------------------------------------
+
+@router.get("/reconstruction")
+async def reconstruct_incident(
+    tenant_id: Optional[str] = Query(None),
+    hypothesis_id: Optional[UUID] = Query(None),
+    entity_identifier: Optional[str] = Query(None),
+    time_start: Optional[datetime] = Query(None),
+    time_end: Optional[datetime] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Reconstruct incident timeline from provenance data.
+
+    LLD ref: §12 (Incident Reconstruction)
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+    services = _get_services()
+
+    return await services["incident_reconstruction"].reconstruct(
+        session=db,
+        tenant_id=tid,
+        hypothesis_id=hypothesis_id,
+        entity_identifier=entity_identifier,
+        time_start=time_start,
+        time_end=time_end,
+    )
 
 
-def _primary_failure_mode(fragment: AbeyanceFragmentORM) -> Optional[str]:
-    """Get the primary failure mode from a fragment's tags."""
-    tags = fragment.failure_mode_tags or []
-    if not tags or not isinstance(tags, list):
-        return None
-    best = max(tags, key=lambda t: t.get("confidence", 0) if isinstance(t, dict) else 0)
-    return best.get("divergence_type") if isinstance(best, dict) else None
+# ---------------------------------------------------------------------------
+# POST /maintenance
+# ---------------------------------------------------------------------------
+
+@router.post("/maintenance")
+async def run_maintenance(
+    tenant_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Trigger full maintenance pass (decay, prune, expire, orphan cleanup).
+
+    LLD ref: §11 (Decay Engine), §5 (Maintenance)
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+    services = _get_services()
+
+    return await services["maintenance"].run_full_maintenance(
+        session=db,
+        tenant_id=tid,
+    )
