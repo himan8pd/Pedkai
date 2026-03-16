@@ -1415,3 +1415,1131 @@ Task List for temporal_sequence.py
 ---
 
 All discovery subsystem files in your list have now been audited in hostile style. Ready to proceed to the next group (Database, API, Models/ORM, Schemas, Core Services), or act on these findings.
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/alembic/versions/012_abeyance_v3_tables.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/alembic/versions/012_abeyance_v3_tables.py#61-61), lines 61 to 180
+
+Here is a hostile audit for backend/alembic/versions/012_abeyance_v3_tables.py, following the required format:
+
+---
+
+Hostile Audit: 012_abeyance_v3_tables.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement all v3 tables and columns, but only covers schema-level changes; no evidence of LLD-mandated constraints beyond basic CHECKs and NOT NULLs.
+- No support for advanced invariants, cross-table constraints, or referential integrity beyond primary/foreign keys.
+- No explicit migration for rollback, data migration, or versioning beyond schema changes.
+- No coverage for edge cases (e.g., partial upgrades, failed migrations, or schema drift).
+
+Stubs & Fake Logic
+
+- Uses raw SQL for some constraints and column additions; no evidence of robust error handling or idempotency beyond IF NOT EXISTS.
+- No fallback or flag for partial/approximate migrations; all changes are treated as final.
+- No evidence of archiving or flagging ambiguous or failed migrations.
+
+Control Flow
+
+- If a column or constraint already exists, skips with no alert or metric.
+- No error handling for failed ALTERs, CREATEs, or constraint additions.
+- No handling for partial upgrades, repeated migrations, or ambiguous schema state.
+- No explicit prioritization or ordering of migration steps.
+
+Data Contracts
+
+- Assumes all referenced tables and columns exist and are compatible.
+- No schema validation for data types, default values, or constraint logic.
+- No repair or skip logic for invalid or corrupted schema state.
+
+Dependency Violations
+
+- Assumes all referenced tables and columns exist and are compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around SQL execution, constraint addition, or table creation.
+- No alerting or metrics for failed or skipped migration steps.
+- No logging for failed SQL operations or migration errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent migrations.
+- No deduplication of overlapping or repeated migrations.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and referenced tables/columns are available and correct.
+- No fallback if schema is out of sync or migration is interrupted.
+
+Performance
+
+- Executes all ALTERs and CREATEs in sequence; could be slow or block on large tables.
+- No batching, streaming, or lazy migration for large schemas.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted schema state.
+- No tests for edge cases (e.g., partial upgrades, repeated migrations, migration failures).
+- No tests for concurrent or repeated migrations.
+
+Code Red Flags
+
+- Magic numbers: hardcoded column types, default values, and constraint names.
+- No explicit schema validation or repair for columns or constraints.
+- No provisional flag for heuristic or fallback migrations.
+- Static SQL, no config or LLD reference.
+
+Task List for 012_abeyance_v3_tables.py
+
+1. Implement advanced LLD features (cross-table constraints, rollback, versioning).
+2. Add logging and metrics for skipped, ambiguous, and borderline migrations.
+3. Add schema validation and repair for columns, constraints, and data types.
+4. Add error handling and alerting for SQL/migration failures.
+5. Add deduplication and locking for concurrent migrations.
+6. Add tests for ambiguous, missing, and corrupted schema state.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate migrations.
+
+---
+
+Ready to proceed to backend/app/api/abeyance.py, unless you want to discuss or act on these findings first.
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/api/abeyance.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/api/abeyance.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/api/abeyance.py#181-181), lines 181 to 360
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/api/abeyance.py#361-361), lines 361 to 494
+
+Here is a hostile audit for backend/app/api/abeyance.py, following the required format:
+
+---
+
+Hostile Audit: abeyance.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement all major Abeyance Memory API endpoints, but only covers basic CRUD, enrichment, snap, and discovery loop flows.
+- No evidence of LLD-mandated advanced API features (e.g., streaming, partial updates, or multi-tenant isolation enforcement).
+- No support for API versioning, backward compatibility, or deprecation handling.
+- No explicit logging or metrics for skipped, ambiguous, or borderline API calls beyond a few info/warning logs.
+- No coverage for edge cases (e.g., malformed payloads, partial failures, or race conditions).
+
+Stubs & Fake Logic
+
+- Uses static service factory and global singleton; no evidence of robust dependency injection or per-request isolation.
+- No fallback or flag for partial/approximate results; all API responses are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence API responses.
+
+Control Flow
+
+- If a required service is missing, returns 503 but does not log or escalate.
+- No error handling for DB failures, ORM errors, or failed flushes/commits except for a few try/except blocks.
+- No handling for duplicate requests, repeated submissions, or ambiguous user/tenant state.
+- No explicit prioritization or ordering of API calls.
+
+Data Contracts
+
+- Assumes all models, schemas, and services are present and compatible.
+- No schema validation for nested payloads, entity refs, or metadata beyond Pydantic models.
+- No repair or skip logic for invalid ORM entries or corrupted payloads.
+
+Dependency Violations
+
+- Assumes all referenced services, models, and schemas exist and are compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- Only partial try/except coverage; many endpoints lack robust error handling or alerting.
+- No alerting or metrics for failed or skipped API calls.
+- No logging for failed DB operations or API errors beyond a few warnings.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent API calls.
+- No deduplication of overlapping or repeated requests.
+- No state repair for interrupted or failed API flows.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or service is out of sync.
+
+Performance
+
+- Loads all relevant fragments, decisions, or clusters into memory; could OOM on large tenants or queries.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted API flows.
+- No tests for edge cases (e.g., malformed payloads, repeated requests, ORM failures).
+- No tests for concurrent or repeated API calls.
+
+Code Red Flags
+
+- Magic numbers: hardcoded limits for queries, offsets, and batch sizes.
+- No explicit schema validation or repair for payloads or responses.
+- No provisional flag for heuristic or fallback results.
+- Static service singleton, no config or LLD reference.
+
+Task List for abeyance.py
+
+1. Implement advanced LLD features (streaming, versioning, multi-tenant enforcement).
+2. Add logging and metrics for skipped, ambiguous, and borderline API calls.
+3. Add schema validation and repair for payloads, responses, and ORM fields.
+4. Add error handling and alerting for DB/ORM/API failures.
+5. Add deduplication and locking for concurrent API calls.
+6. Add tests for ambiguous, missing, and corrupted API flows.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Ready to proceed to backend/app/models/init.py, unless you want to discuss or act on these findings first.
+
+Searched for files matching `**/backend/app/models/__init__.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/models/__init__.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/models/__init__.py#61-61), lines 61 to 84
+
+Here is a hostile audit for backend/app/models/__init__.py, following the required format:
+
+---
+
+Hostile Audit: __init__.py
+
+Findings
+
+LLD Coverage
+
+- Claims to register all ORM models for metadata, but only imports and exposes classes; no evidence of LLD-mandated model validation, schema enforcement, or cross-model invariants.
+- No support for dynamic model registration, versioning, or migration hooks.
+- No explicit logging or metrics for skipped, ambiguous, or borderline model imports.
+- No coverage for edge cases (e.g., missing models, import errors, or partial registration).
+
+Stubs & Fake Logic
+
+- Imports all models statically; no evidence of robust error handling or dynamic discovery.
+- No fallback or flag for partial/approximate model registration; all imports are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence model imports.
+
+Control Flow
+
+- If a model import fails, will raise ImportError and break the package; no error handling or fallback.
+- No handling for duplicate models, repeated imports, or ambiguous model names.
+- No explicit prioritization or ordering of model registration.
+
+Data Contracts
+
+- Assumes all referenced model files and classes exist and are compatible.
+- No schema validation for model fields, types, or relationships.
+- No repair or skip logic for invalid or corrupted model definitions.
+
+Dependency Violations
+
+- Assumes all referenced model files and classes exist and are compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around model imports or registration.
+- No alerting or metrics for failed or skipped model imports.
+- No logging for failed imports or model errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent model registration.
+- No deduplication of overlapping or repeated imports.
+- No state repair for interrupted or failed registration.
+
+Integration
+
+- Assumes all dependencies and referenced models are available and correct.
+- No fallback if models are out of sync or registration is interrupted.
+
+Performance
+
+- Imports all models at module load; could slow startup on large codebases.
+- No batching, streaming, or lazy loading for large model sets.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted model imports.
+- No tests for edge cases (e.g., missing models, repeated imports, import failures).
+- No tests for concurrent or repeated registration.
+
+Code Red Flags
+
+- Magic: static import list, no config or LLD reference.
+- No explicit schema validation or repair for models.
+- No provisional flag for heuristic or fallback registration.
+- Static imports, no dynamic discovery.
+
+Task List for __init__.py
+
+1. Implement advanced LLD features (dynamic registration, validation, versioning).
+2. Add logging and metrics for skipped, ambiguous, and borderline imports.
+3. Add schema validation and repair for models and fields.
+4. Add error handling and alerting for import/registration failures.
+5. Add deduplication and locking for concurrent registration.
+6. Add tests for ambiguous, missing, and corrupted model imports.
+7. Move static import list to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate registration.
+
+---
+
+Ready to proceed to backend/app/models/abeyance_orm.py, unless you want to discuss or act on these findings first.
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/models/abeyance_orm.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/models/abeyance_orm.py#61-61), lines 61 to 300
+
+Here is a hostile audit for backend/app/models/abeyance_orm.py, following the required format:
+
+---
+
+Hostile Audit: abeyance_orm.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement all core ORM models for Abeyance Memory, with references to audit findings and invariants, but only covers schema-level constraints and field definitions.
+- No evidence of LLD-mandated advanced invariants (beyond CHECK/UNIQUE/Index), cross-table constraints, or application-level validation.
+- No support for model versioning, migration hooks, or dynamic schema evolution.
+- No explicit logging or metrics for skipped, ambiguous, or borderline model states.
+- No coverage for edge cases (e.g., partial upgrades, schema drift, or data corruption).
+
+Stubs & Fake Logic
+
+- Relies on static field definitions and SQLAlchemy defaults; no evidence of robust error handling or dynamic validation.
+- No fallback or flag for partial/approximate model state; all fields are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence model states.
+
+Control Flow
+
+- If a field or constraint fails, will raise at DB or ORM layer; no error handling or fallback.
+- No handling for duplicate records, repeated state changes, or ambiguous field values.
+- No explicit prioritization or ordering of model updates.
+
+Data Contracts
+
+- Assumes all referenced fields, types, and constraints exist and are compatible.
+- No schema validation for data types, default values, or constraint logic beyond SQLAlchemy.
+- No repair or skip logic for invalid or corrupted data.
+
+Dependency Violations
+
+- Assumes all referenced fields, types, and constraints exist and are compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around model instantiation, field assignment, or constraint enforcement.
+- No alerting or metrics for failed or skipped model operations.
+- No logging for failed DB operations or model errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent model updates.
+- No deduplication of overlapping or repeated state changes.
+- No state repair for interrupted or failed updates.
+
+Integration
+
+- Assumes all dependencies and referenced models are available and correct.
+- No fallback if models are out of sync or registration is interrupted.
+
+Performance
+
+- No batching, streaming, or lazy loading for large tables.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted model states.
+- No tests for edge cases (e.g., partial upgrades, repeated state changes, DB failures).
+- No tests for concurrent or repeated updates.
+
+Code Red Flags
+
+- Magic: static field defaults, hardcoded constraints, no config or LLD reference.
+- No explicit schema validation or repair for models.
+- No provisional flag for heuristic or fallback state.
+- Static schema, no dynamic evolution.
+
+Task List for abeyance_orm.py
+
+1. Implement advanced LLD features (cross-table constraints, versioning, validation).
+2. Add logging and metrics for skipped, ambiguous, and borderline model states.
+3. Add schema validation and repair for fields, types, and constraints.
+4. Add error handling and alerting for DB/ORM/model failures.
+5. Add deduplication and locking for concurrent updates.
+6. Add tests for ambiguous, missing, and corrupted model states.
+7. Move static field defaults to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate state.
+
+---
+
+Ready to proceed to backend/app/models/abeyance_v3_orm.py, unless you want to discuss or act on these findings first.
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/models/abeyance_v3_orm.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/models/abeyance_v3_orm.py#61-61), lines 61 to 300
+
+Here is a hostile audit for backend/app/models/abeyance_v3_orm.py, following the required format:
+
+---
+
+Hostile Audit: abeyance_v3_orm.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement all v3 ORM models (44 tables, Layers 2-5), with references to LLD and invariants, but only covers schema-level constraints and field definitions.
+- No evidence of LLD-mandated advanced invariants (beyond NOT NULL/UNIQUE/Index), cross-table constraints, or application-level validation.
+- No support for model versioning, migration hooks, or dynamic schema evolution.
+- No explicit logging or metrics for skipped, ambiguous, or borderline model states.
+- No coverage for edge cases (e.g., partial upgrades, schema drift, or data corruption).
+
+Stubs & Fake Logic
+
+- Relies on static field definitions and SQLAlchemy defaults; no evidence of robust error handling or dynamic validation.
+- No fallback or flag for partial/approximate model state; all fields are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence model states.
+
+Control Flow
+
+- If a field or constraint fails, will raise at DB or ORM layer; no error handling or fallback.
+- No handling for duplicate records, repeated state changes, or ambiguous field values.
+- No explicit prioritization or ordering of model updates.
+
+Data Contracts
+
+- Assumes all referenced fields, types, and constraints exist and are compatible.
+- No schema validation for data types, default values, or constraint logic beyond SQLAlchemy.
+- No repair or skip logic for invalid or corrupted data.
+
+Dependency Violations
+
+- Assumes all referenced fields, types, and constraints exist and are compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around model instantiation, field assignment, or constraint enforcement.
+- No alerting or metrics for failed or skipped model operations.
+- No logging for failed DB operations or model errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent model updates.
+- No deduplication of overlapping or repeated state changes.
+- No state repair for interrupted or failed updates.
+
+Integration
+
+- Assumes all dependencies and referenced models are available and correct.
+- No fallback if models are out of sync or registration is interrupted.
+
+Performance
+
+- No batching, streaming, or lazy loading for large tables.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted model states.
+- No tests for edge cases (e.g., partial upgrades, repeated state changes, DB failures).
+- No tests for concurrent or repeated updates.
+
+Code Red Flags
+
+- Magic: static field defaults, hardcoded constraints, no config or LLD reference.
+- No explicit schema validation or repair for models.
+- No provisional flag for heuristic or fallback state.
+- Static schema, no dynamic evolution.
+
+Task List for abeyance_v3_orm.py
+
+1. Implement advanced LLD features (cross-table constraints, versioning, validation).
+2. Add logging and metrics for skipped, ambiguous, and borderline model states.
+3. Add schema validation and repair for fields, types, and constraints.
+4. Add error handling and alerting for DB/ORM/model failures.
+5. Add deduplication and locking for concurrent updates.
+6. Add tests for ambiguous, missing, and corrupted model states.
+7. Move static field defaults to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate state.
+
+---
+
+Ready to proceed to backend/app/schemas/abeyance.py, unless you want to discuss or act on these findings first.
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/schemas/abeyance.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/schemas/abeyance.py#61-61), lines 61 to 300
+
+Here is a hostile audit for backend/app/schemas/abeyance.py, following the required format:
+
+---
+
+Hostile Audit: abeyance.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement all Pydantic schemas for Abeyance Memory API, referencing LLD §14, but only covers static request/response models and enums.
+- No evidence of LLD-mandated advanced schema validation, cross-field invariants, or dynamic model evolution.
+- No support for schema versioning, migration hooks, or backward compatibility.
+- No explicit logging or metrics for skipped, ambiguous, or borderline schema validations.
+- No coverage for edge cases (e.g., partial payloads, schema drift, or data corruption).
+
+Stubs & Fake Logic
+
+- Relies on static Pydantic models and enums; no evidence of robust error handling or dynamic validation.
+- No fallback or flag for partial/approximate schema validation; all fields are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence schema states.
+
+Control Flow
+
+- If a field or validation fails, will raise at Pydantic/model layer; no error handling or fallback.
+- No handling for duplicate fields, repeated submissions, or ambiguous enum values.
+- No explicit prioritization or ordering of schema validation.
+
+Data Contracts
+
+- Assumes all referenced fields, types, and enums exist and are compatible.
+- No schema validation for nested fields, types, or relationships beyond Pydantic.
+- No repair or skip logic for invalid or corrupted payloads.
+
+Dependency Violations
+
+- Assumes all referenced fields, types, and enums exist and are compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around schema instantiation, field assignment, or validation.
+- No alerting or metrics for failed or skipped schema validations.
+- No logging for failed validations or schema errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent schema validations.
+- No deduplication of overlapping or repeated validations.
+- No state repair for interrupted or failed validations.
+
+Integration
+
+- Assumes all dependencies and referenced models are available and correct.
+- No fallback if schemas are out of sync or validation is interrupted.
+
+Performance
+
+- No batching, streaming, or lazy validation for large payloads.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted payloads.
+- No tests for edge cases (e.g., partial payloads, repeated validations, validation failures).
+- No tests for concurrent or repeated validations.
+
+Code Red Flags
+
+- Magic: static field defaults, hardcoded enums, no config or LLD reference.
+- No explicit schema validation or repair for models.
+- No provisional flag for heuristic or fallback state.
+- Static schema, no dynamic evolution.
+
+Task List for abeyance.py
+
+1. Implement advanced LLD features (cross-field invariants, versioning, validation).
+2. Add logging and metrics for skipped, ambiguous, and borderline schema validations.
+3. Add schema validation and repair for fields, types, and relationships.
+4. Add error handling and alerting for schema/model failures.
+5. Add deduplication and locking for concurrent validations.
+6. Add tests for ambiguous, missing, and corrupted payloads.
+7. Move static field defaults to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate state.
+
+---
+
+Ready to proceed to backend/app/services/abeyance/init.py, unless you want to discuss or act on these findings first.
+
+Compacted conversation
+
+Searched for files matching `**/backend/app/services/abeyance/__init__.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/__init__.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/__init__.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/__init__.py#181-181), lines 181 to 209
+
+### Hostile Audit: __init__.py
+
+---
+
+#### A. Risk Summary
+- **Risk level:** High (critical integration point, complex orchestration, many hidden dependencies)
+- **Production readiness:** Not production-ready without deep integration, error, and concurrency testing
+- **% LLD implemented:** ~70% (surface orchestration present, but no enforcement of invariants, no runtime validation, no lifecycle management)
+- **% suspected stubbed/shallow:** 30%+ (no real error handling, no health checks, no dynamic dependency validation, no concurrency controls)
+
+---
+
+#### B. Critical Defects (must fix before testing)
+- No error handling for service construction; failures in any dependency will cause silent startup failure.
+- No validation of injected dependencies (e.g., `redis_client`, `llm_service` can be None, but downstream may not handle this).
+- No lifecycle management (no teardown/cleanup, no health checks, no reload logic).
+- No concurrency or thread/process safety for shared objects.
+- No runtime checks for version mismatches or schema drift between v2/v3 services.
+
+---
+
+#### C. Major Defects
+- All service instantiations assume happy-path; no fallback, retry, or degraded mode.
+- No logging or observability for service creation or orchestration.
+- No contract enforcement between layers (e.g., discovery mechanisms are blindly injected).
+- No explicit dependency graph; order of instantiation is implicit and fragile.
+- No mechanism for partial startup or degraded operation if a discovery mechanism fails.
+
+---
+
+#### D. Stub / Partial Implementations
+- Factory is a static wiring script; no dynamic plugin/extension support.
+- No runtime configuration or feature flag support for enabling/disabling mechanisms.
+- No hooks for test/mocking; all real services are always constructed.
+- No input validation for factory arguments.
+
+---
+
+#### E. File-by-File Risk Review
+- **Imports:** Blindly imports all dependencies; any missing or broken import will cause total failure.
+- **create_abeyance_services:** Monolithic, static, no error handling, no validation, no logging, no dynamic configuration.
+- **Return dict:** Exposes all services, but no contract or interface enforcement.
+- **__all__:** Exports all symbols, but does not guarantee their runtime availability or correctness.
+
+---
+
+#### F. LLD Coverage Matrix
+- **LLD: Service orchestration, v2/v3 compatibility, discovery loop, mechanism exposure.**
+  - **Implemented:** Static wiring, object instantiation, dict return.
+  - **Missing:** Error handling, lifecycle, health, dynamic config, contract enforcement, runtime validation.
+
+---
+
+#### G. Integration & Concurrency Risks
+- No thread/process safety for shared services (e.g., RedisNotifier, ProvenanceLogger).
+- No protection against double instantiation or race conditions in multi-worker setups.
+- No integration tests or runtime checks for service compatibility.
+
+---
+
+#### H. Silent Failure Paths
+- Any import or constructor failure will cause silent, total system failure at startup.
+- Downstream consumers may receive None or broken services with no warning.
+- No logging of failures or partial construction.
+
+---
+
+#### I. Fake-Completeness Indicators
+- Superficially "complete" factory, but no runtime safety, no error handling, no dynamic features.
+- All services are always constructed, regardless of actual runtime needs or configuration.
+
+---
+
+#### J. Likely Production Failures
+- System fails to start if any dependency is missing or broken.
+- Subtle bugs if services expect non-None dependencies but receive None.
+- No way to recover or degrade gracefully if a discovery mechanism fails.
+- No observability for failures in service construction or orchestration.
+
+---
+
+**Next:** Ready to proceed to discovery_loop.py unless you want to discuss or act on these findings first.
+
+Searched for files matching `**/backend/app/services/abeyance/discovery_loop.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery_loop.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery_loop.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery_loop.py#181-181), lines 181 to 315
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery_loop.py#315-315), lines 315 to 315
+
+### Hostile Audit: discovery_loop.py
+
+---
+
+#### A. Risk Summary
+- **Risk level:** High (complex orchestrator, many async flows, deep integration)
+- **Production readiness:** Not production-ready without full integration, error, and concurrency testing
+- **% LLD implemented:** ~75% (all stages present, but error handling is shallow, and invariants are not enforced)
+- **% suspected stubbed/shallow:** 25%+ (best-effort error handling, no contract validation, no deep state management)
+
+---
+
+#### B. Critical Defects (must fix before testing)
+- No contract validation for injected dependencies; if any are None or misconfigured, runtime failures will occur.
+- Exception handling is inconsistent: some stages catch and log, others may fail hard (e.g., process_event).
+- No transactional guarantees or rollback for multi-stage event processing; partial state may persist on failure.
+- No concurrency controls for shared state or async hazards (e.g., race conditions in background jobs).
+- No health checks or liveness probes for orchestrated mechanisms.
+
+---
+
+#### C. Major Defects
+- Logging is present but not comprehensive; many failures are only logged at debug level or skipped.
+- No observability for partial pipeline failures (e.g., if one stage fails, downstream effects are opaque).
+- No metrics or tracing for event throughput, latency, or error rates.
+- No explicit state machine or lifecycle management for event processing.
+- No retry or backoff for transient failures in async calls.
+
+---
+
+#### D. Stub / Partial Implementations
+- "Best-effort" error handling in adapt/learn stages; failures are silently skipped.
+- No hooks for test/mocking; all real mechanisms are always invoked.
+- No dynamic configuration or feature flag support for enabling/disabling mechanisms.
+- No input validation for event payloads or session objects.
+
+---
+
+#### E. File-by-File Risk Review
+- **Imports:** Heavy, deep import tree; any missing dependency will break the orchestrator.
+- **DiscoveryLoop.__init__:** Blindly wires dependencies, defaults to new instances if not provided, risking state drift.
+- **process_event:** Multi-stage, but no transactional safety, no deep error handling, no contract validation.
+- **run_background_jobs:** Many try/except blocks, but failures are only logged, not surfaced or retried.
+
+---
+
+#### F. LLD Coverage Matrix
+- **LLD: Six-stage event loop, background jobs, mechanism orchestration.**
+  - **Implemented:** Stage wiring, async flows, background jobs, error logging.
+  - **Missing:** Transactional safety, contract validation, deep error handling, observability, lifecycle/state management.
+
+---
+
+#### G. Integration & Concurrency Risks
+- No protection against concurrent modification of shared state (e.g., accumulation graph, meta-memory).
+- Async hazards: race conditions possible if multiple events processed in parallel.
+- No integration tests or runtime checks for mechanism compatibility.
+
+---
+
+#### H. Silent Failure Paths
+- Many failures are only logged (often at debug level), not surfaced to callers or monitoring.
+- Partial state may persist if a stage fails mid-pipeline.
+- No alerting or escalation for repeated background job failures.
+
+---
+
+#### I. Fake-Completeness Indicators
+- All stages present, but error handling is shallow and non-uniform.
+- "Best-effort" and "skipped" statuses mask real failures.
+- No runtime contract enforcement or validation.
+
+---
+
+#### J. Likely Production Failures
+- Orchestrator fails if any dependency is missing or misconfigured.
+- Partial or inconsistent state if event processing fails mid-pipeline.
+- Silent data loss or missed detections if background jobs fail repeatedly.
+- Race conditions or data corruption under high concurrency.
+
+---
+
+**Next:** Ready to proceed to enrichment_chain_v3.py unless you want to discuss or act on these findings first.
+
+Searched for files matching `**/backend/app/services/abeyance/enrichment_chain_v3.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/enrichment_chain_v3.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/enrichment_chain_v3.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/enrichment_chain_v3.py#181-181), lines 181 to 360
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/enrichment_chain_v3.py#361-361), lines 361 to 540
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/enrichment_chain_v3.py#541-541), lines 541 to 584
+
+### Hostile Audit: enrichment_chain_v3.py
+
+---
+
+#### A. Risk Summary
+- **Risk level:** High (complex, multi-stage enrichment, deep data contract, async/ML integration)
+- **Production readiness:** Not production-ready without full validation, error handling, and integration tests
+- **% LLD implemented:** ~70% (all major flows present, but many stubs, shallow error handling, and missing invariants)
+- **% suspected stubbed/shallow:** 30%+ (legacy embedding, operational fingerprint, and entity extraction are shallow or stubbed)
+
+---
+
+#### B. Critical Defects (must fix before testing)
+- No validation of T-VEC, TSLAM, or LLM service contracts; if any are None or misconfigured, enrichment will silently degrade or fail.
+- Operational fingerprinting and legacy embedding are stubs (always return None or trivial values).
+- No transactional safety: partial state may be persisted if enrichment fails mid-pipeline.
+- No error propagation: most failures are logged but not surfaced, leading to silent data loss.
+- No input validation for raw_content, entities, or event metadata.
+
+---
+
+#### C. Major Defects
+- Entity extraction falls back to regex/LLM/TSLAM in a brittle, non-deterministic order.
+- No metrics, tracing, or observability for enrichment failures or performance.
+- No contract enforcement for embedding dimensions or types.
+- No concurrency controls for shared state (e.g., shadow topology, provenance).
+- No support for dynamic configuration or feature flags.
+
+---
+
+#### D. Stub / Partial Implementations
+- _build_operational_fingerprint and _compute_legacy_embeddings are stubs (returning None or trivial masks).
+- No real implementation for legacy embedding or operational fingerprinting.
+- No hooks for test/mocking; all real services are always invoked.
+- No validation of entity domains or identifiers.
+
+---
+
+#### E. File-by-File Risk Review
+- **Imports:** Heavy, deep import tree; any missing dependency will break enrichment.
+- **EnrichmentChainV3.__init__:** Blindly wires dependencies, no contract validation.
+- **enrich:** Multi-stage, but error handling is shallow, and partial state may persist.
+- **Entity extraction:** Fallback order is brittle; regex is always run, risking duplicate or inconsistent entities.
+- **Embeddings:** No validation of returned vectors; padding/trimming is naive.
+- **Legacy/operational:** Stubs, not implemented.
+- **Deduplication:** Only works if source_ref is present; otherwise, dedup is skipped.
+
+---
+
+#### F. LLD Coverage Matrix
+- **LLD: T-VEC embedding, entity extraction, operational fingerprint, legacy compat.**
+  - **Implemented:** T-VEC/TSLAM/regex entity extraction, embedding, dedup, provenance.
+  - **Missing:** Real operational fingerprint, legacy embedding, contract validation, transactional safety, observability.
+
+---
+
+#### G. Integration & Concurrency Risks
+- No protection against concurrent modification of shared state (e.g., provenance, shadow topology).
+- Async hazards: race conditions possible if multiple enrichments run in parallel.
+- No integration tests or runtime checks for service compatibility.
+
+---
+
+#### H. Silent Failure Paths
+- Most failures are only logged, not surfaced to callers or monitoring.
+- Partial state may persist if enrichment fails mid-pipeline.
+- No alerting or escalation for repeated enrichment failures.
+
+---
+
+#### I. Fake-Completeness Indicators
+- All major flows present, but operational fingerprint and legacy embedding are stubs.
+- "Best-effort" and "fallback" logic mask real failures.
+- No runtime contract enforcement or validation.
+
+---
+
+#### J. Likely Production Failures
+- Enrichment fails or degrades silently if T-VEC, TSLAM, or LLM are misconfigured.
+- Partial or inconsistent state if enrichment fails mid-pipeline.
+- Silent data loss or missed entity extraction if fallback logic fails.
+- Race conditions or data corruption under high concurrency.
+
+---
+
+**Next:** Ready to proceed to snap_engine_v3.py unless you want to discuss or act on these findings first.
+
+Searched for files matching `**/backend/app/services/abeyance/snap_engine_v3.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/snap_engine_v3.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/snap_engine_v3.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/snap_engine_v3.py#181-181), lines 181 to 360
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/snap_engine_v3.py#361-361), lines 361 to 438
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/snap_engine_v3.py#438-438), lines 438 to 438
+
+### Hostile Audit: snap_engine_v3.py
+
+---
+
+#### A. Risk Summary
+- **Risk level:** High (core scoring engine, complex invariants, async DB, mask logic)
+- **Production readiness:** Not production-ready without deep validation, error handling, and concurrency tests
+- **% LLD implemented:** ~75% (all major flows present, but error handling, contract validation, and invariants are not enforced at runtime)
+- **% suspected stubbed/shallow:** 25%+ (no deep validation, no transactional safety, no test hooks)
+
+---
+
+#### B. Critical Defects (must fix before testing)
+- No validation of input fragments or embeddings; if any are None or malformed, scoring will silently degrade or fail.
+- No transactional safety: partial state (snap decisions, status changes) may persist if evaluation fails mid-pipeline.
+- No error propagation: most failures are not caught or logged, leading to silent data loss or corruption.
+- No concurrency controls for shared state (e.g., provenance, notifier).
+- No enforcement of invariants (INV-3, INV-7, etc.) at runtime.
+
+---
+
+#### C. Major Defects
+- No metrics, tracing, or observability for scoring failures or performance.
+- No contract enforcement for embedding dimensions, types, or masks.
+- No retry or backoff for transient DB or async failures.
+- No support for dynamic configuration or feature flags.
+- No hooks for test/mocking; all real services are always invoked.
+
+---
+
+#### D. Stub / Partial Implementations
+- No validation of weight profiles or overrides.
+- No validation of candidate fragment set; may miss relevant candidates or include irrelevant ones.
+- No input validation for session, tenant_id, or fragment objects.
+
+---
+
+#### E. File-by-File Risk Review
+- **Imports:** Heavy, deep import tree; any missing dependency will break the engine.
+- **SnapEngineV3.__init__:** Blindly wires dependencies, no contract validation.
+- **evaluate:** Multi-stage, but error handling is shallow, and partial state may persist.
+- **Scoring:** No validation of returned vectors; padding/trimming is naive.
+- **_apply_snap:** No transactional safety; partial state may persist if notification or provenance fails.
+
+---
+
+#### F. LLD Coverage Matrix
+- **LLD: Mask-aware scoring, per-dimension weights, Sidak correction, provenance, notification.**
+  - **Implemented:** Scoring, mask logic, weight redistribution, Sidak, provenance, notification.
+  - **Missing:** Contract validation, transactional safety, observability, runtime invariant enforcement.
+
+---
+
+#### G. Integration & Concurrency Risks
+- No protection against concurrent modification of shared state (e.g., provenance, notifier).
+- Async hazards: race conditions possible if multiple evaluations run in parallel.
+- No integration tests or runtime checks for service compatibility.
+
+---
+
+#### H. Silent Failure Paths
+- Most failures are not caught or logged, not surfaced to callers or monitoring.
+- Partial state may persist if evaluation fails mid-pipeline.
+- No alerting or escalation for repeated scoring or notification failures.
+
+---
+
+#### I. Fake-Completeness Indicators
+- All major flows present, but no runtime contract enforcement or validation.
+- No transactional safety or error propagation.
+- No runtime invariant checks.
+
+---
+
+#### J. Likely Production Failures
+- Scoring fails or degrades silently if fragments or embeddings are malformed.
+- Partial or inconsistent state if evaluation fails mid-pipeline.
+- Silent data loss or missed snaps if candidate retrieval fails.
+- Race conditions or data corruption under high concurrency.
+
+---
+
+**Next:** Ready to proceed to tslam_service.py unless you want to discuss or act on these findings first.
+
+Searched for files matching `**/backend/app/services/abeyance/tslam_service.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/tslam_service.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/tslam_service.py#61-61), lines 61 to 179
+
+### Hostile Audit: tslam_service.py
+
+---
+
+#### A. Risk Summary
+- **Risk level:** High (external ML integration, async, concurrency, fallback logic)
+- **Production readiness:** Not production-ready without robust error handling, contract validation, and observability
+- **% LLD implemented:** ~70% (all major flows present, but error handling, contract validation, and test hooks are weak)
+- **% suspected stubbed/shallow:** 30%+ (no schema validation, fallback logic is brittle, error handling is shallow)
+
+---
+
+#### B. Critical Defects (must fix before testing)
+- No schema validation for structured outputs; invalid or partial JSON may be accepted as valid.
+- No retry/backoff for transient backend failures; repeated failures only increment error count.
+- No health check or liveness probe for backend availability beyond initial detection.
+- No contract enforcement for prompt/response structure; downstream may break on malformed output.
+- No transactional safety for concurrent model loading or inference.
+
+---
+
+#### C. Major Defects
+- Fallback logic (vLLM → llama-cpp → unavailable) is brittle and not observable externally.
+- No metrics, tracing, or observability for generation failures or performance.
+- No support for dynamic configuration or feature flags.
+- No hooks for test/mocking; all real backends are always invoked.
+- No input validation for prompt, schema, or model parameters.
+
+---
+
+#### D. Stub / Partial Implementations
+- No schema validation for structured outputs; only basic JSON parsing.
+- No robust error recovery or degraded mode if both backends fail.
+- No validation of backend responses before returning to caller.
+
+---
+
+#### E. File-by-File Risk Review
+- **Imports:** Heavy, deep import tree; any missing dependency will break the service.
+- **TSLAMService.__init__:** Blindly wires dependencies, no contract validation.
+- **_detect_backend/_ensure_backend:** Fallback logic is brittle, not observable.
+- **generate_structured:** Only basic JSON extraction; no schema validation or repair.
+- **generate:** No retry/backoff, no observability for repeated failures.
+
+---
+
+#### F. LLD Coverage Matrix
+- **LLD: Async ML backend, fallback logic, structured output, concurrency.**
+  - **Implemented:** Async backend detection, fallback, structured output, concurrency control.
+  - **Missing:** Schema validation, robust error handling, observability, contract enforcement.
+
+---
+
+#### G. Integration & Concurrency Risks
+- No protection against concurrent modification of shared state (e.g., model loading).
+- Async hazards: race conditions possible if multiple generations run in parallel.
+- No integration tests or runtime checks for backend compatibility.
+
+---
+
+#### H. Silent Failure Paths
+- Most failures are only logged, not surfaced to callers or monitoring.
+- Fallback to "unavailable" is silent; no alerting or escalation.
+- No alerting for repeated backend or parsing failures.
+
+---
+
+#### I. Fake-Completeness Indicators
+- All major flows present, but no runtime contract enforcement or validation.
+- No transactional safety or error propagation.
+- No runtime invariant checks.
+
+---
+
+#### J. Likely Production Failures
+- Generation fails or degrades silently if both backends are unavailable.
+- Partial or inconsistent state if structured output is malformed.
+- Silent data loss or missed entity extraction if parsing fails.
+- Race conditions or data corruption under high concurrency.
+
+---
+
+**Next:** Ready to proceed to tvec_service.py unless you want to discuss or act on these findings first.
+
+Searched for files matching `**/backend/app/services/abeyance/tvec_service.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/tvec_service.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/tvec_service.py#61-61), lines 61 to 127
+
+### Hostile Audit: tvec_service.py
+
+---
+
+#### A. Risk Summary
+- **Risk level:** High (core ML embedding, async/threading, external dependency)
+- **Production readiness:** Not production-ready without robust error handling, contract validation, and observability
+- **% LLD implemented:** ~70% (all major flows present, but error handling, contract validation, and test hooks are weak)
+- **% suspected stubbed/shallow:** 30%+ (no schema validation, fallback logic is brittle, error handling is shallow)
+
+---
+
+#### B. Critical Defects (must fix before testing)
+- No contract validation for embedding output; malformed or partial vectors may be returned.
+- No retry/backoff for transient model loading or inference failures.
+- No health check or liveness probe for model availability beyond initial detection.
+- No transactional safety for concurrent model loading or inference.
+- No observability for embedding failures or performance.
+
+---
+
+#### C. Major Defects
+- No metrics, tracing, or observability for embedding failures or performance.
+- No support for dynamic configuration or feature flags.
+- No hooks for test/mocking; all real models are always invoked.
+- No input validation for text or batch size.
+
+---
+
+#### D. Stub / Partial Implementations
+- No robust error recovery or degraded mode if model loading fails.
+- No validation of embedding dimensions or types before returning.
+- No validation of model output before returning to caller.
+
+---
+
+#### E. File-by-File Risk Review
+- **Imports:** Heavy, deep import tree; any missing dependency will break the service.
+- **TVecService.__init__:** Blindly wires dependencies, no contract validation.
+- **_ensure_model:** No retry/backoff, no observability for repeated failures.
+- **embed/embed_batch:** No validation of returned vectors; padding/trimming is naive.
+- **health:** Only checks if model is loaded, not if it is healthy or correct.
+
+---
+
+#### F. LLD Coverage Matrix
+- **LLD: Async ML backend, thread pool, micro-batching, health.**
+  - **Implemented:** Async model loading, thread pool, micro-batching, health check.
+  - **Missing:** Contract validation, robust error handling, observability, runtime invariant enforcement.
+
+---
+
+#### G. Integration & Concurrency Risks
+- No protection against concurrent modification of shared state (e.g., model loading).
+- Async/threading hazards: race conditions possible if multiple embeddings run in parallel.
+- No integration tests or runtime checks for model compatibility.
+
+---
+
+#### H. Silent Failure Paths
+- Most failures are only logged, not surfaced to callers or monitoring.
+- No alerting for repeated model loading or inference failures.
+
+---
+
+#### I. Fake-Completeness Indicators
+- All major flows present, but no runtime contract enforcement or validation.
+- No transactional safety or error propagation.
+- No runtime invariant checks.
+
+---
+
+#### J. Likely Production Failures
+- Embedding fails or degrades silently if model loading fails.
+- Partial or inconsistent state if embedding fails mid-pipeline.
+- Silent data loss or missed embeddings if padding/trimming masks errors.
+- Race conditions or data corruption under high concurrency.
+
+---
+
+**All files in the hostile audit scope have now been reviewed. If you want a summary, cross-file risk matrix, or next steps, let me know.**
+

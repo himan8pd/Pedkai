@@ -8,6 +8,7 @@ Wires all 14 discovery mechanisms through the five-layer cognitive architecture.
 from __future__ import annotations
 
 import logging
+import traceback
 from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -116,6 +117,28 @@ class DiscoveryLoop:
         self._meta_memory = meta_memory or MetaMemoryService()
         self._evolution = evolutionary_patterns or EvolutionaryPatternService()
 
+        # Error tracking: counts of errors per mechanism for observability
+        self._error_counts: dict[str, int] = {}
+
+    def _record_mechanism_error(self, mechanism: str, exc: Exception) -> dict:
+        """Record a mechanism error for observability. Returns error detail dict."""
+        self._error_counts[mechanism] = self._error_counts.get(mechanism, 0) + 1
+        logger.warning(
+            "Discovery mechanism failed: %s (total_failures=%d): %s",
+            mechanism, self._error_counts[mechanism], exc,
+            exc_info=True,
+        )
+        return {
+            "status": "failed",
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "total_failures": self._error_counts[mechanism],
+        }
+
+    def get_error_counts(self) -> dict[str, int]:
+        """Return cumulative error counts per mechanism for monitoring/alerting."""
+        return dict(self._error_counts)
+
     async def process_event(
         self,
         session: AsyncSession,
@@ -216,21 +239,21 @@ class DiscoveryLoop:
         result["stages"]["generate"] = generate_results
 
         # Stage 5: Learn — integrate calibrated weights
+        calibrated = {}
         try:
             calibrated = await self._calibration.get_all_calibrated_weights(session, tenant_id)
             if calibrated:
                 self._snap.set_weight_overrides(calibrated)
-        except Exception:
-            logger.debug("Calibration weight integration skipped", exc_info=True)
-
-        result["stages"]["learn"] = {"calibrated_profiles": len(calibrated) if 'calibrated' in dir() else 0}
+            result["stages"]["learn"] = {"calibrated_profiles": len(calibrated)}
+        except Exception as exc:
+            result["stages"]["learn"] = self._record_mechanism_error("outcome_calibration", exc)
 
         # Stage 6: Adapt — meta-memory (async, best-effort)
         try:
             bias = await self._meta_memory.compute_bias(session, tenant_id)
             result["stages"]["adapt"] = {"bias_areas": len(bias)}
-        except Exception:
-            result["stages"]["adapt"] = {"status": "skipped"}
+        except Exception as exc:
+            result["stages"]["adapt"] = self._record_mechanism_error("meta_memory", exc)
 
         await session.flush()
         return result
@@ -249,9 +272,8 @@ class DiscoveryLoop:
         # Ignorance mapping scan
         try:
             results["ignorance"] = await self._ignorance.run_scan(session, tenant_id)
-        except Exception:
-            logger.warning("Ignorance scan failed", exc_info=True)
-            results["ignorance"] = {"status": "failed"}
+        except Exception as exc:
+            results["ignorance"] = self._record_mechanism_error("ignorance_mapper", exc)
 
         # Bridge detection
         try:
@@ -262,53 +284,57 @@ class DiscoveryLoop:
                     session, tenant_id, "BRIDGE_DISCOVERY", b.id,
                     context={"severity": b.severity},
                 )
-        except Exception:
-            logger.warning("Bridge detection failed", exc_info=True)
-            results["bridges"] = {"status": "failed"}
+        except Exception as exc:
+            results["bridges"] = self._record_mechanism_error("bridge_detector", exc)
 
         # Pattern conflict detection
         try:
             conflicts = await self._conflict.scan(session, tenant_id)
             results["conflicts"] = {"count": len(conflicts)}
-        except Exception:
-            logger.warning("Conflict detection failed", exc_info=True)
-            results["conflicts"] = {"status": "failed"}
+        except Exception as exc:
+            results["conflicts"] = self._record_mechanism_error("pattern_conflict", exc)
 
         # Causal direction analysis
         try:
             results["causal"] = await self._causal.run_analysis(session, tenant_id)
-        except Exception:
-            logger.warning("Causal analysis failed", exc_info=True)
-            results["causal"] = {"status": "failed"}
+        except Exception as exc:
+            results["causal"] = self._record_mechanism_error("causal_direction", exc)
 
         # Pattern compression
         from backend.app.services.abeyance.snap_engine_v3 import WEIGHT_PROFILES_V3
         for profile in WEIGHT_PROFILES_V3:
             try:
                 await self._compressor.analyze(session, tenant_id, profile)
-            except Exception:
-                logger.debug("Compression analysis failed for %s", profile)
+            except Exception as exc:
+                results.setdefault("compression_errors", []).append(
+                    self._record_mechanism_error(f"pattern_compression:{profile}", exc)
+                )
 
         # Counterfactual simulation
         try:
             results["counterfactual"] = await self._counterfactual.run_batch(session, tenant_id)
-        except Exception:
-            logger.warning("Counterfactual sim failed", exc_info=True)
-            results["counterfactual"] = {"status": "failed"}
+        except Exception as exc:
+            results["counterfactual"] = self._record_mechanism_error("counterfactual_sim", exc)
 
         # Evolutionary patterns
         for profile in WEIGHT_PROFILES_V3:
             try:
                 await self._evolution.evolve_generation(session, tenant_id, profile)
-            except Exception:
-                logger.debug("Evolution failed for %s", profile)
+            except Exception as exc:
+                results.setdefault("evolution_errors", []).append(
+                    self._record_mechanism_error(f"evolutionary_patterns:{profile}", exc)
+                )
 
         # Hypothesis expiration
         try:
             expired = await self._hypothesis.expire_hypotheses(session, tenant_id)
             results["hypotheses_expired"] = expired
-        except Exception:
-            logger.debug("Hypothesis expiration failed")
+        except Exception as exc:
+            results["hypotheses_expired"] = self._record_mechanism_error("hypothesis_expiration", exc)
+
+        # Append cumulative error summary for monitoring
+        if self._error_counts:
+            results["_error_summary"] = dict(self._error_counts)
 
         await session.flush()
         return results

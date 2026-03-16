@@ -641,6 +641,8 @@ class CounterfactualSimulationResultORM(Base):
     decision_flip_count = Column(Integer, nullable=False, default=0)
     decision_flip_rate = Column(Float, nullable=False, default=0.0)
     pairs_evaluated = Column(Integer, nullable=False, default=0)
+    # True when using subtraction heuristic instead of full re-score replay (LLD §10.2)
+    heuristic_used = Column(Boolean, nullable=False, default=True, server_default='true')
     created_at = Column(
         DateTime(timezone=True), nullable=False,
         default=lambda: datetime.now(timezone.utc), server_default=func.now(),

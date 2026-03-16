@@ -438,30 +438,29 @@ class EnrichmentChainV3:
                 if oper_text:
                     oper_vec = results[idx] if idx < len(results) else None
 
-        # Assign results
-        if semantic_vec is not None:
-            result["semantic"]["vector"] = self._pad_or_trim(semantic_vec, SEMANTIC_DIM)
-            result["semantic"]["valid"] = True
-        else:
-            result["semantic"]["vector"] = None
-            result["semantic"]["valid"] = False
-
-        if topo_vec is not None:
-            result["topological"]["vector"] = self._pad_or_trim(topo_vec, TOPOLOGICAL_DIM)
-            result["topological"]["valid"] = True
-        else:
-            result["topological"]["vector"] = None
-            result["topological"]["valid"] = False
+        # Assign results — INV-12: reject all-zero vectors as invalid
+        for col, vec, dim in [
+            ("semantic", semantic_vec, SEMANTIC_DIM),
+            ("topological", topo_vec, TOPOLOGICAL_DIM),
+            ("operational", oper_vec, OPERATIONAL_DIM),
+        ]:
+            if vec is not None:
+                padded = self._pad_or_trim(vec, dim)
+                if self._is_zero_vector(padded):
+                    logger.warning(
+                        "INV-12 violation: %s embedding is all-zero, marking invalid", col,
+                    )
+                    result[col]["vector"] = None
+                    result[col]["valid"] = False
+                else:
+                    result[col]["vector"] = padded
+                    result[col]["valid"] = True
+            else:
+                result[col]["vector"] = None
+                result[col]["valid"] = False
 
         # Temporal (sinusoidal encoding — always valid, no model needed)
         result["temporal"]["vector"] = self._build_temporal_vector(event_time, fingerprint)
-
-        if oper_vec is not None:
-            result["operational"]["vector"] = self._pad_or_trim(oper_vec, OPERATIONAL_DIM)
-            result["operational"]["valid"] = True
-        else:
-            result["operational"]["vector"] = None
-            result["operational"]["valid"] = False
 
         return result
 
@@ -470,6 +469,11 @@ class EnrichmentChainV3:
         if len(vec) < target_dim:
             return vec + [0.0] * (target_dim - len(vec))
         return vec[:target_dim]
+
+    @staticmethod
+    def _is_zero_vector(vec: list[float]) -> bool:
+        """INV-12: detect all-zero embeddings that would poison similarity calculations."""
+        return all(v == 0.0 for v in vec)
 
     def _build_topo_text(self, entities: list[dict], neighbourhood: dict) -> str:
         parts = [f"{e['identifier']} ({e.get('domain', 'unknown')})" for e in entities[:20]]

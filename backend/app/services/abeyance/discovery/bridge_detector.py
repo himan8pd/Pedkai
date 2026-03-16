@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import random
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 MIN_BETWEENNESS = 0.3
 MIN_DOMAIN_SPAN = 2
 MAX_FRAGMENTS_TO_SCAN = 2000
+SAMPLED_BRIDGE_SCAN_SIZE = 2000
 
 
 class BridgeDetector:
@@ -61,8 +63,23 @@ class BridgeDetector:
             adj[e.fragment_b_id].add(e.fragment_a_id)
 
         all_nodes = set(adj.keys())
+        sampled = False
         if len(all_nodes) > MAX_FRAGMENTS_TO_SCAN:
-            return []
+            logger.warning(
+                "Bridge detection: graph too large for full scan "
+                "(tenant=%s nodes=%d limit=%d), running sampled analysis",
+                tenant_id, len(all_nodes), MAX_FRAGMENTS_TO_SCAN,
+            )
+            sampled_nodes = set(random.sample(sorted(all_nodes), SAMPLED_BRIDGE_SCAN_SIZE))
+            # Rebuild adjacency restricted to sampled nodes
+            sampled_adj: dict[UUID, set[UUID]] = defaultdict(set)
+            for node in sampled_nodes:
+                for neighbor in adj[node]:
+                    if neighbor in sampled_nodes:
+                        sampled_adj[node].add(neighbor)
+            adj = sampled_adj
+            all_nodes = sampled_nodes
+            sampled = True
 
         # Compute approximate betweenness centrality (Brandes simplified)
         betweenness = self._brandes_betweenness(adj, all_nodes)
@@ -114,7 +131,11 @@ class BridgeDetector:
             discoveries.append(discovery)
 
         await session.flush()
-        logger.info("Bridge detection: tenant=%s found=%d", tenant_id, len(discoveries))
+        scan_type = "sampled" if sampled else "full"
+        logger.info(
+            "Bridge detection: tenant=%s found=%d scan=%s nodes=%d",
+            tenant_id, len(discoveries), scan_type, len(all_nodes),
+        )
         return discoveries
 
     @staticmethod

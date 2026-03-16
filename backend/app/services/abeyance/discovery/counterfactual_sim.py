@@ -142,14 +142,16 @@ class CounterfactualSimulator:
         deltas = []
 
         for d in decisions:
-            # Counterfactual: zero out the contribution of this fragment
+            # Counterfactual: approximate by removing entity overlap contribution.
+            # NOTE: This is a subtraction heuristic, NOT a true re-score replay
+            # as specified in LLD §10.2. Results are flagged with heuristic_used=True
+            # so downstream consumers (outcome calibration, impact scoring) know
+            # the causal impact is approximate.
             original_score = d.final_score
-            # Approximate counterfactual by removing entity overlap contribution
             weights = d.weights_used or {}
             entity_weight = weights.get("w_ent", 0.25)
             entity_score = getattr(d, "score_entity_overlap", 0.0) or 0.0
 
-            # Counterfactual score: remove entity overlap contribution
             counterfactual_score = max(0.0, original_score - entity_weight * entity_score * d.temporal_modifier)
             delta = original_score - counterfactual_score
 
@@ -185,6 +187,7 @@ class CounterfactualSimulator:
             decision_flip_count=flip_count,
             decision_flip_rate=round(flip_rate, 4),
             pairs_evaluated=len(decisions),
+            heuristic_used=True,  # Subtraction heuristic, not full re-score replay
         )
         session.add(sim_result)
 
