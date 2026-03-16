@@ -1,0 +1,61 @@
+#### Abeyance Memory 3.0 Hostile Audit — Cross-File Risk Matrix & Next Steps
+
+---
+
+### Cross-File Risk Matrix
+
+| Area                | Systemic Risk Level | Evidence/Examples                                                                                  | Impact if Unaddressed                          |
+|---------------------|--------------------|----------------------------------------------------------------------------------------------------|------------------------------------------------|
+| **LLD Coverage**    | Partial            | Major flows present, but operational fingerprinting, legacy embedding, and runtime invariants are stubs or missing in multiple files (enrichment_chain_v3.py, snap_engine_v3.py). | Hidden logic gaps, diluted correctness         |
+| **Stub/Fake Logic** | High               | Stubs for operational fingerprint, legacy embedding, and error handling in enrichment_chain_v3.py, snap_engine_v3.py, tvec_service.py. | Silent data loss, fake completeness            |
+| **Control Flow**    | Weak               | No transactional safety, partial state persists on failure, error handling is shallow or missing (discovery_loop.py, snap_engine_v3.py). | Data corruption, inconsistent state            |
+| **Data Contracts**  | Weak               | No runtime validation of embedding dimensions/types, entity schemas, or backend responses (enrichment_chain_v3.py, tvec_service.py, tslam_service.py). | Schema drift, runtime breakage                 |
+| **Dependency Mgmt** | Brittle            | Blind imports, no contract validation, fallback logic is brittle and silent (init.py, tslam_service.py, tvec_service.py). | Startup failures, silent degraded operation    |
+| **Error Handling**  | Inadequate         | Most failures are only logged, not surfaced; no retries/backoff; partial state may persist (all core services). | Silent failure, undetected data loss           |
+| **State/Concurrency**| Unsafe            | No concurrency controls for shared state, async/threading hazards, race conditions possible (discovery_loop.py, tvec_service.py, tslam_service.py). | Race conditions, data corruption               |
+| **Integration**     | Brittle            | No contract enforcement between layers, no integration tests, no runtime checks for compatibility (all core services). | Broken pipelines, brittle coupling             |
+| **Performance**     | Unproven           | Async/threading used, but no metrics, tracing, or observability; micro-batching is not validated (tvec_service.py, tslam_service.py). | Latency spikes, resource exhaustion            |
+| **Test Gaps**       | Severe             | No hooks for test/mocking, no metrics, no observability, no robust test coverage (all files).      | Undetected regressions, poor reliability       |
+| **Code Red Flags**  | Present            | Superficially complete modules, magic numbers, copy-paste logic, no runtime invariant checks (all files). | Masked defects, maintainability risk           |
+
+---
+
+### Next Steps (Zero-Trust, Hostile Remediation Plan)
+
+1. **Enforce Data Contracts & Invariants**
+   - Add runtime validation for all embeddings, entity schemas, and backend responses.
+   - Enforce LLD invariants (INV-x) at runtime, not just in comments.
+
+2. **Eliminate Stubs & Fake Logic**
+   - Fully implement operational fingerprinting, legacy embedding, and all "stub" methods.
+   - Remove or clearly mark any fallback logic that is not production-grade.
+
+3. **Transactional Safety & Error Propagation**
+   - Make all multi-stage flows transactional; roll back on failure.
+   - Surface all errors to callers and monitoring, not just logs.
+
+4. **Concurrency & State Management**
+   - Add explicit concurrency controls for all shared state and async/threaded code.
+   - Audit for race conditions and non-idempotent operations.
+
+5. **Observability & Testability**
+   - Add metrics, tracing, and health checks for all core services and ML backends.
+   - Add hooks for test/mocking; ensure all critical paths are covered by robust tests.
+
+6. **Integration & Dependency Hardening**
+   - Add contract validation for all service wiring and backend integrations.
+   - Fail fast and loud on missing/broken dependencies; never silently degrade.
+
+7. **Performance & Scalability**
+   - Validate async/threading performance under load; add backpressure and resource limits.
+   - Test micro-batching and concurrency at scale.
+
+8. **Documentation & Maintainability**
+   - Document all runtime invariants, error paths, and integration contracts.
+   - Remove magic numbers, dead code, and copy-paste logic.
+
+---
+
+**Summary:**  
+The Abeyance Memory 3.0 core is architecturally ambitious but operationally fragile. Major flows are present, but stubs, shallow error handling, and lack of runtime validation create systemic production risks. Immediate focus should be on eliminating stubs, enforcing contracts, adding observability, and making all flows transactional and testable.  
+**Production deployment is not recommended until these risks are remediated.**

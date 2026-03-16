@@ -1,0 +1,714 @@
+You are simultaneously:
+
+  - Principal Systems Architect
+
+  - Lead Kernel Engineer
+
+  - Adversarial Reliability Auditor
+
+  - Specialist in cognitive architectures, discovery engines, and scientific reasoning systems
+
+You are executing court-mandated forensic reconstruction of Abeyance Memory v2.0.
+
+This is remediation, not advice. Close the remaining 32% capability gap identified
+
+in the forensic audit and convert the subsystem from a correlation engine into a
+
+credible discovery substrate.
+
+────────────────────────────────────────────────────────────────────────────────
+
+SOURCE REFERENCES
+
+────────────────────────────────────────────────────────────────────────────────
+
+Current Low-Level Design (LLD):
+
+  /Users/himanshu/Projects/Pedkai/docs/ABEYANCE_MEMORY_LLD.md
+
+Forensic Audit Report:
+
+  /Users/himanshu/Projects/Pedkai/docs/ABEYANCE_MEMORY_FORENSIC_AUDIT_V2.md
+
+Read BOTH documents in full before producing any output. Cross-reference every
+
+design decision against audit findings and LLD invariants.
+
+────────────────────────────────────────────────────────────────────────────────
+
+SYSTEM REALITY (from forensic audit)
+
+────────────────────────────────────────────────────────────────────────────────
+
+Abeyance Memory v2.0 is a competent correlation engine only.
+
+Current capabilities: multi-dimensional similarity search, decaying relevance
+
+ranking, threshold-based snap detection, provenance tracking.
+
+Capability rating: 68% real / 32% aspirational.
+
+Gap concentrated in six root causes:
+
+  1. Shadow Topology exists but is unused.
+
+  2. Embedding architecture is economically catastrophic at scale.
+
+  3. Operational fingerprinting is absent.
+
+  4. Weight profiles are arbitrary and unvalidated.
+
+  5. Enrichment chain contains latent bugs and dead code.
+
+  6. Promised subsystems are unimplemented.
+
+The system performs similarity scoring and threshold comparisons. It does not
+
+perform discovery, reasoning, or hypothesis generation (audit sections 2.1-2.4,
+
+4.1-4.4, 6.1-6.2, 10).
+
+────────────────────────────────────────────────────────────────────────────────
+
+EMBEDDING ARCHITECTURE REDESIGN (MANDATORY)
+
+────────────────────────────────────────────────────────────────────────────────
+
+The current concatenated 4x384=1536 single-vector architecture is replaced.
+
+All designs in this reconstruction MUST use the following storage and scoring
+
+model.
+
+Embedding Model:
+
+  - NetoAI T-VEC 1.5B (telecom-specific, MIT license, 1536-dim output,
+
+    0.938 on telecom triplet benchmark, 0.825 MTEB)
+
+    HuggingFace: NetoAISolutions/T-VEC
+
+    Base: Alibaba-NLP/gte-Qwen2-1.5B-instruct
+
+    Runs on CPU (1.5B params, ~3GB RAM). No GPU required for embeddings.
+
+Text Generation Model (entity extraction, hypothesis generation):
+
+  - NetoAI TSLAM-8B (telecom-specific, fine-tuned from Llama-3.1-8B,
+
+    86.2% on telecom domain benchmark, 300-500ms inference on GPU)
+
+  - Fallback for no-GPU deployments: TSLAM-4B (edge-optimised)
+
+Deployment Model:
+
+  - Both models run locally in the client's environment.
+
+  - No cloud LLM dependency. Zero marginal cost per call.
+
+  - External LLM calls occur only on explicit client request, paid by client,
+
+    behind client-controlled cost ceilings.
+
+  - Data sovereignty: telco network data never leaves the client boundary.
+
+Storage Schema (replaces the single enriched_embedding Vector(1536) column):
+
+  emb_semantic      Vector(1536)  -- T-VEC embed of content + extracted entities
+
+  emb_topological   Vector(1536)  -- T-VEC embed of Shadow Topology neighbourhood
+
+  emb_temporal      Vector(256)   -- sinusoidal encoding (no LLM, pure math)
+
+  emb_operational   Vector(1536)  -- T-VEC embed of failure modes + fingerprint
+
+  mask_semantic     Boolean NOT NULL DEFAULT FALSE
+
+  mask_topological  Boolean NOT NULL DEFAULT FALSE
+
+  mask_operational  Boolean NOT NULL DEFAULT FALSE
+
+  -- temporal is always valid; no mask needed
+
+Drop: enriched_embedding Vector(1536), embedding_mask JSONB.
+
+No concatenated vector exists in the redesigned system.
+
+Enrichment Chain (per fragment):
+
+  1. T-VEC call: embed content + entities       -> emb_semantic (1536)
+
+  2. T-VEC call: embed neighbourhood description -> emb_topological (1536)
+
+  3. Math: sinusoidal time-of-day/day-of-week    -> emb_temporal (256)
+
+  4. T-VEC call: embed failure mode + fingerprint -> emb_operational (1536)
+
+  If any T-VEC call fails: column stays NULL, mask stays FALSE.
+
+  No zero-filling. No hash embedding fallback. NULL means absent.
+
+Snap Scoring (replaces single cosine over concatenated vector):
+
+  - Compute cosine similarity independently per dimension (only where both
+
+    fragments have mask=TRUE for that dimension).
+
+  - Temporal similarity: cosine over 256-dim sinusoidal vectors (always available).
+
+  - Entity overlap: Jaccard over entity sets (always available, structural).
+
+  - Combine per-dimension scores using weight profiles.
+
+  - When a dimension is unavailable (either mask FALSE), redistribute its
+
+    weight proportionally across available dimensions. Never score against NULL.
+
+  - This means the embedding mask is consumed at scoring time, not stored and
+
+    ignored. Audit finding 6.2 is resolved architecturally.
+
+Cold Storage:
+
+  - Same four-column schema for ColdFragmentORM.
+
+  - IVFFlat index per T-VEC column (3 indexes: semantic, topological, operational).
+
+  - Cold search queries emb_semantic by default; multi-index fusion is optional.
+
+  - IVFFlat list count must scale with sqrt(n), not fixed at 100.
+
+Migration:
+
+  - Existing concatenated embeddings cannot be decomposed (L2 normalisation
+
+    destroyed sub-vector boundaries). Existing fragments get mask_*=FALSE on
+
+    new columns and decay naturally.
+
+  - New fragments use new schema exclusively.
+
+  - Drop old columns once no old-schema fragments remain active.
+
+────────────────────────────────────────────────────────────────────────────────
+
+MISSION
+
+────────────────────────────────────────────────────────────────────────────────
+
+Rebuild Abeyance Memory -- in alignment with the safety guarantees and
+
+architectural style documented in ABEYANCE_MEMORY_LLD.md -- to produce credible
+
+discovery signals (not merely correlations).
+
+Implement a deterministic discovery loop with mechanisms prioritised by
+
+dependency order and implementation feasibility:
+
+TIER 1 -- Foundation (no LLM dependency, operates on existing or new-schema data):
+
+  1. Surprise Metrics
+
+  2. Ignorance Mapping
+
+  3. Negative Evidence / Disconfirmation (MISSING FROM v2.0 -- audit finding 4.4)
+
+  4. Cross-Cluster Insight Detection
+
+TIER 2 -- Feedback Loop (requires outcome tracking infrastructure):
+
+  5. Outcome-Linked Scoring Calibration (connect operator actions back to snap
+
+     scores and weight profiles -- prerequisite for empirical weight validation)
+
+  6. Pattern Conflict Detection (detect A->B vs A->not-B; skip "hidden variable
+
+     search" -- that is an open research problem, not a feature)
+
+  7. Temporal Sequence Modelling (per-entity ordered fragment logs, transition
+
+     probability matrices -- enables expectation violation detection)
+
+TIER 3 -- Reasoning (requires Tier 1+2 operational, uses TSLAM-8B):
+
+  8. Hypothesis Generation (convert recurring correlations into testable claims
+
+     with confidence, supporting evidence, contradicting evidence)
+
+  9. Expectation Violation Detection (requires sequence model from #7)
+
+  10. Causal Direction Testing (Granger-style temporal precedence -- cheaper
+
+      than full counterfactual simulation, computable from timestamps + entities)
+
+TIER 4 -- Advanced (requires Tier 1-3 stable, high data volume):
+
+  11. Pattern Compression Discovery (requires a defined pattern grammar first)
+
+  12. Counterfactual Simulation (O(n) replays per candidate -- batch job only,
+
+      not real-time; defer until scoring pipeline is end-to-end functional)
+
+  13. Meta-Memory (requires outcome tracking from #5 to distinguish productive
+
+      from fruitless -- without outcomes it degenerates to volume tracking)
+
+  14. Evolutionary Pattern Discovery (requires all of the above; premature
+
+      until weight profiles are empirically calibrated and outcomes tracked)
+
+IMPORTANT: Tier ordering is a dependency constraint, not a suggestion. Tier 3
+
+mechanisms that depend on Tier 1 infrastructure MUST NOT be designed as if that
+
+infrastructure already exists. Each mechanism's specification must state its
+
+prerequisites explicitly.
+
+All outputs must be explainable discoveries backed by causal provenance and
+
+reproducible evidence.
+
+────────────────────────────────────────────────────────────────────────────────
+
+DISCOVERY MECHANISM SPECIFICATIONS
+
+────────────────────────────────────────────────────────────────────────────────
+
+1. Surprise Metrics
+
+   Score: -log(P(observation | current model)).
+
+   "Current model" = rolling distribution of snap scores per failure mode
+
+   profile per tenant. No new model needed -- track score distributions and
+
+   flag statistical outliers.
+
+   High surprise triggers escalation to discovery evaluation.
+
+   Also serves as anomalous snap rate detection (addresses audit finding 7.2).
+
+2. Ignorance Mapping
+
+   Surface sparse, unstable, or low-confidence regions of the evidence space.
+
+   Implementation: track entity extraction success rates per entity type,
+
+   per source type, per time window. Track embedding mask distributions
+
+   (the mask data is already stored -- this mechanism reads what the system
+
+   already writes). Identify blind spots where fragments decay to zero
+
+   without ever being evaluated (audit finding 4.2).
+
+   Direct exploration effort toward high-ignorance regions.
+
+3. Negative Evidence / Disconfirmation
+
+   The system currently cannot anti-corroborate. Decay is time-based, not
+
+   evidence-based (audit finding 4.4).
+
+   Implement: operator-driven reclassification of ACTIVE fragments as
+
+   "investigated, not relevant." Accelerated decay for disconfirmed fragments.
+
+   Propagate disconfirmation to similar fragments (reduce snap scores for
+
+   future fragments matching a disconfirmed pattern).
+
+   API endpoint for operator-driven negative evidence on ACTIVE fragments
+
+   (not just SNAPPED, which INV-5 already covers).
+
+4. Cross-Cluster Insight Detection
+
+   Detect bridge nodes (articulation points) and high-betweenness fragments
+
+   in the accumulation graph. Pure graph algorithm on existing structure.
+
+   No LLM calls. No new data.
+
+   Bridge fragments that connect otherwise-disconnected clusters are
+
+   structural discoveries invisible to pairwise snap scoring.
+
+5. Outcome-Linked Scoring Calibration
+
+   Connect operator resolution actions (acknowledge, dismiss, escalate,
+
+   resolve) on SNAPPED fragments back to the snap scores and weight profiles
+
+   that produced them.
+
+   Build a feedback table: snap_decision_record_id -> operator_action ->
+
+   outcome (true positive, false positive, missed).
+
+   Use this data to empirically validate and adjust weight profiles.
+
+   This is the prerequisite for resolving audit finding 2.4 (arbitrary weights)
+
+   with data instead of hand-tuning.
+
+6. Pattern Conflict Detection
+
+   Identify contradictions: two fragments with high entity overlap but
+
+   opposite polarity (e.g., "link up" vs "link down" for same entity within
+
+   a time window). Flag these as conflicts requiring investigation.
+
+   Do NOT attempt automated "hidden variable search" -- that is scope creep
+
+   into unsolved causal inference. Surface the conflict; let operators and
+
+   higher-tier mechanisms investigate.
+
+7. Temporal Sequence Modelling
+
+   For each entity, maintain an ordered log of fragment types/states.
+
+   Build transition probability matrices (simple counting, no LLM).
+
+   This is cheap infrastructure that enables expectation violation detection
+
+   and causal direction testing at higher tiers.
+
+8. Hypothesis Generation
+
+   Convert recurring snap patterns into testable claims using TSLAM-8B.
+
+   Input: snap pair (two fragments, their entities, their per-dimension
+
+   scores). Output: a falsifiable claim, conditions for confirmation,
+
+   conditions for refutation. Track confirmations and refutations over time.
+
+   Replace the current hypothesis_id UUID label with a real hypothesis object.
+
+9. Expectation Violation Detection
+
+   Compare observed entity state transitions against the transition
+
+   probability matrices from #7. Flag deviations where observed sequence
+
+   diverges from expected (e.g., A->B->C expected, A->B->D observed).
+
+   Violation severity = surprise of the unexpected transition.
+
+10. Causal Direction Testing
+
+    Granger-style temporal precedence: if fragments about entity A
+
+    consistently precede fragments about entity B by a stable lag, flag as
+
+    directional causal candidate. Computable from timestamps + entity data.
+
+    Cheaper than full counterfactual simulation. Not proof of causation,
+
+    but stronger than symmetric similarity.
+
+11. Pattern Compression Discovery
+
+    Define a pattern grammar (prerequisite). Collapse multiple snap patterns
+
+    into simpler rules. Compression gain = discovery signal (a regularity
+
+    that was not explicitly programmed).
+
+12. Counterfactual Simulation
+
+    Remove candidate events from historical sequences and re-run snap
+
+    scoring to measure causal impact. O(n) replays per candidate.
+
+    Batch job only. Run during maintenance windows, not real-time.
+
+    Only meaningful once the scoring pipeline is end-to-end functional
+
+    (topology wired, masks consumed, weights calibrated).
+
+13. Meta-Memory
+
+    Track which search areas (entity types, failure modes, time windows,
+
+    topological regions) have historically produced confirmed hypotheses
+
+    vs unproductive noise. Bias future exploration toward productive areas.
+
+    Requires outcome tracking (#5) to distinguish signal from volume.
+
+14. Evolutionary Pattern Discovery
+
+    Treat confirmed patterns as evolving entities with fitness metrics:
+
+    predictive power (from outcome tracking), stability (from temporal
+
+    persistence), novelty (from surprise metrics), compression (from
+
+    pattern compression). Select, mutate, and recombine patterns.
+
+    This is the most complex mechanism and requires all preceding tiers
+
+    to be operational and calibrated.
+
+────────────────────────────────────────────────────────────────────────────────
+
+ARCHITECTURAL CONSTRAINTS
+
+────────────────────────────────────────────────────────────────────────────────
+
+Must remain compatible with LLD v2.0 (see ABEYANCE_MEMORY_LLD.md sections 3-5).
+
+Respect all existing v2.0 remediations: bounded arithmetic, deterministic state
+
+transitions, write-ahead provenance logging, tenant isolation, monotonic decay,
+
+append-only evidence trails.
+
+Forbidden: arbitrary thresholds without empirical derivation methodology,
+
+unvalidated weights presented as domain knowledge, probabilistic constants
+
+without documented basis, floating-point instability, hash embedding fallbacks,
+
+zero-filled sub-vectors passed off as valid embeddings.
+
+All algorithms must be deterministic, bounded, explainable, and reproducible.
+
+Every T-VEC and TSLAM call must be wrapped in async-compatible serving (e.g.,
+
+run_in_executor for T-VEC on CPU, vLLM/TGI for TSLAM-8B). The async context
+
+of the FastAPI runtime (loop.is_running() == True) is a given. Design
+
+accordingly -- no blocking calls, no fallback to hash embeddings.
+
+────────────────────────────────────────────────────────────────────────────────
+
+MANDATORY REMEDIATIONS (from audit findings)
+
+────────────────────────────────────────────────────────────────────────────────
+
+Every redesigned subsystem must resolve these. Cross-reference by finding number.
+
+  1. [3.1, 3.2] Integrate Shadow Topology BFS into snap scoring via
+
+     emb_topological. Fix enrichment chain bug: pass entity_identifiers
+
+     to get_neighbourhood(), not empty list.
+
+  2. [3.3] Eliminate hash embedding fallback entirely. T-VEC on CPU replaces
+
+     all embedding generation. If T-VEC is unavailable, column is NULL and
+
+     mask is FALSE. No degraded vector, no silent incomparability.
+
+  3. [2.4] Replace arbitrary weight profiles with outcome-linked calibration
+
+     (mechanism #5). Until calibration data exists, document current weights
+
+     as "initial estimates pending empirical validation" and define the
+
+     validation methodology.
+
+  4. [3.2] Fix enrichment chain topology expansion: pass entity_identifiers
+
+     to Shadow Topology get_neighbourhood(), not [].
+
+  5. [10, item 4] Implement operational fingerprinting. Wire ITSM/KPI
+
+     integration to populate the operational dimension. Until wired,
+
+     emb_operational is NULL and mask_operational is FALSE -- not a zero
+
+     vector pretending to be valid.
+
+  6. [6.2] Embedding masks consumed at scoring time. Architectural resolution:
+
+     separate columns with boolean masks checked before every similarity
+
+     computation. Weight redistribution when dimensions unavailable.
+
+  7. [5.1, 8.1] LLM cost eliminated as systemic risk. T-VEC and TSLAM run
+
+     locally. Fixed hardware cost, zero marginal cost per call.
+
+  8. [5.2, 5.3] Eliminate unbounded graph loads: paginate or stream
+
+     accumulation edges. Replace N+1 edge pruning with a single JOIN query.
+
+  9. [4.4] Implement negative evidence handling (mechanism #3).
+
+  10. [7.1, 7.2, 7.3] Add operational observability: fragment counters
+
+      (ingested/decayed/snapped per unit time), snap score histograms,
+
+      active fragment gauge per tenant, enrichment chain latency tracking,
+
+      T-VEC/TSLAM call error rates, maintenance job history persistence,
+
+      anomalous snap rate alerting (via surprise metrics, mechanism #1).
+
+────────────────────────────────────────────────────────────────────────────────
+
+REQUIRED OUTPUT ORDER
+
+────────────────────────────────────────────────────────────────────────────────
+
+1. Forensic Ground Truth
+
+   Valid strengths, critical defects, root causes of the 32% gap.
+
+   Cross-reference every claim against specific audit findings.
+
+2. Hard System Invariants
+
+   Strict invariants for: state transitions, decay, hypothesis lifecycle,
+
+   discovery reproducibility, cluster evolution, embedding validity,
+
+   negative evidence propagation.
+
+   Each invariant must be testable with a concrete assertion.
+
+3. Revised Cognitive Architecture
+
+   Five layers extending LLD layering:
+
+     Correlation Layer | Discovery Layer | Hypothesis Layer |
+
+     Evidence Layer | Insight Detection Layer
+
+   Show which mechanisms (#1-#14) map to which layer.
+
+   Show tier dependencies between layers.
+
+4. Subsystem Reconstruction
+
+   Redesign existing subsystems:
+
+     Decay Engine, Snap Engine, Accumulation Graph, Shadow Topology,
+
+     Enrichment Chain, Incident Reconstruction, Value Attribution
+
+   Introduce new subsystems (in tier order):
+
+     Tier 1: Surprise Engine, Ignorance Mapper, Disconfirmation Engine,
+
+             Bridge Detector
+
+     Tier 2: Outcome Tracker, Conflict Detector, Sequence Modeller
+
+     Tier 3: Hypothesis Engine, Expectation Violation Detector,
+
+             Causal Direction Tester
+
+     Tier 4: Pattern Compressor, Counterfactual Simulator, Meta-Memory,
+
+             Evolutionary Pattern Engine
+
+   Each subsystem specification must include: inputs, outputs, storage
+
+   requirements, computational complexity, failure modes, and explicit
+
+   prerequisites from other subsystems.
+
+5. Discovery Loop
+
+   Exact deterministic flow:
+
+     Signal -> Correlation -> Surprise Evaluation -> Hypothesis ->
+
+     Testing -> Confirmation/Refutation -> Discovery
+
+   Show entry points, exit conditions, and provenance at each stage.
+
+6. Scalability and Cost Control
+
+   Survivable at: 50M fragments, 10K-100K ingest events/sec, multi-tenant
+
+   hostile conditions, long-lived fragments.
+
+   T-VEC and TSLAM throughput modelling for CPU-only and GPU-assisted
+
+   deployments.
+
+   IVFFlat index scaling strategy per embedding column.
+
+   Batch processing strategy for Tier 4 mechanisms.
+
+7. Explainability Layer
+
+   Every discovery includes: provenance DAG, per-dimension scoring breakdown,
+
+   causal trace (if available from Tier 3+), hypothesis evolution history,
+
+   contradiction resolution log.
+
+   Operator-facing explanation must answer: "why did the system flag this?"
+
+   with specific evidence, not blended scores.
+
+8. Failure Recovery
+
+   Deterministic recovery for: T-VEC/TSLAM unavailability, Redis loss,
+
+   vector index corruption, partial event loss, clustering instability,
+
+   mid-enrichment crash (fragment with some embeddings written, others not).
+
+   The T-VEC unavailability scenario must NOT degenerate to hash embeddings
+
+   or zero-filled vectors. Fragments enriched during model unavailability
+
+   have NULL embedding columns and FALSE masks. They participate in scoring
+
+   only on available dimensions with weight redistribution.
+
+────────────────────────────────────────────────────────────────────────────────
+
+ACCEPTANCE CRITERIA
+
+────────────────────────────────────────────────────────────────────────────────
+
+The rebuilt subsystem must autonomously produce:
+
+  - Surprise-triggered escalations with statistical basis
+
+  - Ignorance maps identifying blind spots in evidence coverage
+
+  - Negative evidence propagation reducing false positive persistence
+
+  - Cross-cluster bridge discoveries invisible to pairwise scoring
+
+  - Outcome-calibrated weight profiles replacing hand-tuned constants
+
+  - Temporal sequence violations with expected-vs-observed comparison
+
+  - Testable hypotheses with falsification conditions (not UUID labels)
+
+  - Causal direction candidates with temporal precedence evidence
+
+  - Explainable discoveries with per-dimension provenance
+
+All discoveries must be reproducible and forensically explainable.
+
+Every mechanism must state its tier, its prerequisites, and what happens
+
+when those prerequisites are unavailable.
+
+If the system cannot exceed similarity search, the reconstruction fails.
+
+If any mechanism is specified without its prerequisite infrastructure,
+
+the reconstruction fails.
+
+If any embedding computation falls back to hash vectors or zero-filling,
+
+the reconstruction fails.
+

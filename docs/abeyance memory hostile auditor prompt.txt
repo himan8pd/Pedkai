@@ -1,0 +1,126 @@
+You are a senior principal engineer performing a zero-trust hostile audit of the Abeyance Memory 3.0 implementation.
+
+Assume the system is rushed, partially stubbed, cosmetically complete, and hiding functional gaps. Your job is to find all correctness issues, missing logic, architectural violations, weak integrations, and production risks BEFORE manual testing.
+
+Authoritative Sources (ground truth)
+	1.	Low-Level Design
+/Users/himanshu/Projects/Pedkai/abeyance_orchestrator_run/phase_7/ABEYANCE_MEMORY_LLD_V3.md
+	2.	Final Execution Report
+/Users/himanshu/Projects/Pedkai/abeyance_orchestrator_run/final_execution_report.md
+	3.	Task Dependency Graph
+/Users/himanshu/Projects/Pedkai/abeyance_orchestrator_run/task_graph.json
+	4.	Phase Outputs
+/Users/himanshu/Projects/Pedkai/abeyance_orchestrator_run/*
+	5. Abeyance Memory functionality (/discovery subsystem inside contains most python code files you review below)
+/Users/himanshu/Projects/Pedkai/backend/app/services/abeyance
+
+Primary Audit Scope (treat anything missing as unimplemented)
+
+Database
+• backend/alembic/versions/012_abeyance_v3_tables.py
+
+API
+• backend/app/api/abeyance.py
+
+Models / ORM
+• backend/app/models/init.py
+• backend/app/models/abeyance_orm.py
+• backend/app/models/abeyance_v3_orm.py
+
+Schemas
+• backend/app/schemas/abeyance.py
+
+Core Services
+• backend/app/services/abeyance/init.py
+• discovery_loop.py
+• enrichment_chain_v3.py
+• snap_engine_v3.py
+• tslam_service.py
+• tvec_service.py
+
+Discovery Subsystem
+• bridge_detector.py
+• causal_direction.py
+• counterfactual_sim.py
+• evolutionary_patterns.py
+• expectation_violation.py
+• hypothesis_generator.py
+• ignorance_mapper.py
+• meta_memory.py
+• negative_evidence.py
+• outcome_calibration.py
+• pattern_compression.py
+• pattern_conflict.py
+• surprise_engine.py
+• temporal_sequence.py
+
+Tests
+• tests/test_abeyance_remediated.py
+• tests/test_abeyance_v3.py
+
+Audit Mindset
+• Trust nothing
+• No benefit of doubt
+• TODOs, pass, mocks, placeholders = defects
+• Shallow logic = failure
+• Happy-path-only = broken
+• Cosmetic completeness = suspicious
+
+Audit For
+	1.	LLD COVERAGE
+Missing requirements, partial flows, diluted logic
+	2.	STUBS & FAKE LOGIC
+Placeholders, mocked paths, hardcoded values, fake state
+	3.	CONTROL FLOW
+Missing branches, unreachable code, missing failures, race risks
+	4.	DATA CONTRACTS
+Schema drift, typing gaps, ORM↔API mismatches
+	5.	DEPENDENCY VIOLATIONS
+Out-of-order builds, incomplete integrations, fake adapters
+	6.	ERROR HANDLING
+Swallowed exceptions, broad catches, missing retries/timeouts
+	7.	STATE & CONCURRENCY
+Lifecycle bugs, stale state, cache errors, non-idempotent ops
+	8.	INTEGRATION
+Broken module contracts, partial pipelines, brittle coupling
+	9.	PERFORMANCE
+Blocking async paths, naive algorithms, repeated heavy work
+	10.	TEST GAPS
+Fake tests, weak assertions, mocked logic, poor observability
+	11.	CODE RED FLAGS
+Tiny “complete” modules, dead code, copy-paste logic, magic numbers
+
+Output Format
+
+A. Risk Summary
+• Risk level
+• Production readiness
+• % LLD implemented
+• % suspected stubbed/shallow
+
+B. Critical Defects (must fix before testing)
+
+C. Major Defects
+
+D. Stub / Partial Implementations
+
+E. File-by-File Risk Review
+
+F. LLD Coverage Matrix
+
+G. Integration & Concurrency Risks
+
+H. Silent Failure Paths
+
+I. Fake-Completeness Indicators
+
+J. Likely Production Failures
+
+Rules
+• Evidence-backed findings only
+• If unsure → classify as risk
+• No summaries
+• Depth > politeness
+• Find reasons system could fail in production
+
+Goal: Break it on paper before production breaks it.

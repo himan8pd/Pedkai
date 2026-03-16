@@ -22,7 +22,7 @@ from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, Index, Integer, String, Text,
+    Boolean, CheckConstraint, Column, DateTime, Float, Index, Integer, String, Text,
     UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -87,12 +87,29 @@ class AbeyanceFragmentORM(Base):
     failure_mode_tags = Column(JSONB, nullable=False, default=list, server_default='[]')
     temporal_context = Column(JSONB, nullable=False, default=dict, server_default='{}')
 
-    # Embedding validity mask — which sub-vector dimensions are valid (INV-11)
-    # 4-element list: [semantic_valid, topo_valid, temporal_valid, operational_valid]
+    # --- v3.0 Four-Column Embedding Architecture (LLD v3.0 §2.5) ---
+    emb_semantic = Column(Vector(1536), nullable=True)
+    emb_topological = Column(Vector(1536), nullable=True)
+    emb_temporal = Column(Vector(256), nullable=True)
+    emb_operational = Column(Vector(1536), nullable=True)
+
+    # Per-dimension validity masks (INV-11, INV-13)
+    mask_semantic = Column(Boolean, nullable=False, default=False, server_default='false')
+    mask_topological = Column(Boolean, nullable=False, default=False, server_default='false')
+    mask_operational = Column(Boolean, nullable=False, default=False, server_default='false')
+    # emb_temporal has no mask; sinusoidal encoding always succeeds
+
+    # Operational polarity for conflict detection (Mechanism #6)
+    polarity = Column(String(10), nullable=True)  # UP / DOWN / NEUTRAL
+
+    # Schema version for dual-write migration (LLD v3.0 §5)
+    embedding_schema_version = Column(Integer, nullable=False, default=3, server_default='3')
+
+    # --- Legacy columns (retained for dual-write migration period, LLD v3.0 §5.3) ---
+    # Embedding validity mask (v2 format)
     embedding_mask = Column(JSONB, nullable=False, default=lambda: [True, False, True, False],
                             server_default='[true, false, true, false]')
-
-    # Embeddings (LLD §6 Step 4 + §7)
+    # Embeddings (v2 format)
     enriched_embedding = Column(Vector(1536), nullable=True)
     raw_embedding = Column(Vector(768), nullable=True)
 
@@ -141,6 +158,19 @@ class AbeyanceFragmentORM(Base):
               postgresql_using="gin", postgresql_ops={"extracted_entities": "jsonb_path_ops"}),
         # Deduplication (Phase 7, §7.3)
         UniqueConstraint("tenant_id", "dedup_key", name="uq_fragment_dedup"),
+        # v3 CHECK constraints for mask/embedding coherence (INV-13)
+        CheckConstraint(
+            "emb_semantic IS NOT NULL OR mask_semantic = FALSE",
+            name="ck_frag_mask_semantic",
+        ),
+        CheckConstraint(
+            "emb_topological IS NOT NULL OR mask_topological = FALSE",
+            name="ck_frag_mask_topological",
+        ),
+        CheckConstraint(
+            "emb_operational IS NOT NULL OR mask_operational = FALSE",
+            name="ck_frag_mask_operational",
+        ),
     )
 
 
@@ -234,10 +264,11 @@ class FragmentHistoryORM(Base):
 
 
 class SnapDecisionRecordORM(Base):
-    """Persisted snap evaluation record (Audit §7.1).
+    """Persisted snap evaluation record (LLD v3.0 §2.6).
 
     Stores the full scoring breakdown for every snap evaluation that
     reaches the scoring stage, regardless of outcome.
+    v3: Five explicit per-dimension score columns (INV-14).
     """
 
     __tablename__ = "snap_decision_record"
@@ -253,9 +284,22 @@ class SnapDecisionRecordORM(Base):
         nullable=False,
     )
     failure_mode_profile = Column(String(50), nullable=False)
-    component_scores = Column(JSONB, nullable=False)
-    # {semantic_sim, topological_prox, entity_overlap, operational_sim}
+
+    # v3: Five explicit per-dimension scores (INV-14)
+    score_semantic = Column(Float, nullable=True)
+    score_topological = Column(Float, nullable=True)
+    score_temporal = Column(Float, nullable=True)
+    score_operational = Column(Float, nullable=True)
+    score_entity_overlap = Column(Float, nullable=False)
+
+    # Mask and weight audit trail
+    masks_active = Column(JSONB, nullable=False)
     weights_used = Column(JSONB, nullable=False)
+    weights_base = Column(JSONB, nullable=True)  # Original profile weights for Outcome Calibration
+
+    # Legacy v2 field (kept during migration)
+    component_scores = Column(JSONB, nullable=True)
+
     raw_composite = Column(Float, nullable=False)
     temporal_modifier = Column(Float, nullable=False)
     final_score = Column(Float, nullable=False)

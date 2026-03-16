@@ -451,11 +451,26 @@ class TestServiceFactory:
     def test_factory_returns_all_services(self):
         from backend.app.services.abeyance import create_abeyance_services
         services = create_abeyance_services()
-        expected_keys = {
+        # v2 core keys (backward compat)
+        v2_keys = {
             "provenance", "notifier", "enrichment", "snap_engine",
             "accumulation_graph", "decay_engine", "shadow_topology",
             "value_attribution", "incident_reconstruction", "maintenance",
         }
+        # v3 keys
+        v3_keys = {
+            "tvec", "tslam", "enrichment_v3", "snap_engine_v3",
+            "discovery_loop",
+        }
+        # discovery mechanism keys
+        mechanism_keys = {
+            "surprise_engine", "ignorance_mapper", "negative_evidence",
+            "bridge_detector", "outcome_calibration", "pattern_conflict",
+            "temporal_sequence", "hypothesis_generator", "expectation_violation",
+            "causal_direction", "pattern_compressor", "counterfactual_sim",
+            "meta_memory", "evolutionary_patterns",
+        }
+        expected_keys = v2_keys | v3_keys | mechanism_keys
         assert set(services.keys()) == expected_keys
 
     def test_services_share_provenance(self):

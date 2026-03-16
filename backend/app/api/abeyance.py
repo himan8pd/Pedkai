@@ -384,3 +384,110 @@ async def run_maintenance(
         session=db,
         tenant_id=tid,
     )
+
+
+# ---------------------------------------------------------------------------
+# v3 Discovery Loop Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/ingest/v3", status_code=201)
+async def ingest_evidence_v3(
+    payload: RawEvidence,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Submit raw evidence through the v3 six-stage discovery loop.
+
+    Processes through: Ingest → Enrich → Score → Detect → Generate → Learn → Adapt.
+    Uses T-VEC/TSLAM local models, mask-aware scoring, and all 14 discovery mechanisms.
+
+    LLD v3.0 ref: §12 (Discovery Loop)
+    """
+    tenant_id = _resolve_tenant(current_user, getattr(payload, "tenant_id", None))
+    services = _get_services()
+    discovery_loop = services.get("discovery_loop")
+    if discovery_loop is None:
+        raise HTTPException(status_code=503, detail="Discovery loop not available")
+
+    result = await discovery_loop.process_event(
+        session=db,
+        tenant_id=tenant_id,
+        raw_content=payload.content,
+        source_type=payload.source_type.value,
+        event_timestamp=payload.event_timestamp,
+        source_ref=payload.source_ref,
+        source_engineer_id=payload.source_engineer_id,
+        explicit_entity_refs=payload.entity_refs or None,
+    )
+
+    await db.commit()
+    return result
+
+
+@router.post("/discovery/background")
+async def run_discovery_background(
+    tenant_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Trigger periodic background discovery jobs.
+
+    Runs ignorance mapping, bridge detection, pattern conflict scan,
+    causal analysis, pattern compression, counterfactual simulation,
+    evolutionary patterns, and hypothesis expiration.
+
+    LLD v3.0 ref: §12.2 (Background Jobs)
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+    services = _get_services()
+    discovery_loop = services.get("discovery_loop")
+    if discovery_loop is None:
+        raise HTTPException(status_code=503, detail="Discovery loop not available")
+
+    result = await discovery_loop.run_background_jobs(session=db, tenant_id=tid)
+    await db.commit()
+    return {"tenant_id": tid, "results": result}
+
+
+@router.get("/discovery/status")
+async def discovery_status(
+    tenant_id: Optional[str] = Query(None),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Get health status of v3 discovery mechanisms.
+
+    Returns model loading status for T-VEC and TSLAM, plus availability
+    of each discovery mechanism.
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+    services = _get_services()
+
+    tvec_status = {}
+    tslam_status = {}
+    tvec = services.get("tvec")
+    tslam = services.get("tslam")
+    if tvec:
+        tvec_status = await tvec.health()
+    if tslam:
+        tslam_status = await tslam.health()
+
+    mechanism_names = [
+        "surprise_engine", "ignorance_mapper", "negative_evidence",
+        "bridge_detector", "outcome_calibration", "pattern_conflict",
+        "temporal_sequence", "hypothesis_generator", "expectation_violation",
+        "causal_direction", "pattern_compressor", "counterfactual_sim",
+        "meta_memory", "evolutionary_patterns",
+    ]
+    mechanisms = {}
+    for name in mechanism_names:
+        svc = services.get(name)
+        mechanisms[name] = "available" if svc is not None else "unavailable"
+
+    return {
+        "tenant_id": tid,
+        "tvec_status": tvec_status,
+        "tslam_status": tslam_status,
+        "mechanisms": mechanisms,
+        "discovery_loop": "available" if services.get("discovery_loop") else "unavailable",
+    }
+

@@ -30,6 +30,28 @@ from backend.app.models.abeyance_orm import (
     ShadowRelationshipORM,
     ValueEventORM,
 )
+from backend.app.models.abeyance_v3_orm import (  # noqa: F401 — register for metadata
+    SurpriseEventORM, SurpriseDistributionStateORM,
+    IgnoranceExtractionStatORM, IgnoranceMaskDistributionORM,
+    IgnoranceSilentDecayRecordORM, IgnoranceSilentDecayStatORM,
+    IgnoranceMapEntryORM, ExplorationDirectiveORM, IgnoranceJobRunORM,
+    DisconfirmationEventORM, DisconfirmationFragmentORM, DisconfirmationPatternORM,
+    BridgeDiscoveryORM, BridgeDiscoveryProvenanceORM,
+    SnapOutcomeFeedbackORM, CalibrationHistoryORM, WeightProfileActiveORM,
+    ConflictRecordORM, ConflictDetectionLogORM,
+    EntitySequenceLogORM, TransitionMatrixORM, TransitionMatrixVersionORM,
+    HypothesisORM, HypothesisEvidenceORM, HypothesisGenerationQueueORM,
+    ExpectationViolationORM,
+    CausalCandidateORM, CausalEvidencePairORM, CausalAnalysisRunORM,
+    CompressionDiscoveryEventORM,
+    CounterfactualSimulationResultORM, CounterfactualPairDeltaORM,
+    CounterfactualCandidateQueueORM, CounterfactualJobRunORM,
+    MetaMemoryAreaORM, MetaMemoryProductivityORM, MetaMemoryBiasORM,
+    MetaMemoryTopologicalRegionORM, MetaMemoryTenantStateORM, MetaMemoryJobRunORM,
+    PatternIndividualORM, PatternIndividualArchiveORM,
+    EvolutionGenerationLogORM, EvolutionPartitionStateORM,
+    MaintenanceJobHistoryORM,
+)
 
 __all__ = [
     "DecisionTrace",

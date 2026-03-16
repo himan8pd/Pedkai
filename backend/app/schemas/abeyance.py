@@ -388,3 +388,30 @@ class IncidentReconstructionResponse(BaseModel):
     snaps: list[SnapHistoryEntry] = Field(default_factory=list)
     clusters: list[AccumulationClusterResponse] = Field(default_factory=list)
     reconstructed_timeline: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# ---- v3 Discovery Loop Response Models ----
+
+class DiscoveryLoopResponse(BaseModel):
+    """Full six-stage discovery loop result (LLD v3.0 §12)."""
+    tenant_id: str
+    fragment_id: str
+    stages: dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        from_attributes = True
+
+
+class DiscoveryBackgroundResponse(BaseModel):
+    """Background discovery jobs result."""
+    tenant_id: str
+    results: dict[str, Any] = Field(default_factory=dict)
+
+
+class DiscoveryStatusResponse(BaseModel):
+    """Health status of v3 discovery mechanisms."""
+    tenant_id: str
+    tvec_status: dict[str, Any] = Field(default_factory=dict)
+    tslam_status: dict[str, Any] = Field(default_factory=dict)
+    mechanisms: dict[str, str] = Field(default_factory=dict)
+

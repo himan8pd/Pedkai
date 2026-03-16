@@ -1,0 +1,425 @@
+You are a senior systems engineer working inside an existing production codebase.
+
+Your task is to complete the Abeyance Memory subsystem by implementing the remaining functionality defined in the system design.
+
+⸻
+
+Authoritative Design Document (MANDATORY)
+
+The master design specification for this subsystem is located at:
+
+/Users/himanshu/Projects/Pedkai/docs/ABEYANCE_MEMORY_LLD.md
+
+This document is the authoritative Low-Level Design (LLD).
+
+You must treat it as the single source of truth for:
+	•	architecture
+	•	algorithms
+	•	component boundaries
+	•	data models
+	•	system interactions
+	•	event flows
+
+Strict Requirements
+
+You must:
+
+• implement components exactly as specified in the LLD
+• not invent alternate architectures
+• not substitute algorithms unless explicitly allowed in the LLD
+• not redesign components or rename them unless required to integrate with the existing codebase
+
+If something appears ambiguous:
+	1.	Read the relevant section of the LLD again.
+	2.	Inspect the existing implementation in the codebase.
+	3.	Implement the behavior that most closely preserves the intent of the LLD.
+
+Only deviate if a direct incompatibility with the current codebase exists, and document the reason.
+
+Every module you implement must include docstrings referencing the LLD section it implements.
+
+⸻
+
+Required Development Workflow
+
+You must follow this workflow before writing implementation code.
+
+Step 1 — Parse the LLD
+
+Read /Users/himanshu/Projects/Pedkai/docs/ABEYANCE_MEMORY_LLD.md and extract:
+	•	component responsibilities
+	•	algorithms
+	•	data flows
+	•	event flows
+	•	storage models
+	•	interfaces between modules
+
+Step 2 — Map to Current Codebase
+
+Identify:
+	•	existing services
+	•	available storage primitives
+	•	embedding infrastructure
+	•	event bus integration points
+	•	API surface
+
+Step 3 — Produce Implementation Plan
+
+Before writing code, produce a structured plan including:
+	•	modules to create
+	•	interfaces
+	•	dependency graph
+	•	storage interactions
+	•	event bus usage
+	•	integration with existing services
+
+Step 4 — Test-Driven Implementation
+
+For each subsystem:
+	1.	create tests
+	2.	implement code
+	3.	ensure integration with the rest of the system
+	4.	confirm existing tests still pass
+
+Do not write implementation code before the plan.
+
+⸻
+
+Current Implementation Status (~30%)
+
+These components already exist and must remain compatible.
+
+Decay Engine
+
+backend/app/services/abeyance_decay.py
+
+Capabilities:
+	•	exponential decay scoring
+	•	corroboration boosting
+	•	batch decay pass
+	•	stale fragment marking
+
+⸻
+
+Cold Storage
+
+backend/app/services/abeyance/cold_storage.py
+
+Capabilities:
+	•	Parquet archival
+	•	cosine similarity search
+	•	multi-tenant isolation
+
+⸻
+
+Telemetry-to-Text Alignment
+
+backend/app/services/abeyance/telemetry_aligner.py
+
+Capabilities:
+	•	converts structured anomalies to natural language
+	•	generates embeddings
+
+⸻
+
+Fragment Storage
+
+Database table:
+
+decision_traces
+
+Fields include:
+	•	pgvector embeddings
+	•	decay_score
+	•	corroboration_count
+	•	abeyance_status
+
+Migration:
+
+008_add_abeyance_fields
+
+
+⸻
+
+Event Bus
+
+Redis Streams.
+
+Existing event type:
+
+abeyance.snap_occurred
+
+
+⸻
+
+Decision API
+
+/api/v1/decisions/
+
+Supports:
+	•	CRUD
+	•	embedding search
+	•	feedback
+	•	outcome recording
+
+⸻
+
+Existing Tests
+
+These tests must continue passing:
+
+test_abeyance_decay.py
+test_cold_storage.py
+test_multimodal_abeyance.py
+test_event_bus.py
+
+
+⸻
+
+Missing Subsystems (~70%)
+
+You must implement the remaining subsystems defined in the LLD.
+
+The file names below represent the expected service structure, but final details must match the LLD.
+
+⸻
+
+1. Snap Engine (Insight Activation Engine)
+
+Purpose:
+
+Detect when new evidence activates dormant fragments.
+
+Expected file:
+
+backend/app/services/abeyance/snap_engine.py
+
+Responsibilities:
+	•	compare incoming fragment embeddings against dormant fragments
+	•	evaluate snap activation thresholds
+	•	detect multi-fragment activations
+	•	emit events via Redis Streams
+
+Event structure:
+
+SnapEvent {
+    snap_id
+    evidence_fragment_id
+    matched_fragment_ids
+    confidence_score
+    timestamp
+}
+
+Must support:
+	•	batched evaluation
+	•	cold storage fragments
+	•	tenant isolation
+
+⸻
+
+2. Accumulation Graph
+
+Purpose:
+
+Combine fragments into compound discoveries.
+
+Expected file:
+
+backend/app/services/abeyance/accumulation_graph.py
+
+Responsibilities:
+	•	maintain fragment graph
+	•	create cluster IDs
+	•	track discovery clusters
+	•	update cluster confidence
+
+Graph edges may be derived from:
+	•	embedding similarity
+	•	shared entities
+	•	temporal proximity
+	•	corroboration relationships
+
+Implementation must match the clustering logic defined in the LLD.
+
+⸻
+
+3. Shadow Topology
+
+Purpose:
+
+Infer hidden relationships between incidents or fragments.
+
+Expected file:
+
+backend/app/services/abeyance/shadow_topology.py
+
+Responsibilities:
+	•	derive latent relationships
+	•	identify repeated failure patterns
+	•	compute hidden correlation graphs
+
+Relationships may be derived from:
+	•	fragment embeddings
+	•	shared enrichment entities
+	•	cluster membership
+	•	time adjacency
+
+Implementation must follow the topology rules in the LLD.
+
+⸻
+
+4. Enrichment Chain
+
+Purpose:
+
+Enhance fragments with structured semantic context.
+
+Expected file:
+
+backend/app/services/abeyance/enrichment_chain.py
+
+Expected pipeline stages:
+	1.	entity resolution
+	2.	fingerprint extraction
+	3.	failure classification
+	4.	semantic tagging
+
+Example enrichment output:
+
+{
+  entities: [...],
+  fingerprint: "...",
+  failure_class: "...",
+  tags: [...]
+}
+
+Pipeline must be modular and match the stage definitions in the LLD.
+
+⸻
+
+5. Incident Reconstruction
+
+Purpose:
+
+Rebuild incident timelines using fragment history.
+
+Expected file:
+
+backend/app/services/abeyance/incident_reconstruction.py
+
+Capabilities:
+	•	time-ordered fragment retrieval
+	•	cluster context
+	•	snap events
+	•	enriched entity context
+
+New endpoint:
+
+GET /api/v1/incidents/reconstruct/{incident_id}
+
+Output should include:
+
+{
+  fragments
+  snaps
+  clusters
+  reconstructed_timeline
+}
+
+Exact structure should follow the LLD.
+
+⸻
+
+6. Value Attribution System
+
+Purpose:
+
+Measure the operational value of discoveries produced by Abeyance Memory.
+
+Expected file:
+
+backend/app/services/abeyance/value_attribution.py
+
+Metrics expected:
+	•	Discovery Review Queue
+	•	Mean-Time-To-Resolution Delta
+	•	Dark Graph Index
+
+Implementation must follow the formulas defined in the LLD.
+
+⸻
+
+Architectural Constraints
+
+Your implementation must:
+	•	reuse pgvector embeddings
+	•	integrate with Redis Streams event bus
+	•	support multi-tenant isolation
+	•	integrate with cold storage retrieval
+	•	support batch processing
+	•	avoid synchronous blocking operations
+
+⸻
+
+Testing Requirements
+
+Create the following tests:
+
+test_snap_engine.py
+test_accumulation_graph.py
+test_shadow_topology.py
+test_enrichment_chain.py
+test_incident_reconstruction.py
+test_value_attribution.py
+
+Coverage target:
+
+≥ 85% per module
+
+Tests must simulate:
+	•	fragment ingestion
+	•	snap activation
+	•	cluster growth
+	•	hidden correlation discovery
+	•	incident reconstruction
+	•	value attribution
+
+Existing tests must continue passing.
+
+⸻
+
+Coding Standards
+
+Follow the current project conventions:
+	•	async-compatible services
+	•	dependency injection
+	•	pydantic models
+	•	structured logging
+	•	type hints for all functions
+	•	minimal coupling between modules
+
+⸻
+
+Deliverables
+
+You must produce:
+	1.	missing service modules
+	2.	any required models
+	3.	API endpoints
+	4.	unit tests
+	5.	Redis event integrations
+	6.	documentation strings referencing the LLD sections implemented
+
+⸻
+
+Definition of Done
+
+The completed Abeyance Memory subsystem must be able to:
+	•	preserve weak signals
+	•	activate dormant fragments when evidence aligns
+	•	accumulate discoveries over time
+	•	reconstruct incidents from fragment history
+	•	detect hidden relationships between failures
+	•	quantify the operational value generated by discoveries
+
+All implementations must be traceable to sections of /Users/himanshu/Projects/Pedkai/docs/ABEYANCE_MEMORY_LLD.md.

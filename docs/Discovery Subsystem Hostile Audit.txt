@@ -1,0 +1,1417 @@
+B. Critical Defects (Discovery Subsystem)
+
+Silent Skipping on Large Graphs (Bridge Detector)
+
+bridge_detector.py returns an empty list if node count > MAX_FRAGMENTS_TO_SCAN (2000), with no alert, partial result, or progressive scan. This can silently blind bridge detection at scale. (LLD §7.4)
+Evidence: if len(all_nodes) > MAX_FRAGMENTS_TO_SCAN: return []
+Counterfactual Simulation: Heuristic, Not Replay
+
+counterfactual_sim.py uses a subtraction heuristic (removes entity overlap) instead of a true re-score replay for counterfactuals, violating LLD §10.2. This can mislead outcome calibration and impact scoring.
+Evidence: counterfactual_score = max(0.0, original_score - entity_weight * entity_score * d.temporal_modifier)
+No Progressive/Bounded Bridge Search
+
+Bridge detection does not implement paginated or bounded BFS as required by LLD. Large graphs are not processed incrementally, risking OOM or missed discoveries.
+No Robust Error/Alerting on Discovery Failures
+
+Most discovery mechanisms (bridge, counterfactual, evolutionary, etc.) log warnings but do not escalate or surface errors to operators or metrics, risking silent data quality loss.
+Partial/Stubbed Implementations
+
+Several mechanisms (counterfactual, evolutionary, meta-memory) are present but rely on batch runs, simplified heuristics, or are only partially implemented. These are not flagged as provisional in DB or logs.
+Mask/Embedding Invariant Violations
+
+Discovery logic (especially in bridge, pattern, and counterfactual) assumes mask/content invariants are enforced, but upstream enrichment can persist zero-filled vectors with mask=True, violating INV-12 and enabling false positives.
+No Data-Quality Checks for All-Zero Vectors
+
+No mechanism in the discovery subsystem detects or alerts on all-zero embeddings, which can poison similarity calculations and downstream logic.
+No Explicit Handling of Stale/Expired Fragments
+
+Discovery mechanisms do not consistently filter or handle fragments in STALE/EXPIRED/COLD states, risking incorrect analysis or wasted compute.
+
+bridge_detector.py
+
+Returns [] if node count > MAX_FRAGMENTS_TO_SCAN (2000), silently skipping large graphs. No alert, partial result, or progressive scan. Violates LLD §7.4. High risk of missed discoveries at scale.
+No progressive or paginated BFS. No logging of skipped analysis.
+No explicit filtering of stale/expired fragments.
+No data-quality checks for all-zero vectors or mask/content invariants.
+causal_direction.py
+
+Implements temporal ordering for causality, but no explicit error handling for missing or malformed sequence logs.
+No checks for stale/expired fragments.
+No metrics or alerts for insufficient data or failed analysis.
+counterfactual_sim.py
+
+Uses a subtraction heuristic for counterfactuals, not a true re-score replay. Violates LLD §10.2. Can mislead calibration and impact scoring.
+No provisional flag in DB for heuristic results.
+No error escalation or alerting on simulation failures.
+No explicit handling of mask/content invariants or all-zero vectors.
+evolutionary_patterns.py
+
+Genetic algorithm logic present, but relies on batch runs and simplified fitness. No evidence of full LLD coverage for all pattern types.
+No error escalation or alerting on failed generations.
+No explicit handling of stale/expired fragments or mask/content invariants.
+expectation_violation.py
+
+Detects anomalous transitions, but relies on temporal modeller for probabilities. No fallback or alert if modeller fails.
+No explicit filtering of stale/expired fragments.
+No data-quality checks for input state.
+hypothesis_generator.py
+
+Enqueues and processes triggers, but falls back to templates if TSLAM is missing. No alert/metric for fallback usage.
+No explicit error escalation on hypothesis generation failures.
+No explicit handling of stale/expired fragments.
+ignorance_mapper.py
+
+Scans for silent decays, mask distribution, and ignorance map. No alerting if scan fails or if high rates of silent decay are detected.
+No explicit filtering of stale/expired fragments.
+No data-quality checks for all-zero vectors.
+meta_memory.py
+
+Tracks productivity and bias, but relies on batch updates. No alerting if meta-memory fails to activate or if productivity drops.
+No explicit handling of stale/expired fragments.
+negative_evidence.py
+
+Handles operator disconfirmation, but no alerting if decay acceleration fails.
+No explicit filtering of stale/expired fragments.
+outcome_calibration.py
+
+Calibrates weights from feedback, but no alerting if insufficient samples or calibration fails.
+No explicit handling of mask/content invariants.
+pattern_compression.py
+
+Discovers compression rules, but no alerting if analysis fails or if no rules are found.
+No explicit filtering of stale/expired fragments.
+pattern_conflict.py
+
+Detects contradictory snaps, but no alerting if scan fails or if conflicts are found.
+No explicit filtering of stale/expired fragments.
+surprise_engine.py
+
+Maintains histograms and flags surprises, but no alerting if state update fails.
+No explicit filtering of stale/expired fragments.
+temporal_sequence.py
+
+Logs transitions and recomputes matrices, but no alerting if recompute fails or if transition counts are anomalous.
+No explicit filtering of stale/expired fragments.
+
+surprise_engine.py — Hostile Audit
+Findings:
+
+LLD Coverage
+
+Implements score histogram and surprise detection per LLD §7.1.
+No explicit test for histogram initialization edge cases (empty bins, corrupted state).
+No evidence of adaptive threshold reset on repeated surprises (only decreases on no-surprise).
+Stubs & Fake Logic
+
+No obvious stubs, but the _contributing_dimensions method is not shown—if it is a placeholder, this is a defect.
+Control Flow
+
+If state update fails (e.g., DB error), no error is surfaced—just logs.
+No explicit handling for missing or corrupted histogram bins.
+Data Contracts
+
+Assumes histogram_bins is a list of floats of length NUM_BINS. No schema validation or repair if this is violated.
+Dependency Violations
+
+None detected.
+Error Handling
+
+All errors are logged, but not escalated or surfaced to metrics/alerts.
+No retries or fallback if DB update fails.
+State & Concurrency
+
+No locking or atomicity for concurrent updates to histogram bins—risk of race conditions if multiple events processed in parallel.
+Integration
+
+Assumes SnapDecisionRecordORM and SurpriseDistributionStateORM are always available and valid.
+Performance
+
+For each snap, updates all bins in a loop—could be optimized, but not a bottleneck at current scale.
+Test Gaps
+
+No evidence of tests for corrupted state, concurrent updates, or repeated surprise events.
+Code Red Flags
+
+Magic numbers: NUM_BINS, ALPHA_EMA, INITIAL_THRESHOLD are hardcoded.
+No explicit schema validation for bins.
+Task List for surprise_engine.py
+Add schema validation and repair for histogram_bins
+
+Where: In process_snap_decision and _get_or_create_state
+What: Before using bins, check if it is a list of NUM_BINS floats. If not, reinitialize to [1.0/NUM_BINS] * NUM_BINS and log a warning.
+Escalate errors and add metrics/alerts
+
+Where: All exception handlers and after state updates
+What: In addition to logging, increment a metric/counter for failed updates and optionally raise an alert if repeated failures occur.
+Add atomicity for concurrent updates
+
+Where: In process_snap_decision
+What: Use a DB-level lock or optimistic concurrency control to prevent race conditions on histogram_bins updates.
+Test for corrupted state and concurrent updates
+
+Where: test_abeyance_v3.py
+What: Add tests that simulate corrupted bins, concurrent updates, and repeated surprise events.
+Document and refactor magic numbers
+
+Where: Top of file
+What: Move NUM_BINS, ALPHA_EMA, INITIAL_THRESHOLD to a config or constants section, with comments referencing LLD.
+
+Hostile Audit: bridge_detector.py
+
+Findings
+LLD Coverage
+
+Implements Brandes betweenness and domain span logic per LLD §7.4.
+Does not implement paginated or bounded BFS for large graphs as required by LLD.
+No progressive or partial result emission for large graphs.
+Stubs & Fake Logic
+
+Returns [] if node count > MAX_FRAGMENTS_TO_SCAN (2000). This is a silent skip, not a real partial result or progressive scan.
+No alert, warning, or metric is raised when skipping analysis.
+Control Flow
+
+No explicit error handling for DB failures or empty edge sets.
+No handling for stale/expired fragments—could include them in analysis.
+Data Contracts
+
+Assumes all nodes and domains are valid; no schema validation for adjacency or domain maps.
+Dependency Violations
+
+None detected.
+Error Handling
+
+Only logs at the start; no escalation or alerting for skipped or failed analysis.
+State & Concurrency
+
+No locking or atomicity for concurrent bridge detection runs.
+Integration
+
+Assumes all fragments and edges are present and valid; no fallback if missing.
+Performance
+
+Loads all edges and nodes into memory; can OOM on large graphs.
+No progressive or paginated processing for large datasets.
+Test Gaps
+
+No evidence of tests for large graphs, skipped analysis, or partial results.
+Code Red Flags
+
+Magic numbers: MAX_FRAGMENTS_TO_SCAN, MIN_BETWEENNESS, MIN_DOMAIN_SPAN.
+Silent failure: returns empty list on large graphs with no operator visibility.
+Task List for bridge_detector.py
+Implement paginated/bounded BFS for large graphs
+
+Where: In detect_bridges
+What: Replace the if len(all_nodes) > MAX_FRAGMENTS_TO_SCAN: return [] logic with a paginated or bounded BFS that processes the graph in chunks, emitting partial results and logging progress.
+Raise alert/metric on skipped analysis
+
+Where: Immediately after detecting a large graph
+What: Log a warning, increment a metric/counter, and optionally raise an alert if bridge detection is skipped due to graph size.
+Filter out stale/expired fragments
+
+Where: When building the adjacency list and domain map
+What: Exclude fragments with status STALE, EXPIRED, or COLD from bridge analysis.
+Add schema validation for adjacency/domain maps
+
+Where: Before using adj and domain_map
+What: Validate that all nodes and domains are present and well-formed; repair or skip invalid entries.
+Add tests for large graph handling and skipped analysis
+
+Where: test_abeyance_v3.py
+What: Add tests that simulate large graphs, verify paginated processing, and check that metrics/alerts are raised when analysis is skipped.
+Document and refactor magic numbers
+
+Where: Top of file
+What: Move MAX_FRAGMENTS_TO_SCAN, MIN_BETWEENNESS, MIN_DOMAIN_SPAN to a config/constants section with LLD references.
+
+Hostile Audit: causal_direction.py
+
+Findings
+LLD Coverage
+
+Implements temporal ordering and directional causality per LLD §9.3.
+No evidence of advanced causality tests (e.g., Granger, conditional independence) as sometimes expected in LLDs for causality.
+No explicit handling for partial or missing event data.
+Stubs & Fake Logic
+
+Only uses simple time-difference logic for directionality; no fallback or flag if data is insufficient.
+No provisional or confidence flag for weak or ambiguous results.
+Control Flow
+
+If there are fewer than MIN_PAIRS_FOR_CANDIDATE entries, returns early with no alert or metric.
+No error handling for DB failures or malformed logs.
+No handling for duplicate or out-of-order events.
+Data Contracts
+
+Assumes all EntitySequenceLogORM entries are valid and ordered.
+No schema validation for event timestamps or entity IDs.
+Dependency Violations
+
+None detected.
+Error Handling
+
+No try/except around DB access or analysis logic.
+No alerting or metrics for failed or skipped analysis.
+State & Concurrency
+
+No locking or atomicity for concurrent analysis runs.
+No deduplication of overlapping runs.
+Integration
+
+Assumes all referenced ORM models are present and valid.
+No fallback if logs are missing or incomplete.
+Performance
+
+Loads up to 50,000 entries into memory; could OOM on larger datasets.
+No batching or streaming for very large logs.
+Test Gaps
+
+No evidence of tests for ambiguous, missing, or corrupted logs.
+No tests for edge cases (e.g., all events at same timestamp).
+Code Red Flags
+
+Magic numbers: MIN_PAIRS_FOR_CANDIDATE, DIRECTIONAL_FRACTION_THRESHOLD, CONFIDENCE_THRESHOLD.
+No explicit schema validation or repair for logs.
+Task List for causal_direction.py
+Add schema validation and repair for event logs
+
+Where: Before processing entries in run_analysis
+What: Validate that all entries have valid UUIDs and timestamps; skip or repair invalid entries and log a warning.
+Escalate errors and add metrics/alerts
+
+Where: All early returns and after DB access
+What: In addition to returning, increment a metric/counter and optionally raise an alert if analysis is skipped or fails due to insufficient data.
+Add atomicity for concurrent analysis runs
+
+Where: At the start of run_analysis
+What: Use a DB-level lock or optimistic concurrency control to prevent overlapping runs for the same tenant.
+Add tests for ambiguous, missing, or corrupted logs
+
+Where: test_abeyance_v3.py
+What: Add tests that simulate missing, ambiguous, or corrupted logs and verify correct handling and alerting.
+Document and refactor magic numbers
+
+Where: Top of file
+What: Move MIN_PAIRS_FOR_CANDIDATE, DIRECTIONAL_FRACTION_THRESHOLD, CONFIDENCE_THRESHOLD to a config/constants section with LLD references.
+Flag ambiguous or low-confidence results
+
+Where: When computing directionality
+What: If directional fraction is close to threshold, flag result as ambiguous or low-confidence in the output/DB.
+
+Hostile Audit: counterfactual_sim.py
+
+Findings
+LLD Coverage
+
+Implements counterfactual simulation, but uses a subtraction heuristic (removes entity overlap) instead of a true re-score replay as required by LLD §10.2.
+No evidence of marking heuristic results as provisional in DB or logs.
+No support for full re-scoring simulation or replay of snap engine logic.
+Stubs & Fake Logic
+
+The core logic is a placeholder: counterfactual_score = max(0.0, original_score - entity_weight * entity_score * d.temporal_modifier).
+No fallback or flag for partial/approximate results.
+Control Flow
+
+If no decisions are found, returns 0 with no alert or metric.
+No error handling for DB failures or missing data.
+No handling for ambiguous or conflicting results.
+Data Contracts
+
+Assumes all SnapDecisionRecordORM fields are present and valid.
+No schema validation for weights or scores.
+Dependency Violations
+
+None detected.
+Error Handling
+
+No try/except around DB access or simulation logic.
+No alerting or metrics for failed or skipped analysis.
+State & Concurrency
+
+No locking or atomicity for concurrent simulation runs.
+No deduplication of overlapping jobs.
+Integration
+
+Assumes SnapEngineV3 exposes all required methods.
+No fallback if SnapEngineV3 is missing or fails.
+Performance
+
+Loads all relevant decisions into memory; could OOM on large candidate sets.
+No batching or streaming for large jobs.
+Test Gaps
+
+No evidence of tests for ambiguous, missing, or corrupted decisions.
+No tests for edge cases (e.g., all scores zero, all decisions SNAP).
+Code Red Flags
+
+Magic numbers: MAX_PAIRS_PER_CANDIDATE, IMPACT_THRESHOLD.
+No explicit schema validation or repair for weights/scores.
+No provisional flag for heuristic results.
+Task List for counterfactual_sim.py
+Implement true re-score replay for counterfactuals
+
+Where: In _simulate_removal
+What: Replace the subtraction heuristic with a call to SnapEngineV3 to recompute the score for each pair with the candidate fragment removed. If not possible, clearly mark the result as provisional in the DB and logs.
+Flag and log provisional/heuristic results
+
+Where: When using the subtraction heuristic
+What: Add a provisional or heuristic_used flag to the result ORM and log a warning when fallback logic is used.
+Escalate errors and add metrics/alerts
+
+Where: All early returns and after DB access
+What: In addition to returning, increment a metric/counter and optionally raise an alert if analysis is skipped or fails due to insufficient data.
+Add schema validation for weights and scores
+
+Where: Before using weights or scores
+What: Validate that all required fields are present and well-formed; repair or skip invalid entries and log a warning.
+Add tests for ambiguous, missing, or corrupted decisions
+
+Where: test_abeyance_v3.py
+What: Add tests that simulate missing, ambiguous, or corrupted decisions and verify correct handling and alerting.
+Document and refactor magic numbers
+
+Where: Top of file
+What: Move MAX_PAIRS_PER_CANDIDATE, IMPACT_THRESHOLD to a config/constants section with LLD references.
+
+Hostile Audit: evolutionary_patterns.py
+
+Findings
+
+LLD Coverage
+
+Claims to implement "Genetic algorithm-based exploration of mask/weight pattern space" (LLD v3.0 §10.4), but only supports a basic genetic algorithm loop with fixed-size population, simple fitness, and no evidence of advanced LLD features (e.g., multi-objective optimization, adaptive mutation, or partitioned evolution).
+No evidence of LLD-mandated logging for failed generations, convergence, or partition state transitions.
+No explicit support for "pattern repair" or "schema validation" as referenced in LLD.
+No coverage for edge cases (e.g., population collapse, repeated patterns, or degenerate fitness).
+Stubs & Fake Logic
+
+Fitness function is a static weighted sum; no evidence of dynamic or learned weights, or LLD-mandated "novelty search" or "compression-aware" objectives.
+_random_pattern() generates only 1-3 char patterns from "S", "T", "O" — no support for full mask/weight space as described in LLD.
+No fallback or flag for partial/approximate results; all results treated as final.
+No evidence of archiving failed or degenerate generations.
+Control Flow
+
+If population is empty, initializes randomly with no alert or metric.
+No error handling for DB failures, ORM errors, or failed flushes.
+No handling for duplicate patterns, population collapse, or repeated elites.
+No explicit convergence detection or early stopping (other than MAX_GENERATIONS).
+Data Contracts
+
+Assumes all ORM fields (fitness, predictive_power, novelty, compression_gain) are present and valid.
+No schema validation for pattern strings, fitness values, or ORM integrity.
+No repair or skip logic for invalid ORM entries.
+Dependency Violations
+
+Assumes all ORM models are present and compatible.
+No fallback if ORM models are missing or schema changes.
+Error Handling
+
+No try/except around DB access, population initialization, or evolution logic.
+No alerting or metrics for failed or skipped generations.
+No logging for failed DB operations or ORM errors.
+State & Concurrency
+
+No locking or atomicity for concurrent evolution runs.
+No deduplication of overlapping jobs or repeated generations.
+No state repair for interrupted or failed runs.
+Integration
+
+Assumes all ORM models and DB session are available and correct.
+No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+Performance
+
+Loads entire population into memory; could OOM on large populations or many tenants.
+No batching, streaming, or lazy loading for large jobs.
+No evidence of profiling or performance metrics.
+Test Gaps
+
+No evidence of tests for degenerate, empty, or corrupted populations.
+No tests for edge cases (e.g., all fitness zero, repeated patterns, ORM failures).
+No tests for concurrent or repeated evolution runs.
+Code Red Flags
+
+Magic numbers: POPULATION_SIZE, TOURNAMENT_K, MUTATION_RATE, RECOMBINATION_RATE, ELITISM_COUNT, MAX_GENERATIONS, fitness weights.
+No explicit schema validation or repair for pattern strings or fitness.
+No provisional flag for heuristic or fallback results.
+Static fitness weights, no config or LLD reference.
+Task List for evolutionary_patterns.py
+
+Implement advanced LLD features (multi-objective, adaptive mutation, partitioned evolution).
+Add logging and metrics for failed generations, convergence, and partition transitions.
+Add schema validation and repair for pattern strings and ORM fields.
+Add error handling and alerting for DB/ORM failures.
+Add deduplication and locking for concurrent runs.
+Add tests for degenerate, empty, and corrupted populations.
+Move magic numbers and weights to config/constants with LLD references.
+Add fallback/flag for partial or approximate results.
+
+Searched for files matching `**/expectation_violation.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/expectation_violation.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/expectation_violation.py#61-61), lines 61 to 77
+
+Read [](file:///Users/himanshu/Projects/Pedkai/tests/test_abeyance_v3.py#181-181), lines 181 to 300
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/models/abeyance_v3_orm.py#61-61), lines 61 to 180
+
+Here is a hostile audit for expectation_violation.py, following the same format:
+
+---
+
+Hostile Audit: expectation_violation.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Expectation Violation Detection" (LLD v3.0 §9.2), but only supports a single-threshold check using a static probability from a transition matrix.
+- No evidence of LLD-mandated support for multi-threshold, adaptive, or context-aware violation detection.
+- No coverage for edge cases (e.g., missing transition data, ambiguous states, or repeated violations).
+- No explicit logging or metrics for skipped, ambiguous, or borderline transitions.
+
+Stubs & Fake Logic
+
+- Uses a static VIOLATION_THRESHOLD (0.05); no evidence of dynamic or learned thresholds as required by LLD.
+- No fallback or flag for partial/approximate results; all violations are treated as final.
+- No evidence of archiving or flagging ambiguous or borderline violations.
+
+Control Flow
+
+- If entity_domain is missing, returns None silently (no alert, metric, or log).
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for ambiguous, repeated, or conflicting transitions.
+- No explicit convergence detection or early stopping.
+
+Data Contracts
+
+- Assumes all ORM fields are present and valid.
+- No schema validation for state names, probabilities, or ORM integrity.
+- No repair or skip logic for invalid ORM entries.
+
+Dependency Violations
+
+- Assumes TemporalSequenceModeller and ExpectationViolationORM are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, probability lookup, or violation creation.
+- No alerting or metrics for failed or skipped checks.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent checks.
+- No deduplication of overlapping or repeated checks.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- No evidence of batching, streaming, or lazy loading for large numbers of checks.
+- No profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted transitions.
+- No tests for edge cases (e.g., all probabilities zero, repeated violations, ORM failures).
+- No tests for concurrent or repeated checks.
+
+Code Red Flags
+
+- Magic number: VIOLATION_THRESHOLD.
+- No explicit schema validation or repair for state names or probabilities.
+- No provisional flag for heuristic or fallback results.
+- Static threshold, no config or LLD reference.
+
+Task List for expectation_violation.py
+
+1. Implement adaptive/multi-threshold and context-aware violation detection per LLD.
+2. Add logging and metrics for skipped, ambiguous, and borderline transitions.
+3. Add schema validation and repair for state names and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent checks.
+6. Add tests for ambiguous, missing, and corrupted transitions.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+Searched for files matching `**/hypothesis_generator.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/hypothesis_generator.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/hypothesis_generator.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/hypothesis_generator.py#181-181), lines 181 to 240
+
+Here is a hostile audit for hypothesis_generator.py, following the required format:
+
+---
+
+Hostile Audit: hypothesis_generator.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Hypothesis Generation" (LLD v3.0 §9.1), but only supports basic queueing, template-based statement generation, and status transitions.
+- No evidence of LLD-mandated advanced hypothesis ranking, prioritization, or multi-source evidence aggregation.
+- No support for hypothesis lifecycle management beyond simple status changes (PROPOSED, CONFIRMED, REFUTED, EXPIRED).
+- No explicit logging or metrics for dropped, ambiguous, or conflicting triggers.
+- No coverage for edge cases (e.g., queue overflow, repeated triggers, or ambiguous context).
+
+Stubs & Fake Logic
+
+- Fallback to static templates for hypothesis statements if TSLAM is unavailable or fails; no evidence of robust fallback or multi-stage reasoning.
+- No fallback or flag for partial/approximate results; all generated hypotheses are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence hypotheses.
+
+Control Flow
+
+- If active hypothesis count exceeds MAX_ACTIVE_HYPOTHESES, silently returns without alert or metric.
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate triggers, repeated hypotheses, or ambiguous context.
+- No explicit prioritization or ranking of hypotheses.
+
+Data Contracts
+
+- Assumes all ORM fields are present and valid.
+- No schema validation for trigger context, hypothesis statements, or ORM integrity.
+- No repair or skip logic for invalid ORM entries.
+
+Dependency Violations
+
+- Assumes TSLAM service and all ORM models are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, queue processing, or hypothesis creation (except TSLAM call).
+- No alerting or metrics for failed or skipped triggers.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent queue processing.
+- No deduplication of overlapping or repeated triggers.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all pending triggers and active hypotheses into memory; could OOM on large tenants.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted triggers.
+- No tests for edge cases (e.g., queue overflow, repeated triggers, ORM failures).
+- No tests for concurrent or repeated queue processing.
+
+Code Red Flags
+
+- Magic numbers: HYPOTHESIS_TTL_DAYS, MAX_ACTIVE_HYPOTHESES, MAX_QUEUE_BATCH.
+- No explicit schema validation or repair for trigger context or hypothesis statements.
+- No provisional flag for heuristic or fallback results.
+- Static templates, no config or LLD reference.
+
+Task List for hypothesis_generator.py
+
+1. Implement advanced LLD features (ranking, prioritization, multi-source evidence).
+2. Add logging and metrics for dropped, ambiguous, and conflicting triggers.
+3. Add schema validation and repair for trigger context and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent queue processing.
+6. Add tests for ambiguous, missing, and corrupted triggers.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Searched for files matching `**/ignorance_mapper.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/ignorance_mapper.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/ignorance_mapper.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/ignorance_mapper.py#181-181), lines 181 to 249
+
+Here is a hostile audit for ignorance_mapper.py, following the required format:
+
+---
+
+Hostile Audit: ignorance_mapper.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Ignorance Mapping" (LLD v3.0 §7.2), but only supports basic scan, mask distribution, and directive generation.
+- No evidence of LLD-mandated advanced analytics (e.g., temporal trends, multi-metric aggregation, or adaptive thresholds).
+- No support for cross-domain correlation, root-cause analysis, or feedback loops.
+- No explicit logging or metrics for skipped, ambiguous, or borderline domains.
+- No coverage for edge cases (e.g., empty fragments, corrupted entities, or repeated directives).
+
+Stubs & Fake Logic
+
+- Uses static thresholds (e.g., IGNORANCE_SCAN_LOOKBACK_DAYS, SILENT_DECAY_MAX_SCORE, ignorance_score >= 0.5); no evidence of dynamic or learned thresholds as required by LLD.
+- No fallback or flag for partial/approximate results; all computed scores and directives are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence domains.
+
+Control Flow
+
+- If no fragments are found, returns silently (no alert, metric, or log).
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate directives, repeated domains, or ambiguous entity data.
+- No explicit prioritization or ranking beyond ignorance_score.
+
+Data Contracts
+
+- Assumes all ORM fields are present and valid.
+- No schema validation for fragment masks, entity domains, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted entities.
+
+Dependency Violations
+
+- Assumes all ORM models are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, scan logic, or directive creation (except for the outer run_scan).
+- No alerting or metrics for failed or skipped scans.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent scans.
+- No deduplication of overlapping or repeated scans.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all relevant fragments and entities into memory; could OOM on large tenants.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted fragments/entities.
+- No tests for edge cases (e.g., empty fragments, repeated directives, ORM failures).
+- No tests for concurrent or repeated scans.
+
+Code Red Flags
+
+- Magic numbers: SILENT_DECAY_MAX_SCORE, IGNORANCE_SCAN_LOOKBACK_DAYS, MAX_DIRECTIVES_PER_RUN, ignorance_score >= 0.5.
+- No explicit schema validation or repair for fragment masks or entity domains.
+- No provisional flag for heuristic or fallback results.
+- Static thresholds, no config or LLD reference.
+
+Task List for ignorance_mapper.py
+
+1. Implement advanced LLD features (temporal trends, multi-metric aggregation, adaptive thresholds).
+2. Add logging and metrics for skipped, ambiguous, and borderline domains.
+3. Add schema validation and repair for fragment masks, entity domains, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent scans.
+6. Add tests for ambiguous, missing, and corrupted fragments/entities.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Searched for files matching `**/meta_memory.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/meta_memory.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/meta_memory.py#61-61), lines 61 to 180
+
+Here is a hostile audit for meta_memory.py, following the required format:
+
+---
+
+Hostile Audit: meta_memory.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Meta-Memory" (LLD v3.0 §10.3), but only supports basic productivity tracking, threshold-based activation, and inverse productivity bias allocation.
+- No evidence of LLD-mandated advanced feedback loops, multi-factor bias adjustment, or adaptive smoothing.
+- No support for cross-tenant learning, area merging/splitting, or feedback loop diagnostics.
+- No explicit logging or metrics for skipped, ambiguous, or borderline areas.
+- No coverage for edge cases (e.g., zero productivity, missing areas, or repeated activations).
+
+Stubs & Fake Logic
+
+- Uses static thresholds (ACTIVATION_THRESHOLD, SMOOTHING_ALPHA, PRODUCTIVITY_EPSILON); no evidence of dynamic or learned parameters as required by LLD.
+- No fallback or flag for partial/approximate results; all computed biases are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence areas.
+
+Control Flow
+
+- If no areas or productivities are found, returns silently (no alert, metric, or log).
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate areas, repeated activations, or ambiguous productivity.
+- No explicit prioritization or ranking beyond inverse productivity.
+
+Data Contracts
+
+- Assumes all ORM fields are present and valid.
+- No schema validation for area keys, productivity values, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted areas.
+
+Dependency Violations
+
+- Assumes all ORM models are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, productivity computation, or bias allocation.
+- No alerting or metrics for failed or skipped bias computations.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent bias computations.
+- No deduplication of overlapping or repeated bias jobs.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all areas and productivities into memory; could OOM on large tenants.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted areas/productivities.
+- No tests for edge cases (e.g., zero productivity, repeated activations, ORM failures).
+- No tests for concurrent or repeated bias computations.
+
+Code Red Flags
+
+- Magic numbers: ACTIVATION_THRESHOLD, SMOOTHING_ALPHA, PRODUCTIVITY_EPSILON.
+- No explicit schema validation or repair for area keys or productivity values.
+- No provisional flag for heuristic or fallback results.
+- Static thresholds, no config or LLD reference.
+
+Task List for meta_memory.py
+
+1. Implement advanced LLD features (multi-factor feedback, adaptive smoothing, diagnostics).
+2. Add logging and metrics for skipped, ambiguous, and borderline areas.
+3. Add schema validation and repair for area keys, productivity, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent bias computations.
+6. Add tests for ambiguous, missing, and corrupted areas/productivities.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Searched for files matching `**/negative_evidence.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/negative_evidence.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/negative_evidence.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/negative_evidence.py#181-181), lines 181 to 192
+
+Here is a hostile audit for negative_evidence.py, following the required format:
+
+---
+
+Hostile Audit: negative_evidence.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Negative Evidence" (LLD v3.0 §7.3), but only supports operator-initiated disconfirmation, decay acceleration, and centroid computation for suppression.
+- No evidence of LLD-mandated advanced suppression strategies, multi-dimensional evidence, or adaptive penalty computation.
+- No support for feedback on suppression effectiveness, operator error correction, or multi-fragment pattern learning.
+- No explicit logging or metrics for skipped, ambiguous, or borderline disconfirmations.
+- No coverage for edge cases (e.g., empty fragment list, corrupted embeddings, or repeated disconfirmations).
+
+Stubs & Fake Logic
+
+- Uses static factors (DISCONFIRMATION_ACCELERATION_FACTOR, DISCONFIRMATION_PATTERN_TTL_DAYS, PENALTY_THRESHOLD); no evidence of dynamic or learned parameters as required by LLD.
+- No fallback or flag for partial/approximate results; all computed penalties and centroids are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence disconfirmations.
+
+Control Flow
+
+- If no patterns are found in check_suppression, returns 1.0 silently (no alert, metric, or log).
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate disconfirmations, repeated centroids, or ambiguous embeddings.
+- No explicit prioritization or ranking beyond penalty factor.
+
+Data Contracts
+
+- Assumes all ORM fields and fragment embeddings are present and valid.
+- No schema validation for embeddings, penalty values, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted embeddings.
+
+Dependency Violations
+
+- Assumes all ORM models and ProvenanceLogger are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, penalty computation, or centroid calculation.
+- No alerting or metrics for failed or skipped disconfirmations.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent disconfirmations or suppression checks.
+- No deduplication of overlapping or repeated disconfirmations.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all relevant fragments and patterns into memory; could OOM on large tenants.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted fragments/embeddings.
+- No tests for edge cases (e.g., empty fragment list, repeated disconfirmations, ORM failures).
+- No tests for concurrent or repeated suppression checks.
+
+Code Red Flags
+
+- Magic numbers: DISCONFIRMATION_ACCELERATION_FACTOR, DISCONFIRMATION_PATTERN_TTL_DAYS, PENALTY_THRESHOLD.
+- No explicit schema validation or repair for embeddings or penalty values.
+- No provisional flag for heuristic or fallback results.
+- Static thresholds, no config or LLD reference.
+
+Task List for negative_evidence.py
+
+1. Implement advanced LLD features (multi-dimensional suppression, adaptive penalty, feedback).
+2. Add logging and metrics for skipped, ambiguous, and borderline disconfirmations.
+3. Add schema validation and repair for embeddings, penalty, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent disconfirmations.
+6. Add tests for ambiguous, missing, and corrupted fragments/embeddings.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Searched for files matching `**/outcome_calibration.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/outcome_calibration.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/outcome_calibration.py#61-61), lines 61 to 180
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/outcome_calibration.py#181-181), lines 181 to 203
+
+Here is a hostile audit for outcome_calibration.py, following the required format:
+
+---
+
+Hostile Audit: outcome_calibration.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Outcome Calibration" (LLD v3.0 §8.1, Feedback Loop A), but only supports basic operator feedback ingestion, simple gradient-based weight adjustment, and profile persistence.
+- No evidence of LLD-mandated advanced calibration (e.g., multi-cycle learning, cross-profile regularization, or operator error correction).
+- No support for feedback loop diagnostics, rollback, or calibration quality metrics beyond TP/FP count.
+- No explicit logging or metrics for skipped, ambiguous, or borderline calibrations.
+- No coverage for edge cases (e.g., conflicting feedback, missing scores, or repeated calibrations).
+
+Stubs & Fake Logic
+
+- Uses static parameters (MIN_SAMPLES_FOR_CALIBRATION, LEARNING_RATE, MAX_WEIGHT_SHIFT); no evidence of dynamic or learned parameters as required by LLD.
+- No fallback or flag for partial/approximate results; all computed weights are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence calibrations.
+
+Control Flow
+
+- If insufficient samples, returns None silently (only logs info).
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate calibrations, repeated feedback, or ambiguous operator verdicts.
+- No explicit prioritization or ranking beyond TP/FP count.
+
+Data Contracts
+
+- Assumes all ORM fields and score attributes are present and valid.
+- No schema validation for weights, feedback, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted scores.
+
+Dependency Violations
+
+- Assumes all ORM models and WEIGHT_PROFILES_V3 are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, calibration logic, or weight updates.
+- No alerting or metrics for failed or skipped calibrations.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent calibrations.
+- No deduplication of overlapping or repeated calibrations.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all relevant feedback and decisions into memory; could OOM on large tenants.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted feedback/decisions.
+- No tests for edge cases (e.g., conflicting feedback, repeated calibrations, ORM failures).
+- No tests for concurrent or repeated calibrations.
+
+Code Red Flags
+
+- Magic numbers: MIN_SAMPLES_FOR_CALIBRATION, LEARNING_RATE, MAX_WEIGHT_SHIFT.
+- No explicit schema validation or repair for weights or feedback.
+- No provisional flag for heuristic or fallback results.
+- Static parameters, no config or LLD reference.
+
+Task List for outcome_calibration.py
+
+1. Implement advanced LLD features (multi-cycle learning, diagnostics, rollback).
+2. Add logging and metrics for skipped, ambiguous, and borderline calibrations.
+3. Add schema validation and repair for weights, feedback, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent calibrations.
+6. Add tests for ambiguous, missing, and corrupted feedback/decisions.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Searched for files matching `**/pattern_compression.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/pattern_compression.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/pattern_compression.py#61-61), lines 61 to 120
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/pattern_compression.py#121-121), lines 121 to 175
+
+Here is a hostile audit for pattern_compression.py, following the required format:
+
+---
+
+Hostile Audit: pattern_compression.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Pattern Compression" (LLD v3.0 §10.1), but only supports basic rule mining, binned score patterns, and simple compression gain calculation.
+- No evidence of LLD-mandated advanced rule discovery (e.g., multi-level, temporal, or cross-profile compression).
+- No support for rule validation, false positive suppression, or feedback loop integration.
+- No explicit logging or metrics for skipped, ambiguous, or borderline compressions.
+- No coverage for edge cases (e.g., all patterns identical, highly fragmented clusters, or repeated rules).
+
+Stubs & Fake Logic
+
+- Uses static parameters (MIN_POPULATION, MIN_COMPRESSION_GAIN, MAX_RULES); no evidence of dynamic or learned thresholds as required by LLD.
+- No fallback or flag for partial/approximate results; all discovered rules and gains are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence rules.
+
+Control Flow
+
+- If insufficient population or compression gain, returns None silently.
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate rules, repeated compressions, or ambiguous patterns.
+- No explicit prioritization or ranking beyond frequency.
+
+Data Contracts
+
+- Assumes all ORM fields and score attributes are present and valid.
+- No schema validation for patterns, rules, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted scores.
+
+Dependency Violations
+
+- Assumes all ORM models are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, rule mining, or compression logic.
+- No alerting or metrics for failed or skipped compressions.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent compressions.
+- No deduplication of overlapping or repeated compressions.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all relevant decisions into memory; could OOM on large tenants.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted decisions/patterns.
+- No tests for edge cases (e.g., all patterns identical, repeated rules, ORM failures).
+- No tests for concurrent or repeated compressions.
+
+Code Red Flags
+
+- Magic numbers: MIN_POPULATION, MIN_COMPRESSION_GAIN, MAX_RULES.
+- No explicit schema validation or repair for patterns or rules.
+- No provisional flag for heuristic or fallback results.
+- Static parameters, no config or LLD reference.
+
+Task List for pattern_compression.py
+
+1. Implement advanced LLD features (multi-level rules, feedback, validation).
+2. Add logging and metrics for skipped, ambiguous, and borderline compressions.
+3. Add schema validation and repair for patterns, rules, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent compressions.
+6. Add tests for ambiguous, missing, and corrupted decisions/patterns.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Searched for files matching `**/pattern_conflict.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/pattern_conflict.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/pattern_conflict.py#61-61), lines 61 to 120
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/pattern_conflict.py#121-121), lines 121 to 155
+
+Here is a hostile audit for pattern_conflict.py, following the required format:
+
+---
+
+Hostile Audit: pattern_conflict.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Pattern Conflict Detection" (LLD v3.0 §8.2), but only supports basic pairwise entity overlap and polarity checks.
+- No evidence of LLD-mandated advanced conflict detection (e.g., multi-way, temporal, or cross-profile conflicts).
+- No support for conflict resolution, escalation, or feedback loop integration.
+- No explicit logging or metrics for skipped, ambiguous, or borderline conflicts beyond a summary log.
+- No coverage for edge cases (e.g., all neutral polarities, fragmented entity sets, or repeated conflicts).
+
+Stubs & Fake Logic
+
+- Uses static parameters (OVERLAP_THRESHOLD, SCAN_WINDOW_DAYS, MAX_DECISIONS_PER_SCAN); no evidence of dynamic or learned thresholds as required by LLD.
+- No fallback or flag for partial/approximate results; all detected conflicts are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence conflicts.
+
+Control Flow
+
+- If insufficient decisions, returns empty list silently.
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate conflicts, repeated scans, or ambiguous polarities.
+- No explicit prioritization or ranking beyond overlap and polarity.
+
+Data Contracts
+
+- Assumes all ORM fields and entity/polarity attributes are present and valid.
+- No schema validation for entity sets, polarities, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted entities.
+
+Dependency Violations
+
+- Assumes all ORM models are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, conflict detection, or log writing.
+- No alerting or metrics for failed or skipped scans.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent scans.
+- No deduplication of overlapping or repeated scans.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all relevant decisions and entities into memory; could OOM on large tenants.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted decisions/entities.
+- No tests for edge cases (e.g., all neutral polarities, repeated conflicts, ORM failures).
+- No tests for concurrent or repeated scans.
+
+Code Red Flags
+
+- Magic numbers: OVERLAP_THRESHOLD, SCAN_WINDOW_DAYS, MAX_DECISIONS_PER_SCAN.
+- No explicit schema validation or repair for entity sets or polarities.
+- No provisional flag for heuristic or fallback results.
+- Static parameters, no config or LLD reference.
+
+Task List for pattern_conflict.py
+
+1. Implement advanced LLD features (multi-way conflicts, escalation, feedback).
+2. Add logging and metrics for skipped, ambiguous, and borderline conflicts.
+3. Add schema validation and repair for entity sets, polarities, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent scans.
+6. Add tests for ambiguous, missing, and corrupted decisions/entities.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Searched for files matching `**/surprise_engine.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/surprise_engine.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/surprise_engine.py#61-61), lines 61 to 120
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/surprise_engine.py#121-121), lines 121 to 136
+
+Here is a hostile audit for surprise_engine.py, following the required format:
+
+---
+
+Hostile Audit: surprise_engine.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Surprise Engine" (LLD v3.0 §7.1), but only supports basic histogram-based anomaly detection and static thresholding.
+- No evidence of LLD-mandated advanced anomaly detection (e.g., multi-modal, adaptive, or context-aware surprise).
+- No support for feedback loop integration, false positive suppression, or escalation tuning.
+- No explicit logging or metrics for skipped, ambiguous, or borderline surprises beyond a summary log.
+- No coverage for edge cases (e.g., all scores identical, histogram drift, or repeated escalations).
+
+Stubs & Fake Logic
+
+- Uses static parameters (NUM_BINS, ALPHA_EMA, INITIAL_THRESHOLD); no evidence of dynamic or learned parameters as required by LLD.
+- No fallback or flag for partial/approximate results; all computed surprises are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence surprise events.
+
+Control Flow
+
+- If no state exists, initializes with uniform bins silently.
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate surprise events, repeated escalations, or ambiguous scores.
+- No explicit prioritization or ranking beyond surprise value.
+
+Data Contracts
+
+- Assumes all ORM fields and score attributes are present and valid.
+- No schema validation for histogram bins, scores, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted bins.
+
+Dependency Violations
+
+- Assumes all ORM models are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, histogram updates, or event creation.
+- No alerting or metrics for failed or skipped surprise checks.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent surprise checks.
+- No deduplication of overlapping or repeated surprise events.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads and updates full histogram bins in memory; could OOM on large tenants or many profiles.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted scores/bins.
+- No tests for edge cases (e.g., all scores identical, repeated escalations, ORM failures).
+- No tests for concurrent or repeated surprise checks.
+
+Code Red Flags
+
+- Magic numbers: NUM_BINS, ALPHA_EMA, INITIAL_THRESHOLD.
+- No explicit schema validation or repair for bins or scores.
+- No provisional flag for heuristic or fallback results.
+- Static parameters, no config or LLD reference.
+
+Task List for surprise_engine.py
+
+1. Implement advanced LLD features (multi-modal, adaptive, feedback integration).
+2. Add logging and metrics for skipped, ambiguous, and borderline surprises.
+3. Add schema validation and repair for bins, scores, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent surprise checks.
+6. Add tests for ambiguous, missing, and corrupted scores/bins.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+Ready to proceed to temporal_sequence.py, unless you want to discuss or act on these findings first.
+
+Searched for files matching `**/temporal_sequence.py`, 1 match
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/temporal_sequence.py#1-1), lines 1 to 60
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/temporal_sequence.py#61-61), lines 61 to 120
+
+Read [](file:///Users/himanshu/Projects/Pedkai/backend/app/services/abeyance/discovery/temporal_sequence.py#121-121), lines 121 to 162
+
+Here is a hostile audit for temporal_sequence.py, following the required format:
+
+---
+
+Hostile Audit: temporal_sequence.py
+
+Findings
+
+LLD Coverage
+
+- Claims to implement "Temporal Sequence Modelling" (LLD v3.0 §8.3), but only supports basic state transition logging, matrix recomputation, and probability lookup.
+- No evidence of LLD-mandated advanced sequence analytics (e.g., higher-order Markov, temporal decay, or anomaly detection).
+- No support for feedback loop integration, state merging/splitting, or transition diagnostics.
+- No explicit logging or metrics for skipped, ambiguous, or borderline transitions beyond a summary log.
+- No coverage for edge cases (e.g., missing states, fragmented logs, or repeated recomputations).
+
+Stubs & Fake Logic
+
+- Uses static parameter (MAX_TRANSITIONS_PER_RECOMPUTE); no evidence of dynamic or learned thresholds as required by LLD.
+- No fallback or flag for partial/approximate results; all computed probabilities and matrices are treated as final.
+- No evidence of archiving or flagging ambiguous or low-confidence transitions.
+
+Control Flow
+
+- If no entries or transitions, returns zeros silently.
+- No error handling for DB failures, ORM errors, or failed flushes.
+- No handling for duplicate transitions, repeated recomputations, or ambiguous states.
+- No explicit prioritization or ranking beyond transition count.
+
+Data Contracts
+
+- Assumes all ORM fields and state attributes are present and valid.
+- No schema validation for states, transitions, or ORM integrity.
+- No repair or skip logic for invalid ORM entries or corrupted logs.
+
+Dependency Violations
+
+- Assumes all ORM models are present and compatible.
+- No fallback if dependencies are missing or schema changes.
+
+Error Handling
+
+- No try/except around DB access, matrix updates, or probability computation.
+- No alerting or metrics for failed or skipped recomputations.
+- No logging for failed DB operations or ORM errors.
+
+State & Concurrency
+
+- No locking or atomicity for concurrent recomputations.
+- No deduplication of overlapping or repeated recomputations.
+- No state repair for interrupted or failed runs.
+
+Integration
+
+- Assumes all dependencies and DB session are available and correct.
+- No fallback if session is closed, DB is unavailable, or ORM is out of sync.
+
+Performance
+
+- Loads all relevant logs and transitions into memory; could OOM on large tenants or domains.
+- No batching, streaming, or lazy loading for large jobs.
+- No evidence of profiling or performance metrics.
+
+Test Gaps
+
+- No evidence of tests for ambiguous, missing, or corrupted logs/states.
+- No tests for edge cases (e.g., missing states, repeated recomputations, ORM failures).
+- No tests for concurrent or repeated recomputations.
+
+Code Red Flags
+
+- Magic number: MAX_TRANSITIONS_PER_RECOMPUTE.
+- No explicit schema validation or repair for states or transitions.
+- No provisional flag for heuristic or fallback results.
+- Static parameter, no config or LLD reference.
+
+Task List for temporal_sequence.py
+
+1. Implement advanced LLD features (higher-order analytics, feedback, diagnostics).
+2. Add logging and metrics for skipped, ambiguous, and borderline transitions.
+3. Add schema validation and repair for states, transitions, and ORM fields.
+4. Add error handling and alerting for DB/ORM failures.
+5. Add deduplication and locking for concurrent recomputations.
+6. Add tests for ambiguous, missing, and corrupted logs/states.
+7. Move magic numbers to config/constants with LLD references.
+8. Add fallback/flag for partial or approximate results.
+
+---
+
+All discovery subsystem files in your list have now been audited in hostile style. Ready to proceed to the next group (Database, API, Models/ORM, Schemas, Core Services), or act on these findings.

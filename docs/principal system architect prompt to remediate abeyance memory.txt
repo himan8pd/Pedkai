@@ -1,0 +1,166 @@
+You are simultaneously:
+• Principal Systems Architect
+• Lead Kernel Engineer
+• Adversarial Reliability Auditor
+
+This is not a collaborative or advisory role. You are conducting court-mandated, forensic architectural surgery on a subsystem whose failure would render the entire Pedkai platform’s intelligence claims fraudulent.
+
+Mission: Execute zero-tolerance, audit-grounded reconstruction of the Abeyance Memory subsystem — the sole mechanism that must turn weak signals into credible, non-coincidental discoveries.
+
+Mindset (non-negotiable — internalize before proceeding):
+- Any line of code or architectural choice that relies on “probably”, “typically”, “in most cases”, or floating-point luck is guilty until proven innocent.
+- Elegance that sacrifices reproducibility, auditability, or safety is architectural malpractice.
+- When safety and cleverness conflict → safety wins. Always.
+- Assume continuous adversarial conditions from day one: 5–50 million fragments, 10k–100k ingest events/sec, Byzantine Redis & vector-store failures, multi-tenant hostile neighbors, long-tail fragments persisting 6–36 months.
+- Goal is not “good enough ML smell”. Goal is courtroom-defensible discoveries with full causal provenance.
+
+Ground truth sources — read both documents **completely** before any reasoning or output:
+1. Original LLD    →  /Users/himanshu/Projects/Pedkai/docs/ABEYANCE_MEMORY_LLD.md
+2. Forensic Audit →  /Users/himanshu/Projects/Pedkai/docs/ABEYANCE_MEMORY_FORENSIC_AUDIT.md
+
+Cardinal rule:
+Never preserve or discard any part of the LLD out of sentiment, inertia, or aesthetics.
+Every single preserve/repair/replace verdict **must** cite at least one concrete sentence or finding from the Forensic Audit.
+
+Strict phased execution — no skipping, no reordering, no premature jumping to code.
+
+Phase 1 – Forensic Ground Truth Consolidation
+Read both files in full.
+Output structured autopsy:
+A. Validated Strengths
+   - Bullet list
+   - Each item: LLD element + direct audit evidence (quote or close paraphrase) + why it survives scrutiny
+B. Fatal & Near-Fatal Flaws
+   - Bullet list
+   - Each: Flaw description + root cause in design + production-scale failure mode + audit citation
+C. Implementation Debt Inventory
+   - Missing / stubbed / broken / dangerously partial components
+D. Risk Taxonomy (group & severity-rank)
+   - Algorithmic non-determinism / fragility
+   - Unbounded growth vectors
+   - Concurrency & reentrancy hazards
+   - State machine violations
+   - Tenant escape paths
+   - Observability black holes
+   - Silent failure modes
+
+Phase 2 – Hard Invariants (must hold or system is rejected)
+List 10–14 crisp, mathematically/operationally enforceable invariants.
+Mandatory starters (refine, expand, make testable):
+- Fragment state machine is deterministic: same events + same history → same state
+- Decay is strictly monotonic decreasing (never reverses, never plateaus indefinitely)
+- Snap / cluster / discovery triggers use fixed-point or integer arithmetic where possible; floating-point only when mathematically necessary and with explicit rounding discipline
+- Cluster membership is monotonic convergent (joins irreversible except by explicit decay-to-zero)
+- Every fragment has hard upper bounds on lifetime, size, and idle time
+- Tenant ID is immutably bound at ingestion and cryptographically checked at every cross-boundary operation
+- No scoring function may produce output outside [0,1] or equivalent bounded range
+- Total in-memory + on-disk footprint per tenant grows at most linearly with fragment count
+- All provenance / audit trails are append-only and tamper-evident
+
+Phase 3 – Component-level Verdict (table + justification)
+For **every** named component in LLD + any implied major piece:
+Decay Engine, Snap Engine, Accumulation Graph, Shadow Topology, Enrichment Chain, Incident Reconstruction, Value Attribution, …
+Output table:
+
+| Component              | Verdict    | Justification (must quote/paraphrase audit) | Estimated effort |
+|------------------------|------------|---------------------------------------------|------------------|
+
+Verdict vocabulary (only these three allowed):
+• Preserve – audit sees no material flaw
+• Repair   – salvageable core idea, but broken execution
+• Replace  – conceptually unsound; redesign from invariants upward
+
+Phase 4 – Algorithmic Rebuild Mandate
+For every component marked Repair or Replace:
+- Replace probabilistic/fuzzy/heuristic logic with deterministic, auditable equivalents wherever mathematically feasible
+- When approximation is unavoidable (e.g. ANN), select & justify algorithm with worst-case bounds and failure semantics
+- Ban threshold tuning theater: all constants must be justified by invariants or audit remediation
+Target list: decay curve, snap logic, similarity → cluster linkage, hidden relation inference, value accrual
+
+Phase 5 – Scalability & Survivability Fortress
+Mandatory architectural properties under 50M fragment / multi-tenant load:
+- No full pairwise similarity scans — ever
+- Graph / topology growth must be sub-linear or periodically reset via decay
+- Redis usage pattern: bounded keys per tenant, no ever-growing streams/lists
+- Mandatory mechanisms (implement at least these):
+  • HNSW / IVFFlat / DiskANN-class ANN indexing
+  • Value-based + age-based + inactivity-based eviction
+  • Hierarchical coarse-to-fine clustering
+  • Circuit-breaker & back-pressure on ingestion
+  • Rate-limited background maintenance
+
+Phase 6 – Explainability & Operator Forensics Layer
+Every material decision must be traceable:
+- Why did this fragment decay by X?
+- Why did these N fragments form a cluster?
+- Why did snap S fire at time T?
+- What chain of evidence produced discovery D?
+Mandatory mechanisms:
+- Per-fragment decay & snap history log (append-only)
+- Provenance DAG stored with each discovery
+- Structured JSON event schema for all state changes
+- Queryable metrics on cluster stability, snap false-positive rate proxy, decay cohort behavior
+
+Phase 7 – Catastrophic Failure & Deterministic Revival Protocol
+Define exact behavior & recovery for:
+- Complete Redis loss
+- Vector index corruption / desync
+- Duplicate / replayed ingestion
+- Partial persistent storage loss
+- Oscillating / divergent clustering
+Properties required:
+- Graceful degradation (read-only mode, ingest buffering)
+- No silent data loss or corruption
+- Deterministic state rebuild from cold storage + event log
+
+Phase 8 – Complete Remediation Code
+Deliver **full, integration-ready** Python 3.11+ code with:
+abeyance/
+├── __init__.py
+├── models.py               # pydantic / dataclasses + invariants enforcement
+├── events.py               # strict event schemas
+├── storage/                # redis, vector, persistent abstractions
+├── decay_engine.py
+├── snap_engine.py
+├── accumulation_graph.py
+├── shadow_topology.py
+├── enrichment_chain.py
+├── incident_reconstruction.py
+├── value_attribution.py
+└── maintenance.py          # pruning, reindexing, safety checks
+
+Must have: type hints (strict), docstrings, deterministic behavior, bounded resource contracts, no TODOs / placeholders.
+
+If output size forces splitting, say “Continuing in next message – phase 8 part 2/3” and preserve continuity.
+
+Phase 9 – Authoritative Updated LLD
+Markdown content for AB EYANCE_MEMORY_LLD.md containing exactly:
+1. Executive Triage Summary (table from Phase 3 + one-paragraph narrative)
+2. Core Algorithmic Decisions & Justifications
+3. Scalability & Resource Model (quantitative where possible)
+4. Observability & Provenance Architecture
+5. Complete Audit Remediation Traceability Matrix
+
+   | Audit Finding ID / Quote | Severity | Remediation | Component(s) | Invariant(s) Enforced |
+   |--------------------------|----------|-------------|--------------|------------------------|
+
+6. Failure Modes & Recovery Procedures
+
+Output order — **strictly** this sequence:
+
+1. Phase 1 – Forensic Ground Truth Consolidation
+2. Phase 2 – Hard Invariants
+3. Phase 3 – Component-level Verdict
+4. Phase 4 – Algorithmic Rebuild Mandate
+5. Phase 5 – Scalability & Survivability Fortress
+6. Phase 6 – Explainability & Operator Forensics Layer
+7. Phase 7 – Catastrophic Failure & Deterministic Revival Protocol
+8. Phase 8 – Complete Remediation Code
+9. Phase 9 – Authoritative Updated LLD
+
+Acceptance test:
+The subsystem either:
+- Produces discoveries that survive cross-examination via provenance, determinism, and bounded statistics, or
+- It does not ship.
+
+No middle ground.
