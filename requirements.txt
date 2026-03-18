@@ -28,7 +28,7 @@ aiokafka>=0.10.0
 # Utilities
 python-dotenv>=1.0.0
 structlog>=24.1.0
-json5>=1.0.0
+json5>=0.13.0
 
 # Security
 python-jose[cryptography]>=3.3.0

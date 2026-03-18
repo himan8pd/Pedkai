@@ -42,10 +42,28 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import psycopg2
 import psycopg2.extras
 import pyarrow.parquet as pq
+from dotenv import load_dotenv
+
+# Load environment from .env (cloud deployment) so we pick up DATABASE_URL / GRAPH_DB_DSN, etc.
+load_dotenv()
+
+
+def _sqlalchemy_url_to_psycopg2_dsn(url: str) -> str:
+    """Convert a SQLAlchemy URL (postgresql+asyncpg://...) to a psycopg2 DSN string."""
+    parsed = urlparse(url)
+    if parsed.scheme.startswith("postgres"):
+        user = parsed.username or ""
+        password = parsed.password or ""
+        host = parsed.hostname or ""
+        port = parsed.port or 5432
+        dbname = (parsed.path or "").lstrip("/")
+        return f"host={host} port={port} dbname={dbname} user={user} password={password}"
+    return url
 
 # ---------------------------------------------------------------------------
 # Configuration defaults (can be overridden via CLI args)
@@ -57,14 +75,25 @@ _DEFAULT_DATA_STORE_ROOT = os.environ.get(
 
 # Database connection strings (sync, for psycopg2 COPY performance)
 # Read from env vars if available, fall back to localhost defaults for local dev
-GRAPH_DB_DSN = os.environ.get(
-    "GRAPH_DB_DSN",
-    "host=localhost port=5432 dbname=pedkai user=postgres password=postgres",
-)
-METRICS_DB_DSN = os.environ.get(
-    "METRICS_DB_DSN",
-    "host=localhost port=5433 dbname=pedkai_metrics user=postgres password=postgres",
-)
+# In cloud deployments we prefer DATABASE_URL / METRICS_DATABASE_URL and/or
+# GRAPH_DB_DSN / METRICS_DB_DSN from .env.
+GRAPH_DB_DSN = os.environ.get("GRAPH_DB_DSN")
+if not GRAPH_DB_DSN:
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        GRAPH_DB_DSN = _sqlalchemy_url_to_psycopg2_dsn(database_url)
+
+METRICS_DB_DSN = os.environ.get("METRICS_DB_DSN")
+if not METRICS_DB_DSN:
+    metrics_url = os.environ.get("METRICS_DATABASE_URL")
+    if metrics_url:
+        METRICS_DB_DSN = _sqlalchemy_url_to_psycopg2_dsn(metrics_url)
+
+# Fall back to local defaults when env vars are missing
+if not GRAPH_DB_DSN:
+    GRAPH_DB_DSN = "host=localhost port=5432 dbname=pedkai user=postgres password=postgres"
+if not METRICS_DB_DSN:
+    METRICS_DB_DSN = "host=localhost port=5433 dbname=pedkai_metrics user=postgres password=postgres"
 
 # Batch sizes
 BATCH_ENTITIES = 10_000
