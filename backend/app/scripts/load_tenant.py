@@ -353,7 +353,7 @@ def step_1_load_network_entities(conn, output_dir: Path, tenant_id: str, dry_run
 
                 row = (
                     entity_id,  # id (UUID)
-                    table["tenant_id"][i],  # tenant_id
+                    tenant_id,  # tenant_id (force to ensure FK validation works)
                     table["entity_type"][i],  # entity_type
                     table["name"][i],  # name
                     table.get("external_id", [None] * n)[i],  # external_id
@@ -468,7 +468,7 @@ def step_2_load_entity_relationships(conn, output_dir: Path, tenant_id: str, dry
 
                 row = (
                     table["relationship_id"][i],
-                    table["tenant_id"][i],
+                    tenant_id,
                     from_id,
                     table["from_entity_type"][i],
                     to_id,
@@ -723,7 +723,8 @@ def step_4_load_customers_bss(
 
     customer_insert_sql = """
         INSERT INTO customers (id, external_id, name, churn_risk_score,
-                               associated_site_id, tenant_id, created_at)
+                               associated_site_id, consent_proactive_comms,
+                               tenant_id, created_at)
         VALUES %s
         ON CONFLICT (external_id) DO NOTHING
     """
@@ -761,6 +762,9 @@ def step_4_load_customers_bss(
                 name = t.get("name", [None] * n)[i]
                 churn = t.get("churn_risk_score", [None] * n)[i]
                 site_id = t.get("associated_site_id", [None] * n)[i]
+                consent = t.get("consent_proactive_comms", [None] * n)[i]
+                if consent is None:
+                    consent = False
 
                 customer_rows.append(
                     (
@@ -769,6 +773,7 @@ def step_4_load_customers_bss(
                         name,
                         churn,
                         site_id,
+                        consent,
                         tenant_id,
                         datetime.now(timezone.utc),
                     )
@@ -799,7 +804,7 @@ def step_4_load_customers_bss(
                     cur,
                     customer_insert_sql,
                     customer_rows,
-                    template="(%s::uuid, %s, %s, %s, %s, %s, %s)",
+                    template="(%s::uuid, %s, %s, %s, %s, %s, %s, %s)",
                     page_size=BATCH_CUSTOMERS,
                 )
                 loaded_customers += len(customer_rows)
