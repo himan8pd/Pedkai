@@ -385,6 +385,19 @@ def step_1_load_network_entities(conn, output_dir: Path, tenant_id: str, dry_run
 
     log.info(f"  ✓ Loaded {loaded:,} entities in {_elapsed(t0)}")
 
+    # Debugging aid: show the tenant IDs present in network_entities (to catch tenant mismatch)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT tenant_id, COUNT(*) FROM network_entities GROUP BY tenant_id ORDER BY COUNT(*) DESC LIMIT 5"
+            )
+            rows = cur.fetchall()
+            if rows:
+                ids = ", ".join([f"{r[0]}({r[1]})" for r in rows])
+                log.info(f"  ✓ network_entities tenant_id sample: {ids}")
+    except Exception:
+        conn.rollback()
+
 
 def step_2_load_entity_relationships(conn, output_dir: Path, tenant_id: str, dry_run: bool = False):
     """Load cmdb_declared_relationships.parquet → entity_relationships."""
@@ -430,6 +443,24 @@ def step_2_load_entity_relationships(conn, output_dir: Path, tenant_id: str, dry
         )
         for row in cur:
             valid_entity_ids.add(row[0])
+
+    if not valid_entity_ids:
+        log.warning(
+            "    ⚠ No entity IDs found for tenant '%s' — relationships will all skip unless tenant mismatch exists",
+            tenant_id,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tenant_id, COUNT(*) FROM network_entities GROUP BY tenant_id ORDER BY COUNT(*) DESC LIMIT 5"
+                )
+                rows = cur.fetchall()
+                if rows:
+                    ids = ", ".join([f"{r[0]}({r[1]})" for r in rows])
+                    log.warning(f"    ✓ network_entities tenant_id sample: {ids}")
+        except Exception:
+            conn.rollback()
+
     log.info(f"    {len(valid_entity_ids):,} valid entity IDs loaded")
 
     insert_sql = """
@@ -800,14 +831,29 @@ def step_4_load_customers_bss(
                     )
 
             if customer_rows:
-                psycopg2.extras.execute_values(
-                    cur,
-                    customer_insert_sql,
-                    customer_rows,
-                    template="(%s::uuid, %s, %s, %s, %s, %s, %s, %s)",
-                    page_size=BATCH_CUSTOMERS,
-                )
-                loaded_customers += len(customer_rows)
+                try:
+                    psycopg2.extras.execute_values(
+                        cur,
+                        customer_insert_sql,
+                        customer_rows,
+                        template="(%s::uuid, %s, %s, %s, %s, %s, %s, %s)",
+                        page_size=BATCH_CUSTOMERS,
+                    )
+                    loaded_customers += len(customer_rows)
+                except psycopg2.errors.NotNullViolation as e:
+                    # Provide a helpful message about what column is failing
+                    col = getattr(e, 'diag', None) and getattr(e.diag, 'column_name', None)
+                    if col:
+                        log.error(
+                            f"  ✗ Not-null constraint failed on column '{col}' in customers table. "
+                            "Check if the source Parquet file includes this field or add a default."
+                        )
+                    else:
+                        log.error(
+                            "  ✗ Not-null constraint failed when inserting customers. "
+                            "Check the customers table schema and source Parquet fields."
+                        )
+                    raise
 
             billing_rows = [r for r in pending_billing if r[1] in inserted_customer_ids]
             if billing_rows:
@@ -856,6 +902,17 @@ def step_8_load_events_alarms(
         return
 
     with conn.cursor() as cur:
+        # If the events/alarms table doesn't exist in this deployment, skip gracefully.
+        cur.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = %s LIMIT 1",
+            ("telco_events_alarms",),
+        )
+        if cur.fetchone() is None:
+            log.warning(
+                "  ⚠ Table telco_events_alarms does not exist in this DB; skipping events load"
+            )
+            return
+
         cur.execute(
             "SELECT COUNT(*) FROM telco_events_alarms WHERE tenant_id = %s",
             (tenant_id,),
