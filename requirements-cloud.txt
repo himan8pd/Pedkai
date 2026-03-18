@@ -4,6 +4,7 @@
 
 # Core dependencies
 fastapi>=0.109.0
+starlette>=0.31.0
 uvicorn[standard]>=0.27.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
@@ -22,6 +23,7 @@ httpx>=0.26.0
 
 # LLM integration
 google-genai
+llama-cpp>=0.1.0
 
 # Kafka
 aiokafka>=0.10.0
@@ -29,6 +31,7 @@ aiokafka>=0.10.0
 # Utilities
 python-dotenv>=1.0.0
 structlog>=24.1.0
+json5>=1.0.0
 simpleeval>=1.0.0
 
 # Security
@@ -42,8 +45,10 @@ huggingface_hub>=0.20.0
 
 # Scientific / Causal AI
 numpy>=1.26.0
+pandas>=2.0.0
 statsmodels>=0.14.0
 sentence-transformers>=2.3.0
+tigramite>=0.9.0
 
 # Observability
 opentelemetry-api>=1.22.0
