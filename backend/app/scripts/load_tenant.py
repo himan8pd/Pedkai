@@ -1700,6 +1700,367 @@ def main():
         metrics_conn.close()
 
 
+def _load_abeyance_fragments(conn, filepath: Path, tenant_id: str) -> int:
+    """Load abeyance_fragments.parquet → abeyance_fragment.
+
+    Parquet PK: fragment_id → DB PK: id
+    New columns: entity_count, snap_partner_id
+    Uses (tenant_id, dedup_key) unique constraint for conflict resolution.
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+
+    # Rename Parquet PK to DB PK
+    if "fragment_id" in df.columns:
+        df = df.rename(columns={"fragment_id": "id"})
+
+    # Ensure new columns exist (migration 015 adds them; parquet has them)
+    for col, default in [("entity_count", 0), ("snap_partner_id", None)]:
+        if col not in df.columns:
+            df[col] = default
+
+    # Map the columns that exist in both parquet and DB
+    keep_cols = [
+        "id", "tenant_id", "source_type", "entity_id", "entity_domain",
+        "snap_status", "failure_mode_profile", "mask_semantic", "mask_topological",
+        "mask_operational", "current_decay_score", "event_timestamp", "dedup_key",
+        "entity_count", "extracted_entities", "polarity", "max_lifetime_days",
+        "snap_partner_id",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    insert_cols = list(df.columns)
+    col_list = ", ".join([f'"{c}"' for c in insert_cols])
+    placeholder = ", ".join(["%s"] * len(insert_cols))
+    sql = (
+        f"INSERT INTO abeyance_fragment ({col_list}) VALUES ({placeholder}) "
+        f"ON CONFLICT (tenant_id, dedup_key) DO NOTHING"
+    )
+
+    rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows, page_size=2000)
+    conn.commit()
+    return len(rows)
+
+
+def _load_snap_decision_records(conn, filepath: Path, tenant_id: str) -> int:
+    """Load snap_decision_records.parquet → snap_decision_record.
+
+    Parquet PK: record_id → DB PK: id
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+
+    if "record_id" in df.columns:
+        df = df.rename(columns={"record_id": "id"})
+
+    keep_cols = [
+        "id", "tenant_id", "new_fragment_id", "candidate_fragment_id",
+        "failure_mode_profile", "score_semantic", "score_topological",
+        "score_temporal", "score_operational", "score_entity_overlap",
+        "masks_active", "weights_used", "weights_base",
+        "raw_composite", "temporal_modifier", "final_score",
+        "threshold_applied", "decision", "multiple_comparisons_k", "evaluated_at",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    insert_cols = list(df.columns)
+    col_list = ", ".join([f'"{c}"' for c in insert_cols])
+    placeholder = ", ".join(["%s"] * len(insert_cols))
+    sql = (
+        f"INSERT INTO snap_decision_record ({col_list}) VALUES ({placeholder}) "
+        f"ON CONFLICT (id) DO NOTHING"
+    )
+
+    rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows, page_size=2000)
+    conn.commit()
+    return len(rows)
+
+
+def _load_disconfirmation_events(conn, filepath: Path, tenant_id: str) -> int:
+    """Load disconfirmation_events.parquet → disconfirmation_events + disconfirmation_fragments.
+
+    The parquet is denormalised: one row per (event, fragment) pair with
+    pre/post decay scores. We split this into:
+      - One parent row in disconfirmation_events (deduplicated by event_id)
+      - One child row in disconfirmation_fragments per parquet row
+
+    Parquet PK: event_id → DB PK: id (in disconfirmation_events)
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+
+    if "event_id" in df.columns:
+        df = df.rename(columns={"event_id": "id"})
+
+    # ── Parent rows (disconfirmation_events) ──────────────────────────
+    parent_cols = ["id", "tenant_id", "pathway", "reason", "acceleration_factor", "created_at"]
+    parent_df = df[[c for c in parent_cols if c in df.columns]].drop_duplicates(subset=["id"])
+
+    # DB requires initiated_by NOT NULL — use synthetic default (migration 015 adds server default,
+    # but we also set it explicitly here for clarity)
+    parent_df = parent_df.copy()
+    parent_df["initiated_by"] = "SYNTHETIC_SEED"
+    parent_df["fragment_count"] = 0  # will be back-filled after fragment insert
+
+    p_cols = list(parent_df.columns)
+    p_col_list = ", ".join([f'"{c}"' for c in p_cols])
+    p_placeholder = ", ".join(["%s"] * len(p_cols))
+    parent_sql = (
+        f"INSERT INTO disconfirmation_events ({p_col_list}) VALUES ({p_placeholder}) "
+        f"ON CONFLICT (id) DO NOTHING"
+    )
+
+    parent_rows = [[row.get(c) for c in p_cols] for row in parent_df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, parent_sql, parent_rows, page_size=1000)
+    conn.commit()
+
+    # ── Child rows (disconfirmation_fragments) ────────────────────────
+    frag_cols_needed = ["id", "fragment_id", "pre_decay_score", "post_decay_score"]
+    if not all(c in df.columns for c in ["fragment_id", "pre_decay_score", "post_decay_score"]):
+        log.warning("  ⚠ disconfirmation_events.parquet missing fragment score columns; skipping fragments")
+        return len(parent_rows)
+
+    frag_df = df[["id", "fragment_id", "pre_decay_score", "post_decay_score"]].copy()
+    frag_df = frag_df.rename(columns={"id": "disconfirmation_event_id"})
+    frag_df["id"] = [str(uuid.uuid4()) for _ in range(len(frag_df))]
+
+    f_cols = list(frag_df.columns)
+    f_col_list = ", ".join([f'"{c}"' for c in f_cols])
+    f_placeholder = ", ".join(["%s"] * len(f_cols))
+    frag_sql = (
+        f"INSERT INTO disconfirmation_fragments ({f_col_list}) VALUES ({f_placeholder}) "
+        f"ON CONFLICT (id) DO NOTHING"
+    )
+
+    frag_rows = [[row.get(c) for c in f_cols] for row in frag_df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, frag_sql, frag_rows, page_size=2000)
+
+    # Update fragment_count on parent rows
+    with conn.cursor() as cur:
+        cur.execute("""
+            UPDATE disconfirmation_events de
+            SET fragment_count = sub.cnt
+            FROM (
+                SELECT disconfirmation_event_id, COUNT(*) AS cnt
+                FROM disconfirmation_fragments
+                GROUP BY disconfirmation_event_id
+            ) sub
+            WHERE de.id = sub.disconfirmation_event_id
+              AND de.tenant_id = %s
+        """, (tenant_id,))
+    conn.commit()
+    return len(parent_rows) + len(frag_rows)
+
+
+def _load_bridge_candidates(conn, filepath: Path, tenant_id: str) -> int:
+    """Load bridge_candidates.parquet → bridge_discovery.
+
+    Parquet PK: node_id — maps to fragment_id (not DB PK id)
+    New DB columns: entity_domains_spanned JSONB, sub_component_size INTEGER
+    Unique constraint: (tenant_id, component_fingerprint)
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+    df["id"] = [str(uuid.uuid4()) for _ in range(len(df))]
+
+    # node_id in parquet = fragment_id in DB
+    if "node_id" in df.columns:
+        df = df.rename(columns={"node_id": "fragment_id"})
+
+    # entity_domains_spanned: parquet stores as a comma-separated string,
+    # convert to JSON array
+    if "entity_domains_spanned" in df.columns:
+        df["entity_domains_spanned"] = df["entity_domains_spanned"].apply(
+            lambda v: json.dumps(v.split(",") if isinstance(v, str) else []) if v is not None else None
+        )
+
+    keep_cols = [
+        "id", "tenant_id", "fragment_id", "betweenness_centrality",
+        "domain_span", "severity", "component_fingerprint",
+        "entity_domains_spanned", "sub_component_size", "created_at",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    insert_cols = list(df.columns)
+    col_list = ", ".join([f'"{c}"' for c in insert_cols])
+    placeholder = ", ".join(["%s"] * len(insert_cols))
+    sql = (
+        f"INSERT INTO bridge_discovery ({col_list}) VALUES ({placeholder}) "
+        f"ON CONFLICT (tenant_id, component_fingerprint) DO NOTHING"
+    )
+
+    rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows, page_size=2000)
+    conn.commit()
+    return len(rows)
+
+
+def _load_causal_pairs(conn, filepath: Path, tenant_id: str) -> int:
+    """Load causal_pairs.parquet → causal_evidence_pair.
+
+    Parquet PK: pair_id → DB PK: id
+    a_precedes_b (bool) → direction VARCHAR ('A_TO_B' / 'B_TO_A')
+    new: direction_category VARCHAR
+    Note: causal_candidate_id FK — inserts a placeholder causal_candidate
+    row when needed to satisfy the FK (if FK enforcement is active).
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+
+    if "pair_id" in df.columns:
+        df = df.rename(columns={"pair_id": "id"})
+
+    # Translate boolean a_precedes_b → direction string
+    if "a_precedes_b" in df.columns and "direction" not in df.columns:
+        df["direction"] = df["a_precedes_b"].apply(
+            lambda v: "A_TO_B" if v else "B_TO_A"
+        )
+
+    keep_cols = [
+        "id", "causal_candidate_id", "fragment_a_id", "fragment_b_id",
+        "time_delta_seconds", "direction", "direction_category",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    # Ensure causal_candidate_id exists (parquet should have it)
+    if "causal_candidate_id" not in df.columns:
+        log.warning("  ⚠ causal_pairs.parquet missing causal_candidate_id; generating placeholder")
+        placeholder_cand_id = str(uuid.uuid4())
+        df["causal_candidate_id"] = placeholder_cand_id
+        # Insert a placeholder causal_candidate to satisfy FK
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO causal_candidate
+                    (id, tenant_id, entity_a_id, entity_b_id, direction,
+                     directional_fraction, confidence, sample_count)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING
+            """, (
+                placeholder_cand_id, tenant_id,
+                "00000000-0000-0000-0000-000000000000",
+                "00000000-0000-0000-0000-000000000000",
+                "UNKNOWN", 0.0, 0.0, 0,
+            ))
+        conn.commit()
+
+    insert_cols = list(df.columns)
+    col_list = ", ".join([f'"{c}"' for c in insert_cols])
+    placeholder = ", ".join(["%s"] * len(insert_cols))
+    sql = (
+        f"INSERT INTO causal_evidence_pair ({col_list}) VALUES ({placeholder}) "
+        f"ON CONFLICT (id) DO NOTHING"
+    )
+
+    rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows, page_size=2000)
+    conn.commit()
+    return len(rows)
+
+
+def _load_scenario_surprise_events(conn, filepath: Path, tenant_id: str) -> int:
+    """Load scenario_surprise_events.parquet → surprise_event.
+
+    Parquet PK: event_id → DB PK: id
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+
+    if "event_id" in df.columns:
+        df = df.rename(columns={"event_id": "id"})
+
+    keep_cols = [
+        "id", "tenant_id", "snap_decision_record_id", "failure_mode_profile",
+        "surprise_value", "threshold_at_time", "escalation_type",
+        "dimensions_contributing", "bin_index", "bin_probability", "created_at",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    # dimensions_contributing may be a string in parquet (JSON-encoded) — keep as-is
+    insert_cols = list(df.columns)
+    col_list = ", ".join([f'"{c}"' for c in insert_cols])
+    placeholder = ", ".join(["%s"] * len(insert_cols))
+    sql = (
+        f"INSERT INTO surprise_event ({col_list}) VALUES ({placeholder}) "
+        f"ON CONFLICT (id) DO NOTHING"
+    )
+
+    rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows, page_size=2000)
+    conn.commit()
+    return len(rows)
+
+
+def _load_temporal_sequences(conn, filepath: Path, tenant_id: str) -> int:
+    """Load temporal_sequences.parquet → entity_sequence_log.
+
+    Parquet PK: seq_id (UUID) — DISCARDED because entity_sequence_log uses
+    BIGSERIAL as its PK. We let the DB auto-generate the serial ID.
+    New DB columns: is_rare, transition_count_hint (added by migration 015).
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+
+    # Drop the parquet UUID PK — entity_sequence_log uses BIGSERIAL
+    if "seq_id" in df.columns:
+        df = df.drop(columns=["seq_id"])
+
+    keep_cols = [
+        "tenant_id", "entity_id", "entity_domain", "from_state", "to_state",
+        "fragment_id", "event_timestamp", "is_rare", "transition_count_hint",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    insert_cols = list(df.columns)
+    col_list = ", ".join([f'"{c}"' for c in insert_cols])
+    placeholder = ", ".join(["%s"] * len(insert_cols))
+    # entity_sequence_log has no natural unique constraint other than serial PK;
+    # use DO NOTHING (benign since serial PK is always fresh)
+    sql = f"INSERT INTO entity_sequence_log ({col_list}) VALUES ({placeholder})"
+
+    rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows, page_size=5000)
+    conn.commit()
+    return len(rows)
+
+
 def _load_abeyance_memory(
     conn,
     output_dir: Path,
@@ -1707,11 +2068,17 @@ def _load_abeyance_memory(
     abeyance_dir: str = "abeyance_memory",
     dry_run: bool = False,
 ):
-    """Load any Abeyance Memory parquet artifacts if they exist.
+    """Load Abeyance Memory parquet artifacts using dedicated column-mapped loaders.
 
-    By default these files live in a subdirectory (e.g. output/abeyance_memory/).
+    Each of the 7 parquet files has a dedicated loader that handles:
+      - PK column renaming (e.g. fragment_id → id)
+      - Data type transformations (e.g. bool a_precedes_b → direction string)
+      - Denormalisation splitting (disconfirmation_events → 2 DB tables)
+      - Correct ON CONFLICT clauses aligned to each table's unique constraints
+      - New DB columns added by migration 015 (entity_count, snap_partner_id, etc.)
+
+    Files are expected in a subdirectory under output_dir (default: abeyance_memory/).
     """
-
     abeyance_path = Path(abeyance_dir)
     base_dir = abeyance_path if abeyance_path.is_absolute() else output_dir / abeyance_path
 
@@ -1719,37 +2086,36 @@ def _load_abeyance_memory(
         log.info(f"  ⊘ Abeyance memory directory not found: {base_dir}")
         return
 
-    mapping = [
-        ("abeyance_fragments.parquet", "abeyance_fragment"),
-        ("snap_decision_records.parquet", "snap_decision_record"),
-        ("disconfirmation_events.parquet", "disconfirmation_events"),
-        ("bridge_candidates.parquet", "bridge_discovery"),
-        ("causal_pairs.parquet", "causal_evidence_pair"),
-        ("scenario_surprise_events.parquet", "surprise_event"),
-        ("temporal_sequences.parquet", "entity_sequence_log"),
-    ]
+    dispatch = {
+        "abeyance_fragments.parquet":       ("abeyance_fragment",       _load_abeyance_fragments),
+        "snap_decision_records.parquet":    ("snap_decision_record",    _load_snap_decision_records),
+        "disconfirmation_events.parquet":   ("disconfirmation_events",  _load_disconfirmation_events),
+        "bridge_candidates.parquet":        ("bridge_discovery",        _load_bridge_candidates),
+        "causal_pairs.parquet":             ("causal_evidence_pair",    _load_causal_pairs),
+        "scenario_surprise_events.parquet": ("surprise_event",          _load_scenario_surprise_events),
+        "temporal_sequences.parquet":       ("entity_sequence_log",     _load_temporal_sequences),
+    }
 
-    for fname, table in mapping:
+    for fname, (table, loader_fn) in dispatch.items():
         filepath = base_dir / fname
         if not filepath.exists():
             log.info(f"  ⊘ {fname} not found in {base_dir}, skipping")
             continue
 
         total_rows = _pq_row_count(filepath)
-        log.info(f"  Source: {fname} ({total_rows:,} rows)")
+        log.info(f"  [{fname}] → {table} ({total_rows:,} rows)")
 
         if dry_run:
-            log.info(f"  [DRY RUN] Would load {total_rows:,} rows into {table}")
+            log.info(f"  [DRY RUN] Would load {total_rows:,} rows via {loader_fn.__name__}")
             continue
 
-        loaded = load_parquet_to_table(
-            conn,
-            filepath,
-            table,
-            tenant_id=tenant_id,
-            conflict_on="id",
-        )
-        log.info(f"  ✓ Loaded {loaded:,} rows into {table} (from {fname})")
+        t0 = _timer()
+        try:
+            loaded = loader_fn(conn, filepath, tenant_id)
+            log.info(f"  ✓ {table}: {loaded:,} rows loaded in {_elapsed(t0)}")
+        except Exception as e:
+            log.error(f"  ✗ Failed to load {fname} into {table}: {e}", exc_info=True)
+            conn.rollback()
 
 
 if __name__ == "__main__":
