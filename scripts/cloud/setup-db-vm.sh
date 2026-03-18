@@ -93,6 +93,8 @@ CREATE DATABASE pedkai_metrics OWNER pedkai;
 
 \c pedkai
 CREATE EXTENSION IF NOT EXISTS vector;
+-- pgcrypto provides gen_random_uuid() on PostgreSQL < 16 (harmless on 16+)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 \c pedkai_metrics
 CREATE EXTENSION IF NOT EXISTS timescaledb;
@@ -100,8 +102,15 @@ SQL
 
 echo ""
 echo "=== DB VM Setup Complete ==="
-echo "PostgreSQL 16 + pgvector + TimescaleDB running on port 5432"
+echo "PostgreSQL 16 + pgvector + pgcrypto + TimescaleDB running on port 5432"
 echo "Data directory: /mnt/pgdata/16/main"
 echo "Databases: pedkai, pedkai_metrics"
 echo "User: pedkai (password set)"
 echo "Access: restricted to ${APP_VM_IP}"
+echo ""
+echo "Next steps (run from your local machine):"
+echo "  1. Finish backend VM setup:   sudo bash setup-backend-vm.sh"
+echo "  2. Set up metrics tables:      psql -h ${APP_VM_IP} -U pedkai -d pedkai_metrics -f create-metrics-tables.sql"
+echo "  3. Deploy & run migrations:    bash scripts/cloud/deploy-and-migrate.sh <app_vm_public_ip>"
+echo "  4. Load Six Telecom data:      bash scripts/cloud/load-six-telecom-cloud.sh <app_vm_public_ip> <data_dir>"
+

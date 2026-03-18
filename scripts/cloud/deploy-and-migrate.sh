@@ -99,7 +99,7 @@ echo "━━━ Step 3: Rebuild & restart backend ━━━"
 $SSH bash -c "
   set -euo pipefail
   cd '${REPO_DIR}'
-  docker compose -f docker-compose.cloud.yml build pedkai-backend
+  docker compose -f docker-compose.cloud.yml build --no-cache pedkai-backend
   docker compose -f docker-compose.cloud.yml up -d --force-recreate pedkai-backend
 "
 echo "  ✓ Backend container restarted"
