@@ -92,6 +92,7 @@ class DecisionFeedbackORM(Base):
     __tablename__ = "decision_feedback"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False, index=True)
     decision_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     operator_id = Column(String(255), nullable=False, index=True)
     score = Column(Integer, nullable=False) # 1-5 star rating

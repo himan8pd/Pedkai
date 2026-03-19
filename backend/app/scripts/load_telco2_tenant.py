@@ -2044,8 +2044,18 @@ Examples:
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
+    parser.add_argument(
+        "--tenant-id",
+        type=str,
+        default="pedkai_telco2_01",
+        help="Tenant ID to load data into (default: pedkai_telco2_01)",
+    )
 
     args = parser.parse_args()
+
+    global TENANT_ID
+    if args.tenant_id:
+        TENANT_ID = args.tenant_id
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -2066,7 +2076,7 @@ Examples:
     if not OUTPUT_DIR.exists():
         log.error(f"Data directory not found: {OUTPUT_DIR}")
         log.error(
-            "Ensure the Telco2 data is at /Volumes/Projects/Pedkai Data Store/Telco2/output/"
+            f"Ensure the Telco2 data is at {OUTPUT_DIR}"
         )
         sys.exit(1)
 

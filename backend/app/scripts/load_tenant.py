@@ -725,11 +725,12 @@ def step_4_load_customers_bss(
                 pname, {"tier": "BRONZE", "monthly_fee": 0.0, "sla_guarantee": None}
             )
             cur.execute(
-                """INSERT INTO bss_service_plans (id, name, tier, monthly_fee, sla_guarantee, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (name) DO UPDATE SET tier = EXCLUDED.tier""",
+                """INSERT INTO bss_service_plans (id, tenant_id, name, tier, monthly_fee, sla_guarantee, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (tenant_id, name) DO UPDATE SET tier = EXCLUDED.tier""",
                 (
                     puuid,
+                    tenant_id,
                     pname,
                     details["tier"],
                     details["monthly_fee"],
@@ -741,7 +742,7 @@ def step_4_load_customers_bss(
     log.info(f"  ✓ Loaded {len(plan_map)} service plans")
 
     with conn.cursor() as cur:
-        cur.execute("SELECT name, id FROM bss_service_plans")
+        cur.execute("SELECT name, id FROM bss_service_plans WHERE tenant_id = %s", (tenant_id,))
         plan_map = {row[0]: str(row[1]) for row in cur.fetchall()}
 
     log.info("  Phase B: Loading customers + billing accounts...")
@@ -761,7 +762,7 @@ def step_4_load_customers_bss(
     """
 
     billing_insert_sql = """
-        INSERT INTO bss_billing_accounts (id, customer_id, plan_id,
+        INSERT INTO bss_billing_accounts (id, tenant_id, customer_id, plan_id,
                                           account_status, avg_monthly_revenue,
                                           contract_end_date, last_billing_dispute)
         VALUES %s
@@ -821,6 +822,7 @@ def step_4_load_customers_bss(
                     pending_billing.append(
                         (
                             str(uuid.uuid4()),
+                            tenant_id,
                             cust_id,
                             plan_id,
                             acct_status,
@@ -855,13 +857,13 @@ def step_4_load_customers_bss(
                         )
                     raise
 
-            billing_rows = [r for r in pending_billing if r[1] in inserted_customer_ids]
+            billing_rows = [r for r in pending_billing if r[2] in inserted_customer_ids]
             if billing_rows:
                 psycopg2.extras.execute_values(
                     cur,
                     billing_insert_sql,
                     billing_rows,
-                    template="(%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, %s)",
+                    template="(%s::uuid, %s, %s::uuid, %s::uuid, %s, %s, %s, %s)",
                     page_size=BATCH_CUSTOMERS,
                 )
                 loaded_billing += len(billing_rows)
@@ -1949,10 +1951,15 @@ def _load_causal_pairs(conn, filepath: Path, tenant_id: str) -> int:
         )
 
     keep_cols = [
-        "id", "causal_candidate_id", "fragment_a_id", "fragment_b_id",
+        "id", "tenant_id", "causal_candidate_id", "fragment_a_id", "fragment_b_id",
         "time_delta_seconds", "direction", "direction_category",
     ]
     df = df[[c for c in keep_cols if c in df.columns]]
+
+    # direction_category is nullable in the DB (migration 015); default to None
+    # so the INSERT explicitly includes the column rather than silently omitting it.
+    if "direction_category" not in df.columns:
+        df["direction_category"] = None
 
     # Ensure causal_candidate_id exists (parquet should have it)
     if "causal_candidate_id" not in df.columns:

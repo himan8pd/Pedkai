@@ -14,7 +14,7 @@ class DensificationRequestORM(Base):
     __tablename__ = "densification_requests"
 
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()"))
-    tenant_id = Column(String(255), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
     region_name = Column(String(255), nullable=False)
     budget_limit = Column(Float, nullable=False)
     target_kpi = Column(String(100), default="prb_utilization") # e.g., congestion reduction
@@ -31,6 +31,7 @@ class InvestmentPlanORM(Base):
     __tablename__ = "investment_plans"
 
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid4, server_default=text("gen_random_uuid()"))
+    tenant_id = Column(String(100), nullable=False, index=True)
     request_id = Column(Uuid(as_uuid=True), ForeignKey("densification_requests.id"), nullable=False)
     total_estimated_cost = Column(Float, nullable=False)
     expected_kpi_improvement = Column(Float, nullable=False) # e.g., 25% reduction in congestion

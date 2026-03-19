@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 import uuid
 
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, Enum as SqlEnum
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Integer, Enum as SqlEnum, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 
@@ -10,9 +10,13 @@ from backend.app.core.database import Base
 
 class ServicePlanORM(Base):
     __tablename__ = "bss_service_plans"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_bss_service_plans_tenant_name"),
+    )
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(100), unique=True, nullable=False) # e.g., "Enterprise Gold 5G"
+    tenant_id = Column(String(100), nullable=False, index=True)
+    name = Column(String(100), nullable=False) # e.g., "Enterprise Gold 5G"
     tier = Column(String(50), nullable=False) # GOLD, SILVER, BRONZE
     monthly_fee = Column(Float, nullable=False)
     sla_guarantee = Column(String(255), nullable=True) # e.g., "99.999% Availability"
@@ -23,6 +27,7 @@ class BillingAccountORM(Base):
     __tablename__ = "bss_billing_accounts"
 
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(100), nullable=False, index=True)
     customer_id = Column(PG_UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False, index=True)
     
     plan_id = Column(PG_UUID(as_uuid=True), ForeignKey("bss_service_plans.id"), nullable=False)

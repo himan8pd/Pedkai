@@ -51,8 +51,8 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
     const startSSE = () => {
         if (esRef.current) esRef.current.close();
 
-        // Using standard EventSource
-        const es = new EventSource(`${API_BASE_URL}/api/v1/ingestion/stream`);
+        // Using standard EventSource — token passed as query param (EventSource cannot set headers)
+        const es = new EventSource(`${API_BASE_URL}/api/v1/ingestion/stream?token=${encodeURIComponent(token ?? '')}`);
         esRef.current = es;
 
         es.onmessage = (ev) => {

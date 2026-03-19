@@ -32,6 +32,7 @@ class ProactiveCareORM(Base):
     __tablename__ = "proactive_care_records"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String(100), nullable=False, index=True)
     customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False)
     anomaly_id = Column(
         UUID(as_uuid=True), nullable=True

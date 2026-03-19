@@ -225,6 +225,7 @@ class DisconfirmationFragmentORM(Base):
     __tablename__ = "disconfirmation_fragments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
     disconfirmation_event_id = Column(UUID(as_uuid=True), nullable=False)
     fragment_id = Column(UUID(as_uuid=True), nullable=False)
     pre_decay_score = Column(Float, nullable=False)
@@ -232,6 +233,7 @@ class DisconfirmationFragmentORM(Base):
 
     __table_args__ = (
         Index("ix_disconf_frag_event", "disconfirmation_event_id"),
+        Index("ix_disconf_frag_tenant", "tenant_id"),
     )
 
 
@@ -293,12 +295,14 @@ class BridgeDiscoveryProvenanceORM(Base):
     __tablename__ = "bridge_discovery_provenance"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
     bridge_discovery_id = Column(UUID(as_uuid=True), nullable=False)
     sub_component_fragment_ids = Column(JSONB, nullable=False)
     relationship_type = Column(String(50), nullable=True)
 
     __table_args__ = (
         Index("ix_bridge_prov_disc", "bridge_discovery_id"),
+        Index("ix_bridge_prov_tenant", "tenant_id"),
     )
 
 
@@ -485,6 +489,7 @@ class HypothesisEvidenceORM(Base):
     __tablename__ = "hypothesis_evidence"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
     hypothesis_id = Column(UUID(as_uuid=True), nullable=False)
     source_table = Column(String(100), nullable=False)
     source_id = Column(UUID(as_uuid=True), nullable=False)
@@ -493,6 +498,7 @@ class HypothesisEvidenceORM(Base):
 
     __table_args__ = (
         Index("ix_hyp_ev_hyp", "hypothesis_id"),
+        Index("ix_hyp_ev_tenant", "tenant_id"),
     )
 
 
@@ -576,6 +582,7 @@ class CausalEvidencePairORM(Base):
     __tablename__ = "causal_evidence_pair"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
     causal_candidate_id = Column(UUID(as_uuid=True), nullable=False)
     fragment_a_id = Column(UUID(as_uuid=True), nullable=False)
     fragment_b_id = Column(UUID(as_uuid=True), nullable=False)
@@ -584,6 +591,7 @@ class CausalEvidencePairORM(Base):
 
     __table_args__ = (
         Index("ix_causal_ev_cand", "causal_candidate_id"),
+        Index("ix_causal_ev_tenant", "tenant_id"),
     )
 
 
@@ -657,6 +665,7 @@ class CounterfactualPairDeltaORM(Base):
     __tablename__ = "counterfactual_pair_delta"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
     simulation_result_id = Column(UUID(as_uuid=True), nullable=False)
     original_score = Column(Float, nullable=False)
     counterfactual_score = Column(Float, nullable=False)
@@ -665,6 +674,7 @@ class CounterfactualPairDeltaORM(Base):
 
     __table_args__ = (
         Index("ix_cf_delta_result", "simulation_result_id"),
+        Index("ix_cf_delta_tenant", "tenant_id"),
     )
 
 
@@ -723,6 +733,7 @@ class MetaMemoryProductivityORM(Base):
     __tablename__ = "meta_memory_productivity"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id = Column(String(100), nullable=False)
     area_id = Column(UUID(as_uuid=True), nullable=False)
     n_tp = Column(Integer, nullable=False, default=0)
     n_fp = Column(Integer, nullable=False, default=0)
@@ -734,6 +745,7 @@ class MetaMemoryProductivityORM(Base):
 
     __table_args__ = (
         Index("ix_mmp_area", "area_id"),
+        Index("ix_mmp_tenant", "tenant_id"),
     )
 
 
