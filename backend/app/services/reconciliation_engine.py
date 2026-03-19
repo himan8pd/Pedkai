@@ -963,11 +963,11 @@ class ReconciliationEngine:
                   SELECT 1 FROM topology_relationships tr
                   WHERE tr.tenant_id = :tid
                     AND (
-                        (tr.from_entity_id = nr.from_cell_id
-                         AND tr.to_entity_id = nr.to_cell_id)
+                        (tr.from_entity_id = CAST(nr.from_cell_id AS TEXT)
+                         AND tr.to_entity_id = CAST(nr.to_cell_id AS TEXT))
                         OR
-                        (tr.from_entity_id = nr.to_cell_id
-                         AND tr.to_entity_id = nr.from_cell_id)
+                        (tr.from_entity_id = CAST(nr.to_cell_id AS TEXT)
+                         AND tr.to_entity_id = CAST(nr.from_cell_id AS TEXT))
                     )
               )
             """,
