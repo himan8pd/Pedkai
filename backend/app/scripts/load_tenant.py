@@ -1260,7 +1260,7 @@ def step_12_load_kpi_sample(
     _prev_wide = 0
 
     insert_sql = """
-        INSERT INTO kpi_metrics (timestamp, tenant_id, entity_id, metric_name, metric_value, metadata)
+        INSERT INTO kpi_metrics (timestamp, tenant_id, entity_id, kpi_name, metric_value, metadata)
         VALUES %s
         ON CONFLICT DO NOTHING
     """
@@ -1737,7 +1737,7 @@ def _load_abeyance_fragments(conn, filepath: Path, tenant_id: str) -> int:
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
     placeholder = ", ".join(["%s"] * len(insert_cols))
     sql = (
-        f"INSERT INTO abeyance_fragment ({col_list}) VALUES ({placeholder}) "
+        f"INSERT INTO abeyance_fragment ({col_list}) VALUES %s "
         f"ON CONFLICT (tenant_id, dedup_key) DO NOTHING"
     )
 
@@ -1777,7 +1777,7 @@ def _load_snap_decision_records(conn, filepath: Path, tenant_id: str) -> int:
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
     placeholder = ", ".join(["%s"] * len(insert_cols))
     sql = (
-        f"INSERT INTO snap_decision_record ({col_list}) VALUES ({placeholder}) "
+        f"INSERT INTO snap_decision_record ({col_list}) VALUES %s "
         f"ON CONFLICT (id) DO NOTHING"
     )
 
@@ -1822,7 +1822,7 @@ def _load_disconfirmation_events(conn, filepath: Path, tenant_id: str) -> int:
     p_col_list = ", ".join([f'"{c}"' for c in p_cols])
     p_placeholder = ", ".join(["%s"] * len(p_cols))
     parent_sql = (
-        f"INSERT INTO disconfirmation_events ({p_col_list}) VALUES ({p_placeholder}) "
+        f"INSERT INTO disconfirmation_events ({p_col_list}) VALUES %s "
         f"ON CONFLICT (id) DO NOTHING"
     )
 
@@ -1845,7 +1845,7 @@ def _load_disconfirmation_events(conn, filepath: Path, tenant_id: str) -> int:
     f_col_list = ", ".join([f'"{c}"' for c in f_cols])
     f_placeholder = ", ".join(["%s"] * len(f_cols))
     frag_sql = (
-        f"INSERT INTO disconfirmation_fragments ({f_col_list}) VALUES ({f_placeholder}) "
+        f"INSERT INTO disconfirmation_fragments ({f_col_list}) VALUES %s "
         f"ON CONFLICT (id) DO NOTHING"
     )
 
@@ -1907,7 +1907,7 @@ def _load_bridge_candidates(conn, filepath: Path, tenant_id: str) -> int:
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
     placeholder = ", ".join(["%s"] * len(insert_cols))
     sql = (
-        f"INSERT INTO bridge_discovery ({col_list}) VALUES ({placeholder}) "
+        f"INSERT INTO bridge_discovery ({col_list}) VALUES %s "
         f"ON CONFLICT (tenant_id, component_fingerprint) DO NOTHING"
     )
 
@@ -1974,7 +1974,7 @@ def _load_causal_pairs(conn, filepath: Path, tenant_id: str) -> int:
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
     placeholder = ", ".join(["%s"] * len(insert_cols))
     sql = (
-        f"INSERT INTO causal_evidence_pair ({col_list}) VALUES ({placeholder}) "
+        f"INSERT INTO causal_evidence_pair ({col_list}) VALUES %s "
         f"ON CONFLICT (id) DO NOTHING"
     )
 
@@ -2012,7 +2012,7 @@ def _load_scenario_surprise_events(conn, filepath: Path, tenant_id: str) -> int:
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
     placeholder = ", ".join(["%s"] * len(insert_cols))
     sql = (
-        f"INSERT INTO surprise_event ({col_list}) VALUES ({placeholder}) "
+        f"INSERT INTO surprise_event ({col_list}) VALUES %s "
         f"ON CONFLICT (id) DO NOTHING"
     )
 
@@ -2051,8 +2051,7 @@ def _load_temporal_sequences(conn, filepath: Path, tenant_id: str) -> int:
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
     placeholder = ", ".join(["%s"] * len(insert_cols))
     # entity_sequence_log has no natural unique constraint other than serial PK;
-    # use DO NOTHING (benign since serial PK is always fresh)
-    sql = f"INSERT INTO entity_sequence_log ({col_list}) VALUES ({placeholder})"
+    sql = f"INSERT INTO entity_sequence_log ({col_list}) VALUES %s"
 
     rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
     with conn.cursor() as cur:
