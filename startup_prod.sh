@@ -55,8 +55,10 @@ fi
 # Load environment — source .env so all variables are available to this script
 # (docker-compose also reads .env automatically, but we need them here too)
 # =============================================================================
-# shellcheck disable=SC2046
-export $(grep -v '^#' "$SCRIPT_DIR/.env" | grep -v '^$' | xargs)
+# shellcheck disable=SC1091
+set -a
+source "$SCRIPT_DIR/.env"
+set +a
 export PYTHONPATH="${PYTHONPATH:-}${PYTHONPATH:+:}$SCRIPT_DIR"
 
 # Ensure required Docker Compose variables exist, fall back to inline defaults

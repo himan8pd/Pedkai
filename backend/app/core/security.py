@@ -47,6 +47,9 @@ AUTONOMOUS_READ = "autonomous:read"
 POLICY_READ = "policy:read"
 POLICY_WRITE = "policy:write"
 
+# User management scope (tenant_admin / admin)
+USERS_MANAGE = "users:manage"
+
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="api/v1/auth/token",
     scopes={
@@ -66,6 +69,7 @@ oauth2_scheme = OAuth2PasswordBearer(
         AUTONOMOUS_READ: "Read autonomous shield detections and recommendations",
         POLICY_READ: "Read policy engine configuration",
         POLICY_WRITE: "Modify policy engine configuration",
+        USERS_MANAGE: "Create and manage users within the current tenant",
     },
 )
 
@@ -94,6 +98,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 # Role definitions
 class Role:
     ADMIN = "admin"
+    TENANT_ADMIN = "tenant_admin"  # Manages users within a single tenant
     OPERATOR = "operator"
     VIEWER = "viewer"
     SHIFT_LEAD = "shift_lead"  # Operator + sitrep approval
@@ -137,6 +142,20 @@ ROLE_SCOPES = {
         AUTONOMOUS_READ,
         POLICY_READ,
         POLICY_WRITE,
+        USERS_MANAGE,
+    ],
+    # Tenant admin: read-only view of the platform + user management for own tenant.
+    # Cannot approve/close incidents or write policies — purely administrative.
+    Role.TENANT_ADMIN: [
+        TMF642_READ,
+        CAPACITY_READ,
+        CX_READ,
+        "metrics:read",
+        TOPOLOGY_READ,
+        INCIDENT_READ,
+        AUTONOMOUS_READ,
+        POLICY_READ,
+        USERS_MANAGE,
     ],
     Role.OPERATOR: _OPERATOR_BASE_SCOPES,
     Role.VIEWER: [

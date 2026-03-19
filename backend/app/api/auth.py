@@ -27,6 +27,7 @@ from backend.app.core.config import get_settings
 from backend.app.core.database import get_db
 from backend.app.core.security import (
     ROLE_SCOPES,
+    Role,
     User,
     create_access_token,
     get_current_user,
@@ -107,7 +108,7 @@ async def login_for_access_token(
         )
 
     # Fetch authorized tenants for this user
-    tenants = await auth_service.get_tenants_for_user(db, user.id)
+    tenants = await auth_service.get_tenants_for_user(db, user.id, role=user.role)
 
     if not tenants:
         raise HTTPException(
@@ -116,16 +117,23 @@ async def login_for_access_token(
         )
 
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-
-    role = user.role
-    scopes = ROLE_SCOPES.get(role, [])
-
     tenant_infos = [TenantInfo(id=t.id, display_name=t.label) for t in tenants]
 
-    # If exactly one tenant, auto-bind it into the token for convenience
+    # If exactly one tenant, auto-bind it into the token for convenience.
+    # For non-admin users, resolve the per-tenant role override (same logic as
+    # /select-tenant) so single-tenant users receive the correct scopes.
     auto_tenant_id: Optional[str] = None
+    role = user.role
+
     if len(tenants) == 1:
         auto_tenant_id = tenants[0].id
+        if user.role != Role.ADMIN:
+            access_row = await auth_service.get_user_tenant_access_row(
+                db, user.id, auto_tenant_id
+            )
+            role = access_row.role if access_row and access_row.role else user.role
+
+    scopes = ROLE_SCOPES.get(role, [])
 
     access_token = create_access_token(
         data={
@@ -168,7 +176,7 @@ async def list_user_tenants(
     if not user_orm:
         raise HTTPException(status_code=404, detail="User not found")
 
-    tenants = await auth_service.get_tenants_for_user(db, user_orm.id)
+    tenants = await auth_service.get_tenants_for_user(db, user_orm.id, role=user_orm.role)
     return [TenantInfo(id=t.id, display_name=t.label) for t in tenants]
 
 
@@ -200,7 +208,7 @@ async def select_tenant(
 
     # Validate that the user is allowed to access this tenant
     allowed = await auth_service.validate_user_tenant_access(
-        db, user_orm.id, body.tenant_id
+        db, user_orm.id, body.tenant_id, role=user_orm.role
     )
     if not allowed:
         raise HTTPException(
@@ -216,9 +224,16 @@ async def select_tenant(
             detail="Tenant not found or inactive.",
         )
 
-    # Issue a new token with tenant_id baked in
+    # Issue a new token with tenant_id baked in.
+    # For non-admin users, use the per-tenant role from user_tenant_access if set.
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-    role = user_orm.role
+    if user_orm.role == Role.ADMIN:
+        role = Role.ADMIN
+    else:
+        access_row = await auth_service.get_user_tenant_access_row(
+            db, user_orm.id, body.tenant_id
+        )
+        role = (access_row.role if access_row and access_row.role else user_orm.role)
     scopes = ROLE_SCOPES.get(role, [])
 
     access_token = create_access_token(

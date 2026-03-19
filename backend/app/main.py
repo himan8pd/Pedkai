@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from backend.app.api import auth, capacity, cx_router, decisions, health, tmf628, tmf642
+from backend.app.api import auth, capacity, cx_router, decisions, health, tmf628, tmf642, users
 from backend.app.core.config import get_settings
 from backend.app.core.database import async_session_maker
 from backend.app.core.logging import correlation_id_ctx, get_logger, setup_logging
@@ -162,6 +162,9 @@ app.add_middleware(
 app.include_router(health.router, tags=["Health"])
 app.include_router(
     auth.router, prefix=f"{settings.api_prefix}/auth", tags=["Authentication"]
+)
+app.include_router(
+    users.router, prefix=f"{settings.api_prefix}/users", tags=["User Management"]
 )
 app.include_router(
     decisions.router, prefix=f"{settings.api_prefix}/decisions", tags=["Decisions"]

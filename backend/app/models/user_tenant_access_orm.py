@@ -10,15 +10,18 @@ class UserTenantAccessORM(Base):
     """
     ORM Model for User-to-Tenant authorization mapping.
 
-    Maps which tenants each user is authorized to access.
-    A user may have access to one or many tenants.
-    At login time, the system queries this table to determine
-    which tenants to offer the user.
+    Maps which tenants each user is authorized to access, and what role they
+    hold within that specific tenant.  A user may have access to one or many
+    tenants with different roles in each.
 
     Rules:
-    - If no rows exist for a user_id → deny access.
+    - If no rows exist for a user_id → deny access (admin role bypasses this).
     - If exactly one row exists → auto-bind session to that tenant.
     - If multiple rows exist → show tenant selection dropdown.
+
+    Effective role resolution (at /select-tenant):
+    - If ``role`` is set on this row, use it for the tenant-scoped JWT.
+    - Otherwise, fall back to ``UserORM.role`` (the user's global default role).
     """
 
     __tablename__ = "user_tenant_access"
@@ -36,9 +39,16 @@ class UserTenantAccessORM(Base):
         nullable=False,
         index=True,
     )
+    # Per-tenant role override.  NULL means "use UserORM.role".
+    role = Column(String(50), nullable=True)
+    # Audit: which user granted this access (NULL for seed / legacy rows).
+    granted_by = Column(String(36), nullable=True)
     granted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (UniqueConstraint("user_id", "tenant_id", name="uq_user_tenant"),)
 
     def __repr__(self):
-        return f"<UserTenantAccess user={self.user_id} tenant={self.tenant_id}>"
+        return (
+            f"<UserTenantAccess user={self.user_id} tenant={self.tenant_id}"
+            f" role={self.role}>"
+        )

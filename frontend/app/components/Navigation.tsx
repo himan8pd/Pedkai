@@ -15,6 +15,7 @@ import {
   Radio,
   MessageSquare,
   Settings,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
@@ -25,7 +26,7 @@ const API_BASE_URL =
 
 export default function Navigation() {
   const pathname = usePathname();
-  const { onLogout, tenantName, tenantId } = useAuth();
+  const { onLogout, tenantName, tenantId, role } = useAuth();
   const [dataMode, setDataMode] = useState<string | null>(null);
   const [dataPeriod, setDataPeriod] = useState<string | null>(null);
 
@@ -70,6 +71,9 @@ export default function Navigation() {
     { href: "/sleeping-cells", label: "Sleeping Cells", icon: Radio },
     { href: "/feedback", label: "Feedback", icon: MessageSquare },
     { href: "/settings", label: "Settings", icon: Settings },
+    ...(role === "admin" || role === "tenant_admin"
+      ? [{ href: "/admin", label: "Admin", icon: Users }]
+      : []),
   ];
 
   return (

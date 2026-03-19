@@ -9,13 +9,15 @@ const SESSION_KEYS = {
   token: "pedkai_token",
   tenantId: "pedkai_tenant_id",
   tenantName: "pedkai_tenant_name",
+  role: "pedkai_role",
 } as const;
 
-function persistSession(tok: string, tid: string, tname: string) {
+function persistSession(tok: string, tid: string, tname: string, r: string) {
   try {
     sessionStorage.setItem(SESSION_KEYS.token, tok);
     sessionStorage.setItem(SESSION_KEYS.tenantId, tid);
     sessionStorage.setItem(SESSION_KEYS.tenantName, tname);
+    sessionStorage.setItem(SESSION_KEYS.role, r);
   } catch {
     // sessionStorage unavailable (SSR, private browsing edge cases)
   }
@@ -27,13 +29,17 @@ function clearSession() {
   } catch {}
 }
 
-function loadSession(): { token: string; tenantId: string; tenantName: string } | null {
+function loadSession(): { token: string; tenantId: string; tenantName: string; role: string } | null {
   try {
     const token = sessionStorage.getItem(SESSION_KEYS.token);
     const tenantId = sessionStorage.getItem(SESSION_KEYS.tenantId);
     const tenantName = sessionStorage.getItem(SESSION_KEYS.tenantName);
     if (token && tenantId && tenantName) {
-      return { token, tenantId, tenantName };
+      // role may be absent in sessions created before this feature was deployed;
+      // fall back to "" so the user stays logged in without data loss.
+      // The admin nav link simply won't appear until they re-login.
+      const role = sessionStorage.getItem(SESSION_KEYS.role) ?? "";
+      return { token, tenantId, tenantName, role };
     }
   } catch {}
   return null;
@@ -64,6 +70,7 @@ export default function AuthLayout({
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [tenantName, setTenantName] = useState<string>("");
+  const [role, setRole] = useState<string>("");
   const [tenantBound, setTenantBound] = useState(false);
   const [tenantError, setTenantError] = useState("");
   const [isTenantLoading, setIsTenantLoading] = useState(false);
@@ -75,6 +82,7 @@ export default function AuthLayout({
       setToken(saved.token);
       setSelectedTenantId(saved.tenantId);
       setTenantName(saved.tenantName);
+      setRole(saved.role);
       setTenantBound(true);
     }
   }, []);
@@ -90,6 +98,7 @@ export default function AuthLayout({
     setTenants([]);
     setSelectedTenantId(null);
     setTenantName("");
+    setRole("");
     setTenantBound(false);
     setTenantError("");
     setUsername("operator");
@@ -143,8 +152,9 @@ export default function AuthLayout({
         setTenants(returnedTenants);
         setSelectedTenantId(returnedTenants[0].id);
         setTenantName(returnedTenants[0].display_name);
+        setRole(data.role ?? "");
         setTenantBound(true);
-        persistSession(data.access_token, returnedTenants[0].id, returnedTenants[0].display_name);
+        persistSession(data.access_token, returnedTenants[0].id, returnedTenants[0].display_name, data.role ?? "");
         return;
       }
 
@@ -188,8 +198,9 @@ export default function AuthLayout({
       setToken(data.access_token);
       setSelectedTenantId(data.tenant_id);
       setTenantName(data.tenant_name);
+      setRole(data.role ?? "");
       setTenantBound(true);
-      persistSession(data.access_token, data.tenant_id, data.tenant_name);
+      persistSession(data.access_token, data.tenant_id, data.tenant_name, data.role ?? "");
     } catch (err: any) {
       setTenantError(err.message ?? "Failed to select tenant.");
     } finally {
@@ -342,6 +353,7 @@ export default function AuthLayout({
       token={token!}
       tenantId={selectedTenantId!}
       tenantName={tenantName}
+      role={role}
       onLogout={handleLogout}
     >
       <Navigation />

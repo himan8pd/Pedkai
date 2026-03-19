@@ -1738,7 +1738,7 @@ def _load_abeyance_fragments(conn, filepath: Path, tenant_id: str) -> int:
     placeholder = ", ".join(["%s"] * len(insert_cols))
     sql = (
         f"INSERT INTO abeyance_fragment ({col_list}) VALUES %s "
-        f"ON CONFLICT (tenant_id, dedup_key) DO NOTHING"
+        f"ON CONFLICT (tenant_id, dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING"
     )
 
     rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
