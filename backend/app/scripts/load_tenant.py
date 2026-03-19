@@ -1260,7 +1260,7 @@ def step_12_load_kpi_sample(
     _prev_wide = 0
 
     insert_sql = """
-        INSERT INTO kpi_metrics (timestamp, tenant_id, entity_id, kpi_name, metric_value, metadata)
+        INSERT INTO kpi_metrics (timestamp, tenant_id, entity_id, kpi_name, kpi_value, metadata)
         VALUES %s
         ON CONFLICT DO NOTHING
     """
@@ -1725,8 +1725,8 @@ def _load_abeyance_fragments(conn, filepath: Path, tenant_id: str) -> int:
 
     # Map the columns that exist in both parquet and DB
     keep_cols = [
-        "id", "tenant_id", "source_type", "entity_id", "entity_domain",
-        "snap_status", "failure_mode_profile", "mask_semantic", "mask_topological",
+        "id", "tenant_id", "source_type",
+        "snap_status", "mask_semantic", "mask_topological",
         "mask_operational", "current_decay_score", "event_timestamp", "dedup_key",
         "entity_count", "extracted_entities", "polarity", "max_lifetime_days",
         "snap_partner_id",
@@ -1770,7 +1770,10 @@ def _load_snap_decision_records(conn, filepath: Path, tenant_id: str) -> int:
         "masks_active", "weights_used", "weights_base",
         "raw_composite", "temporal_modifier", "final_score",
         "threshold_applied", "decision", "multiple_comparisons_k", "evaluated_at",
+        "component_scores",
     ]
+    if "component_scores" not in df.columns:
+        df["component_scores"] = "{}"
     df = df[[c for c in keep_cols if c in df.columns]]
 
     insert_cols = list(df.columns)
@@ -1887,6 +1890,8 @@ def _load_bridge_candidates(conn, filepath: Path, tenant_id: str) -> int:
 
     # node_id in parquet = fragment_id in DB
     if "node_id" in df.columns:
+        if "fragment_id" in df.columns:
+            df = df.drop(columns=["fragment_id"])
         df = df.rename(columns={"node_id": "fragment_id"})
 
     # entity_domains_spanned: parquet stores as a comma-separated string,
