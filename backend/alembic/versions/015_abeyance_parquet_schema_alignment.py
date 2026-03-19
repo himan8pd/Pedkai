@@ -37,13 +37,21 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = '015_abeyance_parquet_schema_alignment'
+revision: str = '015_abeyance_schema_fix'
 down_revision: Union[str, Sequence[str], None] = '014_add_missing_core_tables'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Widen alembic_version.version_num in case this instance has VARCHAR(32).
+    # Standard Alembic default is VARCHAR(32); our IDs exceed that.
+    # This is idempotent — widening a varchar column never loses data.
+    op.execute("""
+        ALTER TABLE alembic_version
+        ALTER COLUMN version_num TYPE VARCHAR(64)
+    """)
+
     # ------------------------------------------------------------------
     # abeyance_fragment — two new columns for parquet ingestion
     # ------------------------------------------------------------------
