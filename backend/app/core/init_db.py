@@ -52,13 +52,21 @@ async def init_database():
     await graph_engine.dispose()
 
     # 2. Initialize Metrics Database (TimescaleDB)
+    # Only create kpi_metrics here — it's the only hypertable for this DB.
+    # All other tables (including vector tables) live in the graph DB above.
+    # kpi_samples stays in the graph DB because it has a FK to network_entities.
+    from backend.app.models.kpi_orm import KPIMetricORM
+
     logger.info(
-        f"📈 Initializing Metrics Database at {settings.metrics_database_url}..."
+        f"Initializing Metrics Database at {settings.metrics_database_url}..."
     )
     metrics_async_engine = create_async_engine(settings.metrics_database_url, echo=True)
     async with metrics_async_engine.begin() as conn:
-        logger.info("📦 Creating metrics tables...")
-        await conn.run_sync(Base.metadata.create_all)
+        logger.info("Creating kpi_metrics table...")
+        metrics_tables = [KPIMetricORM.__table__]
+        await conn.run_sync(
+            lambda sync_conn: Base.metadata.create_all(sync_conn, tables=metrics_tables)
+        )
 
         # Convert to Hypertable (Strategic Review Phase 1 Fix)
         logger.info("⚡ Converting kpi_metrics to TimescaleDB Hypertable...")
