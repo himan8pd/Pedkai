@@ -26,10 +26,17 @@ from backend.app.models.abeyance_orm import (
     CmdbExportLogORM,
     DiscoveryLedgerORM,
     FragmentEntityRefORM,
+    FragmentHistoryORM,
+    SnapDecisionRecordORM,
+    ClusterSnapshotORM,
     ShadowEntityORM,
     ShadowRelationshipORM,
     ValueEventORM,
 )
+from backend.app.models.bss_orm import ServicePlanORM, BillingAccountORM  # noqa: F401
+from backend.app.models.policy_orm import PolicyORM, PolicyEvaluationORM, PolicyVersionORM  # noqa: F401
+from backend.app.models.reconciliation_result_orm import ReconciliationResultORM, ReconciliationRunORM  # noqa: F401
+from backend.app.models.investment_planning import DensificationRequestORM, InvestmentPlanORM  # noqa: F401
 from backend.app.models.abeyance_v3_orm import (  # noqa: F401 — register for metadata
     SurpriseEventORM, SurpriseDistributionStateORM,
     IgnoranceExtractionStatORM, IgnoranceMaskDistributionORM,
