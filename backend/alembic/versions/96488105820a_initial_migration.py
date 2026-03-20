@@ -32,29 +32,55 @@ def upgrade() -> None:
     op.create_index(op.f('ix_decision_feedback_decision_id'), 'decision_feedback', ['decision_id'], unique=False)
     op.create_index(op.f('ix_decision_feedback_operator_id'), 'decision_feedback', ['operator_id'], unique=False)
     op.create_index('ix_feedback_decision_operator', 'decision_feedback', ['decision_id', 'operator_id'], unique=True)
-    op.drop_index(op.f('ix_entity_relationships_relationship_type'), table_name='entity_relationships')
-    op.drop_index(op.f('ix_entity_relationships_tenant_id'), table_name='entity_relationships')
-    op.drop_index(op.f('ix_relationships_source'), table_name='entity_relationships')
-    op.drop_index(op.f('ix_relationships_target'), table_name='entity_relationships')
-    op.drop_index(op.f('ix_relationships_type'), table_name='entity_relationships')
-    op.drop_table('entity_relationships')
-    op.drop_index(op.f('ix_network_entities_entity_type'), table_name='network_entities')
-    op.drop_index(op.f('ix_network_entities_external'), table_name='network_entities')
-    op.drop_index(op.f('ix_network_entities_external_id'), table_name='network_entities')
-    op.drop_index(op.f('ix_network_entities_tenant_id'), table_name='network_entities')
-    op.drop_index(op.f('ix_network_entities_tenant_type'), table_name='network_entities')
-    op.drop_table('network_entities')
-    op.add_column('decision_traces', sa.Column('ack_state', sa.String(length=50), nullable=False))
-    op.add_column('decision_traces', sa.Column('external_correlation_id', sa.String(length=255), nullable=True))
-    op.add_column('decision_traces', sa.Column('internal_correlation_id', sa.String(length=255), nullable=True))
-    op.add_column('decision_traces', sa.Column('probable_cause', sa.String(length=100), nullable=True))
-    op.add_column('decision_traces', sa.Column('feedback_score', sa.Integer(), nullable=False))
-    op.drop_index(op.f('ix_kpi_metrics_entity_id'), table_name='kpi_metrics')
-    op.drop_index(op.f('ix_kpi_metrics_entity_metric_time'), table_name='kpi_metrics')
-    op.drop_index(op.f('ix_kpi_metrics_metric_name'), table_name='kpi_metrics')
-    op.drop_index(op.f('ix_kpi_metrics_tenant_id'), table_name='kpi_metrics')
-    op.drop_index(op.f('ix_kpi_metrics_tenant_time'), table_name='kpi_metrics')
-    op.drop_column('kpi_metrics', 'id')
+    # These drops are no-ops on a fresh DB (IF EXISTS handles it).
+    # On a legacy DB they clean up the old table layout before 001+ recreates them.
+    op.execute("DROP INDEX IF EXISTS ix_entity_relationships_relationship_type")
+    op.execute("DROP INDEX IF EXISTS ix_entity_relationships_tenant_id")
+    op.execute("DROP INDEX IF EXISTS ix_relationships_source")
+    op.execute("DROP INDEX IF EXISTS ix_relationships_target")
+    op.execute("DROP INDEX IF EXISTS ix_relationships_type")
+    op.execute("DROP TABLE IF EXISTS entity_relationships")
+    op.execute("DROP INDEX IF EXISTS ix_network_entities_entity_type")
+    op.execute("DROP INDEX IF EXISTS ix_network_entities_external")
+    op.execute("DROP INDEX IF EXISTS ix_network_entities_external_id")
+    op.execute("DROP INDEX IF EXISTS ix_network_entities_tenant_id")
+    op.execute("DROP INDEX IF EXISTS ix_network_entities_tenant_type")
+    op.execute("DROP TABLE IF EXISTS network_entities")
+    # decision_traces is created by migration 003 on a fresh DB; only alter if it already exists.
+    op.execute("""
+        DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'decision_traces') THEN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'decision_traces' AND column_name = 'ack_state') THEN
+                    ALTER TABLE decision_traces ADD COLUMN ack_state VARCHAR(50) NOT NULL DEFAULT '';
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'decision_traces' AND column_name = 'external_correlation_id') THEN
+                    ALTER TABLE decision_traces ADD COLUMN external_correlation_id VARCHAR(255);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'decision_traces' AND column_name = 'internal_correlation_id') THEN
+                    ALTER TABLE decision_traces ADD COLUMN internal_correlation_id VARCHAR(255);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'decision_traces' AND column_name = 'probable_cause') THEN
+                    ALTER TABLE decision_traces ADD COLUMN probable_cause VARCHAR(100);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'decision_traces' AND column_name = 'feedback_score') THEN
+                    ALTER TABLE decision_traces ADD COLUMN feedback_score INTEGER NOT NULL DEFAULT 0;
+                END IF;
+            END IF;
+        END $$;
+    """)
+    # kpi_metrics index/column drops — no-ops on fresh DB.
+    op.execute("DROP INDEX IF EXISTS ix_kpi_metrics_entity_id")
+    op.execute("DROP INDEX IF EXISTS ix_kpi_metrics_entity_metric_time")
+    op.execute("DROP INDEX IF EXISTS ix_kpi_metrics_metric_name")
+    op.execute("DROP INDEX IF EXISTS ix_kpi_metrics_tenant_id")
+    op.execute("DROP INDEX IF EXISTS ix_kpi_metrics_tenant_time")
+    op.execute("""
+        DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'kpi_metrics') THEN
+                ALTER TABLE kpi_metrics DROP COLUMN IF EXISTS id;
+            END IF;
+        END $$;
+    """)
     # ### end Alembic commands ###
 
 
