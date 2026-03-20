@@ -27,11 +27,11 @@ export default function Dashboard({
   onRefetchData,
 }: DashboardProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">NOC Dashboard</h1>
-        <p className="text-white/80">Real-time network operations center</p>
+        <h1 className="text-3xl font-bold text-white mb-1">NOC Dashboard</h1>
+        <p className="text-white/60">Real-time network operations center</p>
       </div>
 
       {/* KPI Cards */}
@@ -63,7 +63,7 @@ export default function Dashboard({
         {/* Alarm Feed — narrower column */}
         <div className="lg:col-span-2 space-y-4">
           <h2 className="text-xl font-bold text-white">Alarm Feed</h2>
-          <div className="space-y-2 max-h-[600px] overflow-y-auto">
+          <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
             {alarms.length === 0 ? (
               <div className="text-center py-8 text-white">
                 No active alarms

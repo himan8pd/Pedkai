@@ -92,7 +92,7 @@ export default function GTMDemoPage() {
   }, [act])
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-10">
+    <main className="min-h-screen bg-[#030f26] text-white p-6 md:p-10">
       <div className="max-w-7xl mx-auto space-y-8">
         <header className="space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-xs text-cyan-300">
@@ -111,7 +111,7 @@ export default function GTMDemoPage() {
           <button
             onClick={() => setAct("blind-spot")}
             className={`glass rounded-xl p-4 text-left transition ${
-              act === "blind-spot" ? "ring-2 ring-rose-400/60" : "hover:ring-1 hover:ring-slate-500"
+              act === "blind-spot" ? "ring-2 ring-rose-400/60" : "hover:ring-1 hover:ring-white/20"
             }`}
           >
             <div className="flex items-center gap-2 text-rose-300 text-sm mb-1">
@@ -125,7 +125,7 @@ export default function GTMDemoPage() {
           <button
             onClick={() => setAct("reconciliation")}
             className={`glass rounded-xl p-4 text-left transition ${
-              act === "reconciliation" ? "ring-2 ring-cyan-400/60" : "hover:ring-1 hover:ring-slate-500"
+              act === "reconciliation" ? "ring-2 ring-cyan-400/60" : "hover:ring-1 hover:ring-white/20"
             }`}
           >
             <div className="flex items-center gap-2 text-cyan-300 text-sm mb-1">
@@ -139,7 +139,7 @@ export default function GTMDemoPage() {
           <button
             onClick={() => setAct("impact")}
             className={`glass rounded-xl p-4 text-left transition ${
-              act === "impact" ? "ring-2 ring-emerald-400/60" : "hover:ring-1 hover:ring-slate-500"
+              act === "impact" ? "ring-2 ring-emerald-400/60" : "hover:ring-1 hover:ring-white/20"
             }`}
           >
             <div className="flex items-center gap-2 text-emerald-300 text-sm mb-1">
@@ -151,23 +151,23 @@ export default function GTMDemoPage() {
           </button>
         </section>
 
-        <section className="glass rounded-2xl p-5 md:p-7 border border-slate-800 space-y-3">
+        <section className="glass rounded-2xl p-5 md:p-7 border border-[rgba(7,242,219,0.1)] space-y-3">
           <h2 className="text-2xl font-semibold">{summary.headline}</h2>
           <p className="text-slate-300">{summary.sub}</p>
           <div className="flex flex-wrap gap-2 text-xs text-slate-300 pt-1">
-            <span className="rounded-full bg-slate-800/80 px-3 py-1 border border-slate-700">Dataset: CasinoLimit simulation</span>
-            <span className="rounded-full bg-slate-800/80 px-3 py-1 border border-slate-700">CMDB: Datagerry seeded with 700+ CIs</span>
-            <span className="rounded-full bg-slate-800/80 px-3 py-1 border border-slate-700">Output: Living Context Graph findings</span>
+            <span className="rounded-full bg-[#0a2d4a]/60 px-3 py-1 border border-cyan-900/30">Dataset: CasinoLimit simulation</span>
+            <span className="rounded-full bg-[#0a2d4a]/60 px-3 py-1 border border-cyan-900/30">CMDB: Datagerry seeded with 700+ CIs</span>
+            <span className="rounded-full bg-[#0a2d4a]/60 px-3 py-1 border border-cyan-900/30">Output: Living Context Graph findings</span>
           </div>
         </section>
 
         {act === "blind-spot" && (
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <article className="glass rounded-2xl p-5 border border-slate-800">
+            <article className="glass rounded-2xl p-5 border border-[rgba(7,242,219,0.1)]">
               <h3 className="text-lg font-semibold mb-4">Incident Contradictions</h3>
               <div className="space-y-3">
                 {INCIDENTS.map((incident) => (
-                  <div key={incident.id} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                  <div key={incident.id} className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-4">
                     <div className="flex items-center justify-between">
                       <p className="font-medium">{incident.id}</p>
                       <span className={`text-xs px-2 py-1 rounded-full ${incident.severity === "critical" ? "bg-rose-400/20 text-rose-300" : "bg-amber-300/20 text-amber-200"}`}>
@@ -176,11 +176,11 @@ export default function GTMDemoPage() {
                     </div>
                     <p className="text-sm text-slate-300 mt-1">{incident.title}</p>
                     <div className="grid grid-cols-2 gap-3 mt-3 text-sm">
-                      <div className="rounded-lg border border-slate-700 bg-slate-900 p-2">
+                      <div className="rounded-lg border border-cyan-900/30 bg-[#06203b] p-2">
                         <p className="text-slate-400">CMDB Intent</p>
                         <p className="text-cyan-300">{incident.cmdbStatus}</p>
                       </div>
-                      <div className="rounded-lg border border-slate-700 bg-slate-900 p-2">
+                      <div className="rounded-lg border border-cyan-900/30 bg-[#06203b] p-2">
                         <p className="text-slate-400">Telemetry Reality</p>
                         <p className="text-rose-300">{incident.telemetryStatus}</p>
                       </div>
@@ -190,12 +190,12 @@ export default function GTMDemoPage() {
               </div>
             </article>
 
-            <article className="glass rounded-2xl p-5 border border-slate-800">
+            <article className="glass rounded-2xl p-5 border border-[rgba(7,242,219,0.1)]">
               <h3 className="text-lg font-semibold mb-4">What Operators Experience</h3>
               <ul className="space-y-3 text-sm text-slate-300">
-                <li className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">Conflicting systems force manual cross-referencing across tickets, CMDB, and telemetry.</li>
-                <li className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">False assumptions lead to prolonged triage and repeated escalations.</li>
-                <li className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">Decision confidence remains low because dependency truth is incomplete.</li>
+                <li className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-3">Conflicting systems force manual cross-referencing across tickets, CMDB, and telemetry.</li>
+                <li className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-3">False assumptions lead to prolonged triage and repeated escalations.</li>
+                <li className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-3">Decision confidence remains low because dependency truth is incomplete.</li>
               </ul>
             </article>
           </section>
@@ -203,11 +203,11 @@ export default function GTMDemoPage() {
 
         {act === "reconciliation" && (
           <section className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <article className="lg:col-span-3 glass rounded-2xl p-5 border border-slate-800">
+            <article className="lg:col-span-3 glass rounded-2xl p-5 border border-[rgba(7,242,219,0.1)]">
               <h3 className="text-lg font-semibold mb-4">Evidence Corroboration Timeline</h3>
               <div className="space-y-3">
                 {EVIDENCE_FLOW.map((item, index) => (
-                  <div key={item.step} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 flex items-start gap-3">
+                  <div key={item.step} className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-4 flex items-start gap-3">
                     <div className="mt-0.5 rounded-full bg-cyan-500/20 text-cyan-300 h-7 w-7 grid place-items-center text-xs">
                       {index + 1}
                     </div>
@@ -221,23 +221,23 @@ export default function GTMDemoPage() {
               </div>
             </article>
 
-            <article className="lg:col-span-2 glass rounded-2xl p-5 border border-slate-800 space-y-4">
+            <article className="lg:col-span-2 glass rounded-2xl p-5 border border-[rgba(7,242,219,0.1)] space-y-4">
               <h3 className="text-lg font-semibold">Engine Guarantees</h3>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <div className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-4">
                 <div className="flex items-center gap-2 text-cyan-300 mb-2">
                   <Database className="h-4 w-4" />
                   Multi-Source Validation
                 </div>
                 <p className="text-sm text-slate-300">No latent edge is accepted from correlation alone.</p>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <div className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-4">
                 <div className="flex items-center gap-2 text-violet-300 mb-2">
                   <Brain className="h-4 w-4" />
                   Abeyance Memory
                 </div>
                 <p className="text-sm text-slate-300">Partial clues are retained and re-evaluated when supporting evidence arrives.</p>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+              <div className="rounded-xl border border-[rgba(7,242,219,0.1)] bg-[#0a2d4a]/70 p-4">
                 <div className="flex items-center gap-2 text-emerald-300 mb-2">
                   <ShieldCheck className="h-4 w-4" />
                   Policy Constitution
@@ -251,22 +251,22 @@ export default function GTMDemoPage() {
         {act === "impact" && (
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {ROI_DELTA.map((metric) => (
-              <article key={metric.label} className="glass rounded-2xl p-5 border border-slate-800">
+              <article key={metric.label} className="glass rounded-2xl p-5 border border-[rgba(7,242,219,0.1)]">
                 <p className="text-sm text-slate-400">{metric.label}</p>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
-                    <p className="text-slate-500">Before</p>
+                  <div className="rounded-xl border border-cyan-900/30 bg-[#0a2d4a]/80 p-3">
+                    <p className="text-white/50">Before</p>
                     <p className="text-rose-300 text-lg font-medium">{metric.before}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
-                    <p className="text-slate-500">After</p>
+                  <div className="rounded-xl border border-cyan-900/30 bg-[#0a2d4a]/80 p-3">
+                    <p className="text-white/50">After</p>
                     <p className="text-emerald-300 text-lg font-medium">{metric.after}</p>
                   </div>
                 </div>
               </article>
             ))}
 
-            <article className="lg:col-span-3 glass rounded-2xl p-5 border border-slate-800">
+            <article className="lg:col-span-3 glass rounded-2xl p-5 border border-[rgba(7,242,219,0.1)]">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-300 mt-0.5" />
                 <div>

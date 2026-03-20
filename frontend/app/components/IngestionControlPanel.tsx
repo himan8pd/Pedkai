@@ -135,7 +135,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
     };
 
     return (
-        <div className="bg-[#0a2d4a] rounded-lg p-6 border border-cyan-900/40 mt-6 md:col-span-4 lg:col-span-5">
+        <div className="bg-[#0a2d4a] rounded-xl p-6 border border-[rgba(7,242,219,0.12)] mt-6 md:col-span-4 lg:col-span-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
                 <div>
                     <h2 className="text-xl font-bold text-white flex items-center">
@@ -151,7 +151,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
                         onClick={handleStartIngestion}
                         disabled={running}
                         className={`flex items-center justify-center px-4 py-2 rounded-md font-medium transition-colors ${running
-                                ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                                ? 'bg-white/10 text-white/40 cursor-not-allowed'
                                 : 'bg-cyan-400 text-gray-950 font-bold hover:bg-cyan-300'
                             }`}
                     >
@@ -187,7 +187,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
             {/* Progress & Logs Section */}
             {(running || logs.length > 0) && (
                 <div className="space-y-3">
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <div className="flex justify-between text-xs text-white/50 mb-1">
                         <span>Progress</span>
                         <span>{progress}%</span>
                     </div>

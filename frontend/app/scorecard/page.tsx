@@ -91,10 +91,10 @@ function KpiCard({
       )}
     >
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-white/55 uppercase tracking-wider">
           {label}
         </h3>
-        <div className="text-gray-700">{icon}</div>
+        <div className="text-white/55">{icon}</div>
       </div>
       <p className="text-3xl font-bold text-white">{value}</p>
       {subtitle && (
@@ -105,7 +105,7 @@ function KpiCard({
           {trend === "down" && (
             <TrendingDown className="w-3.5 h-3.5 text-red-400" />
           )}
-          <p className="text-sm text-gray-700">{subtitle}</p>
+          <p className="text-sm text-white/55">{subtitle}</p>
         </div>
       )}
     </div>
@@ -155,7 +155,7 @@ export default function ScorecardPage() {
   if (loading)
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-gray-700 animate-pulse text-lg">
+        <div className="text-white/55 animate-pulse text-lg">
           Loading scorecard...
         </div>
       </div>
@@ -296,7 +296,7 @@ export default function ScorecardPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Object.entries(scorecard.drift_calibration).map(([key, val]) => (
               <div key={key}>
-                <p className="text-xs text-gray-700 uppercase tracking-wider">
+                <p className="text-xs text-white/55 uppercase tracking-wider">
                   {key.replace(/_/g, " ")}
                 </p>
                 <p className="text-white font-mono text-sm mt-1">
@@ -322,9 +322,9 @@ export default function ScorecardPage() {
             </span>
           </h2>
           {showDetections ? (
-            <ChevronUp className="w-5 h-5 text-gray-700" />
+            <ChevronUp className="w-5 h-5 text-white/55" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-gray-700" />
+            <ChevronDown className="w-5 h-5 text-white/55" />
           )}
         </button>
 

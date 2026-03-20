@@ -441,7 +441,7 @@ export default function TopologyPage() {
           </div>
 
           <div className="relative">
-            <Search className="w-4 h-4 text-gray-700 absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-white/40 absolute left-3 top-2.5" />
             <input
               type="text"
               placeholder="Search by name, ID, or type..."

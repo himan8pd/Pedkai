@@ -213,14 +213,14 @@ export default function AuthLayout({
   // ═══════════════════════════════════════════════════════════════
   if (phase === "login") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] to-[#020d18]">
-        <div className="w-full max-w-md">
-          <div className="bg-[#0a2d4a] rounded-xl border border-cyan-900/40 p-8 shadow-2xl">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] via-[#030f26] to-[#06203b]">
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
             <div className="flex flex-col items-center mb-8">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.jpeg" alt="pedk.ai" className="w-20 h-20 rounded-2xl mb-4" />
+              <img src="/logo.jpeg" alt="pedk.ai" className="w-20 h-20 rounded-2xl mb-4 shadow-[0_0_20px_rgba(7,242,219,0.15)]" />
               <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
-              <p className="text-sm text-white mt-1">NOC Command Center</p>
+              <p className="text-sm text-white/60 mt-1">NOC Command Center</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
@@ -232,7 +232,7 @@ export default function AuthLayout({
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
                   placeholder="operator"
                 />
               </div>
@@ -245,7 +245,7 @@ export default function AuthLayout({
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
                   placeholder="••••••"
                 />
               </div>
@@ -259,7 +259,7 @@ export default function AuthLayout({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full px-4 py-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-colors"
+                className="w-full px-4 py-2.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-all duration-200 hover:shadow-[0_0_16px_rgba(7,242,219,0.25)]"
               >
                 {isLoading ? "Logging in..." : "Login"}
               </button>
@@ -281,14 +281,14 @@ export default function AuthLayout({
   // ═══════════════════════════════════════════════════════════════
   if (phase === "tenant-select") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] to-[#020d18]">
-        <div className="w-full max-w-md">
-          <div className="bg-[#0a2d4a] rounded-xl border border-cyan-900/40 p-8 shadow-2xl">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] via-[#030f26] to-[#06203b]">
+        <div className="w-full max-w-md animate-fade-in">
+          <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
             <div className="flex flex-col items-center mb-6">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3" />
+              <img src="/logo.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3 shadow-[0_0_16px_rgba(7,242,219,0.1)]" />
               <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
-              <p className="text-white text-sm mt-1">
+              <p className="text-white/60 text-sm mt-1">
                 Select a tenant to continue
               </p>
             </div>
@@ -301,7 +301,7 @@ export default function AuthLayout({
                 <select
                   value={selectedTenantId ?? ""}
                   onChange={(e) => setSelectedTenantId(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-[#06203b] border border-cyan-900/50 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
                 >
                   {tenants.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -326,7 +326,7 @@ export default function AuthLayout({
               <button
                 type="submit"
                 disabled={isTenantLoading || !selectedTenantId}
-                className="w-full px-4 py-2 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-colors"
+                className="w-full px-4 py-2.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-all duration-200 hover:shadow-[0_0_16px_rgba(7,242,219,0.25)]"
               >
                 {isTenantLoading ? "Selecting..." : "Continue"}
               </button>
@@ -357,7 +357,7 @@ export default function AuthLayout({
       onLogout={handleLogout}
     >
       <Navigation />
-      <main className="w-full px-4 md:px-8">{children}</main>
+      <main className="w-full px-4 md:px-8 animate-fade-in">{children}</main>
     </AuthProvider>
   );
 }

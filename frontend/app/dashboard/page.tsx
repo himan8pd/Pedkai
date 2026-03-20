@@ -120,8 +120,9 @@ export default function DashboardPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="mb-4 text-sm text-white/70">
-        SSE: {connected ? "connected" : "disconnected"}
+      <div className="mb-4 flex items-center gap-2 text-xs text-white/50">
+        <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-400" : "bg-red-400"}`} />
+        SSE {connected ? "connected" : "disconnected"}
       </div>
       <Dashboard
         token={token}

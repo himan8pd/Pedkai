@@ -90,8 +90,8 @@ export default function ROIDashboardPage() {
     return (
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading ROI Dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+          <p className="text-white/60">Loading ROI Dashboard...</p>
         </div>
       </div>
     )
@@ -124,10 +124,10 @@ export default function ROIDashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-white mb-2">ROI Dashboard</h1>
-        <p className="text-gray-400">
+        <p className="text-white/60">
           Business value metrics for 30-day period
         </p>
-        <p className="text-gray-500 text-sm mt-2">
+        <p className="text-white/50 text-sm mt-2">
           Period: {new Date(roiData.period_start).toLocaleDateString()} – {new Date(roiData.period_end).toLocaleDateString()}
         </p>
       </div>
@@ -135,9 +135,9 @@ export default function ROIDashboardPage() {
       {/* Main KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Revenue Protected Card */}
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <div className="bg-[#0a2d4a] rounded-xl border border-[rgba(7,242,219,0.12)] p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-300 font-semibold flex items-center gap-2">
+            <h3 className="text-white/80 font-semibold flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-green-400" />
               Revenue Protected
             </h3>
@@ -150,7 +150,7 @@ export default function ROIDashboardPage() {
           <p className="text-4xl font-bold text-white">
             {roiData.revenue_protected?.value ? formatCurrency(roiData.revenue_protected.value) : 'N/A'}
           </p>
-          <p className="text-sm text-gray-400 mt-2">
+          <p className="text-sm text-white/60 mt-2">
             Confidence: {roiData.revenue_protected?.confidence_interval || '±15%'}
           </p>
           {roiData.data_sources?.bss === 'mock' && (
@@ -162,32 +162,32 @@ export default function ROIDashboardPage() {
         </div>
 
         {/* Incidents Prevented Card */}
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <div className="bg-[#0a2d4a] rounded-xl border border-[rgba(7,242,219,0.12)] p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-300 font-semibold">Incidents Prevented</h3>
+            <h3 className="text-white/80 font-semibold">Incidents Prevented</h3>
             <Zap className="w-5 h-5 text-blue-400" />
           </div>
           <p className="text-4xl font-bold text-white">{roiData.incidents_prevented || 0}</p>
-          <p className="text-sm text-gray-400 mt-2">
+          <p className="text-sm text-white/60 mt-2">
             via early detection & recommendation
           </p>
         </div>
 
         {/* MTTR Reduction Card */}
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <div className="bg-[#0a2d4a] rounded-xl border border-[rgba(7,242,219,0.12)] p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-gray-300 font-semibold">MTTR Reduction</h3>
+            <h3 className="text-white/80 font-semibold">MTTR Reduction</h3>
             <TrendingUp className="w-5 h-5 text-green-400" />
           </div>
           <p className="text-4xl font-bold text-white">{roiData.mttr_reduction_pct || 0}%</p>
-          <p className="text-sm text-gray-400 mt-2">
+          <p className="text-sm text-white/60 mt-2">
             vs. non-Pedkai baseline
           </p>
         </div>
       </div>
 
       {/* MTTR Trend Chart */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <div className="bg-[#0a2d4a] rounded-xl border border-[rgba(7,242,219,0.12)] p-6">
         <h2 className="text-xl font-bold text-white mb-4">MTTR Reduction Trend (30 days)</h2>
         <div className="h-80 flex flex-col">
           {/* Simple ASCII-style chart */}
@@ -203,7 +203,7 @@ export default function ROIDashboardPage() {
                   <div className="w-full flex gap-0.5 items-end justify-center h-64">
                     {/* Baseline bar */}
                     <div
-                      className="flex-1 bg-gray-600 opacity-50 rounded-t"
+                      className="flex-1 bg-white/20 opacity-50 rounded-t"
                       style={{ height: `${baselineHeight}%` }}
                       title={`Day ${point.day} Baseline: ${point.baseline}min`}
                     />
@@ -215,7 +215,7 @@ export default function ROIDashboardPage() {
                     />
                   </div>
                   {idx % 5 === 0 && (
-                    <span className="text-xs text-gray-500 mt-2">D{point.day}</span>
+                    <span className="text-xs text-white/50 mt-2">D{point.day}</span>
                   )}
                 </div>
               )
@@ -223,27 +223,27 @@ export default function ROIDashboardPage() {
           </div>
           <div className="flex gap-4 mt-6 text-sm">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-gray-600 opacity-50 rounded"></div>
-              <span className="text-gray-400">Baseline MTTR</span>
+              <div className="w-4 h-4 bg-white/20 opacity-50 rounded"></div>
+              <span className="text-white/60">Baseline MTTR</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-green-500 rounded"></div>
-              <span className="text-gray-400">Pedkai Actual MTTR</span>
+              <span className="text-white/60">Pedkai Actual MTTR</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Methodology & Data Sources */}
-      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+      <div className="bg-[#0a2d4a] rounded-xl border border-[rgba(7,242,219,0.12)] p-6">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Info className="w-5 h-5" />
           Methodology & Data Sources
         </h2>
         <div className="space-y-4">
           <div>
-            <h3 className="text-gray-300 font-semibold mb-2">Calculation Method</h3>
-            <p className="text-gray-400 text-sm">
+            <h3 className="text-white/80 font-semibold mb-2">Calculation Method</h3>
+            <p className="text-white/60 text-sm">
               All figures use a counterfactual methodology comparing Pedkai-managed zones vs. non-Pedkai baseline.
               See the full methodology document for details on confidence intervals, limitations, and audit trail.
             </p>
@@ -251,23 +251,23 @@ export default function ROIDashboardPage() {
               href={roiData.methodology_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+              className="inline-block mt-3 px-4 py-2 bg-cyan-400 hover:bg-cyan-300 text-gray-950 font-bold text-white rounded text-sm"
             >
               View Full Methodology
             </a>
           </div>
 
-          <div className="border-t border-gray-700 pt-4">
-            <h3 className="text-gray-300 font-semibold mb-2">Data Sources</h3>
+          <div className="border-t border-cyan-900/30 pt-4">
+            <h3 className="text-white/80 font-semibold mb-2">Data Sources</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="bg-gray-700 rounded p-3">
-                <p className="text-gray-400">BSS Data</p>
+              <div className="bg-[#06203b] rounded p-3">
+                <p className="text-white/60">BSS Data</p>
                 <p className="text-white font-semibold capitalize">
                   {roiData.data_sources?.bss || 'unknown'}
                 </p>
               </div>
-              <div className="bg-gray-700 rounded p-3">
-                <p className="text-gray-400">KPI Data</p>
+              <div className="bg-[#06203b] rounded p-3">
+                <p className="text-white/60">KPI Data</p>
                 <p className="text-white font-semibold capitalize">
                   {roiData.data_sources?.kpi || 'unknown'}
                 </p>
