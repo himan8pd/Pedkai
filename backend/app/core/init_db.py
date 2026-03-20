@@ -31,14 +31,23 @@ async def init_database():
     """Initialize both graph and metrics databases."""
 
     # 1. Initialize Graph Database
-    logger.info(f"📡 Initializing Graph Database at {settings.database_url}...")
+    logger.info(f"Initializing Graph Database at {settings.database_url}...")
+
+    # Step 1a: Enable extensions on their own connection, then dispose.
+    # asyncpg resolves custom types (vector) at connection-open time.
+    # Disposing after the extension commit forces create_all to use
+    # brand-new connections that see the vector type in pg_type.
+    ext_engine = create_async_engine(settings.database_url, echo=False)
+    async with ext_engine.begin() as conn:
+        logger.info("Enabling pgvector extension...")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
+    await ext_engine.dispose()  # close all pool connections before create_all
+
+    # Step 1b: Fresh engine — every connection now sees the committed vector type.
     graph_engine = create_async_engine(settings.database_url, echo=True)
     async with graph_engine.begin() as conn:
-        logger.info("🔧 Enabling pgvector extension...")
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        logger.info("📦 Creating graph tables...")
-        # In a real system, we'd filter which tables go where.
-        # For MVP, creating all is fine as long as we use the right engine for the right data.
+        logger.info("Creating graph tables...")
         await conn.run_sync(Base.metadata.create_all)
     await graph_engine.dispose()
 
