@@ -51,14 +51,9 @@ async def authenticate_user(
 # Tenant helpers
 # ---------------------------------------------------------------------------
 
-# The three known tenants and their display labels.
-# tenant_id (plain string PK) → display_name shown in the UI.
-# Adding a new tenant is just one row in the DB — no code change needed.
-SEED_TENANTS: dict[str, str] = {
-    "casinolimit": "CasinoLimit",
-    "pedkai_synthetic_01": "Pedkai Synthetic 01",
-    "pedkai_telco2_01": "Pedkai Telco2 01",
-}
+# NOTE: SEED_TENANTS is no longer used. Tenants are loaded via data import scripts
+# (e.g., load_telco2_tenant.py). The seeding function now only creates the global
+# pedkai_admin user and grants access to all existing tenants in the database.
 
 
 async def get_tenants_for_user(
@@ -369,63 +364,67 @@ async def seed_tenants(db: AsyncSession) -> dict[str, TenantORM]:
 
 async def seed_default_users(db: AsyncSession) -> None:
     """
-    Seed 4 default users on first startup.  Passwords from env vars.
+    Seed the global pedkai_admin user on first startup.
 
-    After users are created (or already exist) this also calls
-    ``_seed_user_tenant_access`` to ensure every user has at least one
-    tenant mapping.
+    Data Model (aligned with current schema):
+    - Only one global user: pedkai_admin (role=ADMIN)
+    - All other users are tenant-scoped: <tenant_id>_admin, <tenant_id>_operator, etc.
+    - Tenant users are created per-tenant, not globally
+    - pedkai_admin has access to all existing tenants
+
+    This function does NOT create tenants or tenant-local users.
+    Tenants are loaded via data import scripts (e.g., load_telco2_tenant.py).
+    Tenant-local users are created on-demand via the user management API.
     """
-    # 1. Ensure tenants exist first
-    tenant_map = await seed_tenants(db)
+    # 1. Seed the global pedkai_admin user (idempotent)
+    admin_user = await get_user_by_username(db, "pedkai_admin")
+    if not admin_user:
+        admin_user = UserORM(
+            username="pedkai_admin",
+            hashed_password=hash_password(
+                os.getenv("PEDKAI_ADMIN_PASSWORD", "CHANGE_ME")
+            ),
+            role=Role.ADMIN,
+            tenant_id=None,  # Global user — not scoped to any single tenant
+        )
+        db.add(admin_user)
+        await db.flush()
+        logger.info("Seeded global user 'pedkai_admin'")
 
-    # The legacy ``user_orm.tenant_id`` column is kept for backward-compat
-    # with code that reads ``user.tenant_id`` directly.  Going forward
-    # the ``user_tenant_access`` table is authoritative.
-    default_tenant_id = "casinolimit"
+    await db.commit()
 
-    # 2. Seed users (idempotent — skip if any user already exists)
-    existing = await db.execute(select(UserORM).limit(1))
-    users_exist = existing.scalar_one_or_none() is not None
+    # 2. Grant pedkai_admin access to all existing active tenants (idempotent)
+    existing_tenants = await db.execute(
+        select(TenantORM).where(TenantORM.is_active.is_(True))
+    )
+    tenants = list(existing_tenants.scalars().all())
 
-    if not users_exist:
-        users = [
-            UserORM(
-                username="admin",
-                hashed_password=hash_password(os.getenv("ADMIN_PASSWORD", "CHANGE_ME")),
-                role=Role.ADMIN,
-                tenant_id=default_tenant_id,
-            ),
-            UserORM(
-                username="operator",
-                hashed_password=hash_password(
-                    os.getenv("OPERATOR_PASSWORD", "CHANGE_ME")
-                ),
-                role=Role.OPERATOR,
-                tenant_id=default_tenant_id,
-            ),
-            UserORM(
-                username="shift_lead",
-                hashed_password=hash_password(
-                    os.getenv("SHIFT_LEAD_PASSWORD", "CHANGE_ME")
-                ),
-                role=Role.SHIFT_LEAD,
-                tenant_id=default_tenant_id,
-            ),
-            UserORM(
-                username="engineer",
-                hashed_password=hash_password(
-                    os.getenv("ENGINEER_PASSWORD", "CHANGE_ME")
-                ),
-                role=Role.ENGINEER,
-                tenant_id=default_tenant_id,
-            ),
-        ]
-        db.add_all(users)
+    if tenants:
+        # Ensure access rows exist for pedkai_admin to all tenants
+        for tenant in tenants:
+            exists = await db.execute(
+                select(UserTenantAccessORM).where(
+                    UserTenantAccessORM.user_id == admin_user.id,
+                    UserTenantAccessORM.tenant_id == tenant.id,
+                )
+            )
+            if not exists.scalar_one_or_none():
+                db.add(
+                    UserTenantAccessORM(
+                        user_id=admin_user.id,
+                        tenant_id=tenant.id,
+                        role=Role.ADMIN,  # pedkai_admin is admin in every tenant
+                    )
+                )
         await db.commit()
-        logger.info("Seeded 4 default users")
-
-    # 3. Seed user↔tenant access mappings (always runs — idempotent)
-    await _seed_user_tenant_access(db, list(tenant_map.values()))
+        logger.info(
+            f"Granted pedkai_admin access to {len(tenants)} existing tenant(s)"
+        )
+    else:
+        logger.warning(
+            "No active tenants found. pedkai_admin will not be able to log in until "
+            "tenants are loaded into the database (e.g., via load_telco2_tenant.py)"
+        )
 
 
 async def _seed_user_tenant_access(

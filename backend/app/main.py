@@ -36,6 +36,15 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"🚀 Starting {settings.app_name} v{settings.app_version}")
 
+    # Seed default users and tenants (idempotent)
+    try:
+        async with async_session_maker() as session:
+            from backend.app.services import auth_service
+            await auth_service.seed_default_users(session)
+            logger.info("✓ Default users and tenants seeded")
+    except Exception as e:
+        logger.error(f"Failed to seed default users: {e}")
+
     # Initialize event bus (P1.6)
     from backend.app.events.bus import initialize_event_bus
 

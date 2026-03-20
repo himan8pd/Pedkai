@@ -1863,6 +1863,13 @@ def _load_abeyance_fragments(conn, filepath: Path, tenant_id: str) -> int:
         if col not in df.columns:
             df[col] = default
 
+    # Force mask columns to FALSE — embeddings (emb_*) are not loaded from
+    # parquet, so CHECK constraints (INV-13: ck_frag_mask_*) would fire if
+    # any mask is TRUE with a NULL embedding.
+    for mask_col in ("mask_semantic", "mask_topological", "mask_operational"):
+        if mask_col in df.columns:
+            df[mask_col] = False
+
     # Map the columns that exist in both parquet and DB
     keep_cols = [
         "id", "tenant_id", "source_type",
@@ -2067,14 +2074,50 @@ def _load_bridge_candidates(conn, filepath: Path, tenant_id: str) -> int:
     return len(rows)
 
 
+def _load_causal_candidates(conn, filepath: Path, tenant_id: str) -> int:
+    """Load causal_candidates.parquet → causal_candidate.
+
+    Parquet PK: candidate_id → DB PK: id
+    Must be loaded BEFORE causal_pairs.parquet (FK dependency).
+    """
+    import pandas as pd
+    df = pd.read_parquet(filepath)
+    if df.empty:
+        return 0
+
+    df["tenant_id"] = tenant_id
+
+    if "candidate_id" in df.columns:
+        df = df.rename(columns={"candidate_id": "id"})
+
+    keep_cols = [
+        "id", "tenant_id", "entity_a_id", "entity_b_id",
+        "direction", "directional_fraction", "confidence", "sample_count",
+        "created_at",
+    ]
+    df = df[[c for c in keep_cols if c in df.columns]]
+
+    insert_cols = list(df.columns)
+    col_list = ", ".join([f'"{c}"' for c in insert_cols])
+    sql = (
+        f"INSERT INTO causal_candidate ({col_list}) VALUES %s "
+        f"ON CONFLICT (id) DO NOTHING"
+    )
+
+    rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
+    with conn.cursor() as cur:
+        psycopg2.extras.execute_values(cur, sql, rows, page_size=2000)
+    conn.commit()
+    return len(rows)
+
+
 def _load_causal_pairs(conn, filepath: Path, tenant_id: str) -> int:
     """Load causal_pairs.parquet → causal_evidence_pair.
 
     Parquet PK: pair_id → DB PK: id
     a_precedes_b (bool) → direction VARCHAR ('A_TO_B' / 'B_TO_A')
     new: direction_category VARCHAR
-    Note: causal_candidate_id FK — inserts a placeholder causal_candidate
-    row when needed to satisfy the FK (if FK enforcement is active).
+    Requires causal_candidate_id — rows/files without it are skipped.
     """
     import pandas as pd
     df = pd.read_parquet(filepath)
@@ -2103,26 +2146,28 @@ def _load_causal_pairs(conn, filepath: Path, tenant_id: str) -> int:
     if "direction_category" not in df.columns:
         df["direction_category"] = None
 
-    # Ensure causal_candidate_id exists (parquet should have it)
+    # causal_candidate_id is required — evidence pairs without a real causal
+    # candidate are meaningless and would pollute business-impact analysis.
     if "causal_candidate_id" not in df.columns:
-        log.warning("  ⚠ causal_pairs.parquet missing causal_candidate_id; generating placeholder")
-        placeholder_cand_id = str(uuid.uuid4())
-        df["causal_candidate_id"] = placeholder_cand_id
-        # Insert a placeholder causal_candidate to satisfy FK
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO causal_candidate
-                    (id, tenant_id, entity_a_id, entity_b_id, direction,
-                     directional_fraction, confidence, sample_count)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (id) DO NOTHING
-            """, (
-                placeholder_cand_id, tenant_id,
-                "00000000-0000-0000-0000-000000000000",
-                "00000000-0000-0000-0000-000000000000",
-                "UNKNOWN", 0.0, 0.0, 0,
-            ))
-        conn.commit()
+        log.error(
+            "  ✗ causal_pairs.parquet missing causal_candidate_id column; "
+            "skipping entire load (placeholder generation removed — "
+            "causal candidates must come from telemetry analysis)"
+        )
+        return 0
+
+    # Drop any rows where causal_candidate_id is null/empty
+    before = len(df)
+    df = df.dropna(subset=["causal_candidate_id"])
+    df = df[df["causal_candidate_id"].astype(str).str.strip() != ""]
+    after = len(df)
+    if after < before:
+        log.warning(
+            f"  ⚠ Dropped {before - after} causal pair(s) with null/empty causal_candidate_id"
+        )
+    if df.empty:
+        log.error("  ✗ All causal pairs had null causal_candidate_id; nothing loaded")
+        return 0
 
     insert_cols = list(df.columns)
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
@@ -2242,6 +2287,7 @@ def _load_abeyance_memory(
         "snap_decision_records.parquet":    ("snap_decision_record",    _load_snap_decision_records),
         "disconfirmation_events.parquet":   ("disconfirmation_events",  _load_disconfirmation_events),
         "bridge_candidates.parquet":        ("bridge_discovery",        _load_bridge_candidates),
+        "causal_candidates.parquet":        ("causal_candidate",        _load_causal_candidates),
         "causal_pairs.parquet":             ("causal_evidence_pair",    _load_causal_pairs),
         "scenario_surprise_events.parquet": ("surprise_event",          _load_scenario_surprise_events),
         "temporal_sequences.parquet":       ("entity_sequence_log",     _load_temporal_sequences),

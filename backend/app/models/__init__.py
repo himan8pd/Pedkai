@@ -34,6 +34,7 @@ from backend.app.models.abeyance_orm import (
     ValueEventORM,
 )
 from backend.app.models.bss_orm import ServicePlanORM, BillingAccountORM  # noqa: F401
+from backend.app.models.entity_relationship_orm import EntityRelationshipORM  # noqa: F401
 from backend.app.models.policy_orm import PolicyORM, PolicyEvaluationORM, PolicyVersionORM  # noqa: F401
 from backend.app.models.reconciliation_result_orm import ReconciliationResultORM, ReconciliationRunORM  # noqa: F401
 from backend.app.models.investment_planning import DensificationRequestORM, InvestmentPlanORM  # noqa: F401
@@ -78,6 +79,7 @@ __all__ = [
     "ActionExecutionORM",
     "TenantORM",
     "CustomerORM",
+    "EntityRelationshipORM",
     "UserTenantAccessORM",
     "AbeyanceFragmentORM",
     "FragmentEntityRefORM",
