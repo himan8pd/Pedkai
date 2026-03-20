@@ -3,26 +3,70 @@ Divergence Report API — T-025
 
 Exposes the signal-based ReconciliationEngine findings as REST endpoints:
 
-  POST /divergence/run              — trigger divergence detection
+  POST /divergence/run              — trigger divergence detection (async, returns job_id)
+  GET  /divergence/run/{job_id}     — poll job status
   GET  /divergence/summary          — summary stats from last run
   GET  /divergence/records          — paginated divergence records w/ filters
   GET  /divergence/report/{tid}     — full structured report (Roadmap V8 §1.4)
+
+Reconciliation is long-running (minutes on large datasets). The POST endpoint
+immediately returns a job_id; callers must poll GET /divergence/run/{job_id}
+for completion. This avoids Cloudflare's 100s upstream timeout (HTTP 524).
 """
 
+import asyncio
 import logging
-from typing import Annotated, Optional
+import uuid
+from datetime import datetime, timezone
+from typing import Annotated, Dict, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Security
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Security
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import get_db, get_metrics_db
+from backend.app.core.database import async_session_maker, get_db, get_metrics_db, metrics_session_maker
 from backend.app.core.security import User, get_current_user
 from backend.app.services.reconciliation_engine import ReconciliationEngine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# In-memory job store (single-instance deployment)
+# Keyed by job_id. Cleaned up after 1 hour to avoid unbounded growth.
+# ---------------------------------------------------------------------------
+
+_jobs: Dict[str, dict] = {}
+
+
+def _make_job(tenant_id: str) -> dict:
+    return {
+        "job_id": str(uuid.uuid4()),
+        "tenant_id": tenant_id,
+        "status": "running",          # running | complete | failed
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "result": None,
+        "error": None,
+    }
+
+
+async def _run_reconciliation_job(job_id: str, tenant_id: str) -> None:
+    """Background task: run reconciliation and update job state when done."""
+    try:
+        async with async_session_maker() as db, metrics_session_maker() as metrics_db:
+            engine = ReconciliationEngine(db, metrics_db)
+            result = await engine.run(tenant_id)
+        _jobs[job_id]["status"] = "complete"
+        _jobs[job_id]["result"] = result
+        _jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+        logger.info(f"Reconciliation job {job_id} complete for tenant '{tenant_id}'")
+    except Exception as exc:
+        _jobs[job_id]["status"] = "failed"
+        _jobs[job_id]["error"] = str(exc)
+        _jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+        logger.error(f"Reconciliation job {job_id} failed: {exc}", exc_info=True)
 
 
 def _tenant_from_jwt(current_user: User) -> str:
@@ -46,15 +90,17 @@ class RunReconciliationRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/divergence/run")
+@router.post("/divergence/run", status_code=202)
 async def run_reconciliation(
     body: RunReconciliationRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    metrics_db: Annotated[AsyncSession, Depends(get_metrics_db)],
+    background_tasks: BackgroundTasks,
     current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ) -> dict:
     """
     Trigger signal-based divergence detection for a tenant.
+
+    Returns immediately with a job_id (HTTP 202 Accepted). Poll
+    GET /divergence/run/{job_id} to check status and retrieve results.
 
     Analyses CMDB (network_entities, topology_relationships) against
     operational signals (kpi_metrics on TimescaleDB, telco_events_alarms,
@@ -64,13 +110,38 @@ async def run_reconciliation(
     No ground-truth data is used during detection.
     """
     tenant_id = _tenant_from_jwt(current_user)
-    try:
-        engine = ReconciliationEngine(db, metrics_db)
-        result = await engine.run(tenant_id)
-        return result
-    except Exception as exc:
-        logger.error(f"Reconciliation failed: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc))
+
+    # Prevent duplicate concurrent runs for the same tenant
+    for job in _jobs.values():
+        if job["tenant_id"] == tenant_id and job["status"] == "running":
+            return {
+                "job_id": job["job_id"],
+                "status": "running",
+                "message": "Reconciliation already in progress for this tenant.",
+            }
+
+    job = _make_job(tenant_id)
+    _jobs[job["job_id"]] = job
+    background_tasks.add_task(_run_reconciliation_job, job["job_id"], tenant_id)
+
+    return {
+        "job_id": job["job_id"],
+        "status": "running",
+        "message": "Reconciliation started. Poll GET /divergence/run/{job_id} for status.",
+    }
+
+
+@router.get("/divergence/run/{job_id}")
+async def get_reconciliation_job(
+    job_id: str,
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
+) -> dict:
+    """Poll reconciliation job status. Returns status, and result/error when complete."""
+    _tenant_from_jwt(current_user)  # Ensure tenant is selected
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    return job
 
 
 # ---------------------------------------------------------------------------

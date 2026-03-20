@@ -370,6 +370,10 @@ export default function DivergencePage() {
   const [runError, setRunError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Async job polling state
+  const [jobId, setJobId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const PAGE_SIZE = 50;
 
   // ── Fetch evidence for a specific divergence record ─────────────────────
@@ -468,32 +472,76 @@ export default function DivergencePage() {
     if (summary && view === "table") fetchRecords();
   }, [summary, view, fetchRecords]);
 
-  // ── Run reconciliation ─────────────────────────────────────────────────
+  // ── Run reconciliation (async job with polling) ────────────────────────
   async function handleRun() {
     if (!token) return;
     setRunning(true);
     setRunError(null);
+    setJobId(null);
+
+    // Clear any previous poll
+    if (pollRef.current) clearInterval(pollRef.current);
+
     try {
-      await apiFetch(`/api/v1/reports/divergence/run`, token, {
+      const res = await apiFetch(`/api/v1/reports/divergence/run`, token, {
         method: "POST",
         body: JSON.stringify({}),
       });
-      setLoading(true);
-      setPage(1);
-      setFilterType("");
-      setFilterDomain("");
-      setFilterTargetType("");
-      setScore(null);
-      setShowEval(false);
-      setAggregations(null);
-      setView("summary");
-      await fetchSummary();
+
+      const id: string = res.job_id;
+      setJobId(id);
+
+      // Poll every 5s until complete or failed
+      pollRef.current = setInterval(async () => {
+        try {
+          const job = await apiFetch(
+            `/api/v1/reports/divergence/run/${encodeURIComponent(id)}`,
+            token,
+          );
+
+          if (job.status === "complete") {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setRunning(false);
+            setJobId(null);
+            // Refresh all views
+            setPage(1);
+            setFilterType("");
+            setFilterDomain("");
+            setFilterTargetType("");
+            setScore(null);
+            setShowEval(false);
+            setAggregations(null);
+            setView("summary");
+            await fetchSummary();
+          } else if (job.status === "failed") {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setRunning(false);
+            setJobId(null);
+            setRunError(job.error ?? "Reconciliation failed.");
+          }
+          // status === "running" → keep polling
+        } catch (pollErr: any) {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setRunning(false);
+          setJobId(null);
+          setRunError(pollErr.message);
+        }
+      }, 5000);
     } catch (e: any) {
-      setRunError(e.message);
-    } finally {
       setRunning(false);
+      setRunError(e.message);
     }
   }
+
+  // Clean up poll on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   // ── Drill-down handlers ────────────────────────────────────────────────
   function drillToType(type: string) {
@@ -597,6 +645,17 @@ export default function DivergencePage() {
             {running ? "Running..." : "Run Reconciliation"}
           </button>
         </div>
+
+        {running && (
+          <div className="p-3 rounded-lg bg-cyan-900/30 border border-cyan-700/50 text-cyan-300 text-sm flex items-center gap-3">
+            <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+            <span>
+              Reconciliation in progress — scanning CMDB against operational signals.
+              This takes several minutes on large datasets.
+              {jobId && <span className="ml-2 text-cyan-400/60 font-mono text-xs">job: {jobId}</span>}
+            </span>
+          </div>
+        )}
 
         {runError && (
           <div className="p-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm">

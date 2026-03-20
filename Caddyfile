@@ -6,7 +6,15 @@ pedk.ai {
 
     # API backend — match these paths first (order matters)
     handle /api/* {
-        reverse_proxy localhost:8000
+        reverse_proxy localhost:8000 {
+            transport http {
+                read_buffer_size  16384
+                write_buffer_size 16384
+                dial_timeout      10s
+                response_header_timeout 600s  # 10 min — covers long-running jobs
+            }
+            flush_interval -1  # Stream responses immediately (SSE + large payloads)
+        }
     }
     handle /docs* {
         reverse_proxy localhost:8000
