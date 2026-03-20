@@ -146,6 +146,10 @@ class AbeyanceFragmentORM(Base):
     # Deduplication key (Phase 7, §7.3)
     dedup_key = Column(String(500), nullable=True)
 
+    # Parquet-alignment columns (migration 015)
+    entity_count = Column(Integer, nullable=False, default=0, server_default='0')
+    snap_partner_id = Column(UUID(as_uuid=True), nullable=True)
+
     __table_args__ = (
         Index("ix_abeyance_fragment_tenant_status", "tenant_id", "snap_status"),
         Index("ix_abeyance_fragment_tenant_created", "tenant_id", "created_at"),

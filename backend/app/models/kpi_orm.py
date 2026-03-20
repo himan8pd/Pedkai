@@ -23,7 +23,7 @@ class KPIMetricORM(Base):
     __tablename__ = "kpi_metrics"
 
     # Multi-tenant isolation (Part of Natural Primary Key)
-    tenant_id = Column(String(255), primary_key=True)
+    tenant_id = Column(String(100), primary_key=True)
 
     # Entity reference (Part of Natural Primary Key)
     entity_id = Column(String(255), primary_key=True)
@@ -38,10 +38,10 @@ class KPIMetricORM(Base):
     )
 
     # Metric details (Part of Natural Primary Key)
-    metric_name = Column(String(100), primary_key=True)
+    metric_name = Column("kpi_name", String(100), primary_key=True, key="metric_name")
 
-    # Metric value — DB column is 'metric_value', ORM attribute is 'value'
-    value = Column("metric_value", Float, nullable=False, key="value")
+    # Metric value — DB column is 'kpi_value', ORM attribute is 'value'
+    value = Column("kpi_value", Float, nullable=False, key="value")
 
     # Additional context — DB column is 'metadata', ORM attribute is 'tags'
     tags = Column("metadata", JSONB, nullable=False, default=dict, key="tags")

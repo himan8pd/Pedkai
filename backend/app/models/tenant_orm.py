@@ -1,8 +1,22 @@
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy.orm import validates
 
 from backend.app.core.database import Base
+
+# Canonical tenant ID format: lowercase letters, digits, underscores.
+# 3-100 chars, must start with a letter.
+TENANT_ID_PATTERN = re.compile(r'^[a-z][a-z0-9_]{2,99}$')
+
+
+def normalise_tenant_slug(slug: str) -> str:
+    """Strip punctuation variants to detect near-miss duplicates.
+
+    Maps ``six-telecom``, ``six_telecom``, ``SixTelecom`` → ``sixtelecom``.
+    """
+    return slug.lower().replace("-", "").replace("_", "").replace(" ", "")
 
 
 class TenantORM(Base):
@@ -17,6 +31,9 @@ class TenantORM(Base):
     ``display_name`` is an optional prettier label shown in the UI
     (e.g. "CasinoLimit" instead of "casinolimit").  If not set, the
     frontend should fall back to ``id``.
+
+    **Naming convention**: ``^[a-z][a-z0-9_]{2,99}$`` — lowercase,
+    underscores only, no hyphens, no spaces.
     """
 
     __tablename__ = "tenants"
@@ -25,6 +42,15 @@ class TenantORM(Base):
     display_name = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    @validates('id')
+    def validate_tenant_id(self, _key: str, value: str) -> str:
+        if not TENANT_ID_PATTERN.match(value):
+            raise ValueError(
+                f"Invalid tenant_id '{value}'. Must match {TENANT_ID_PATTERN.pattern} "
+                f"(lowercase alphanumeric + underscores, 3-100 chars, starts with a letter)."
+            )
+        return value
 
     def __repr__(self):
         return f"<Tenant {self.id}>"

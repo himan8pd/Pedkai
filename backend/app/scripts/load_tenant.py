@@ -14,7 +14,7 @@ Key goals:
 
 Usage:
   ./venv/bin/python -m backend.app.scripts.load_tenant \
-    --tenant-id six-telecom-01 \
+    --tenant-id six_telecom \
     --tenant-name "Six Telecom" \
     --output-dir "/path/to/tenant/output" \
     --load-abeyance-memory
@@ -33,9 +33,11 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import time
 import uuid
@@ -157,6 +159,66 @@ def _get_conn(dsn: str):
     return conn
 
 
+def _verify_parquet_tenant_id(filepath: Path, expected_tenant_id: str) -> None:
+    """Abort if Parquet file contains wrong or missing tenant_id."""
+    try:
+        table = pq.read_table(filepath, columns=["tenant_id"])
+        unique_tenants = table.column("tenant_id").unique().to_pylist()
+        if len(unique_tenants) == 0:
+            raise ValueError(f"TENANT MISMATCH in {filepath.name}: no tenant_id column found.")
+        if len(unique_tenants) != 1 or unique_tenants[0] != expected_tenant_id:
+            raise ValueError(
+                f"TENANT MISMATCH in {filepath.name}: "
+                f"expected '{expected_tenant_id}', found {unique_tenants}. "
+                f"Regenerate data with correct tenant_id."
+            )
+    except KeyError:
+        raise ValueError(
+            f"TENANT MISMATCH in {filepath.name}: file has no 'tenant_id' column. "
+            f"Regenerate data with tenant_id included."
+        )
+
+
+def _record_step_progress(conn, tenant_id: str, step_name: str, row_count: int) -> None:
+    """Record that a load step completed successfully."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO _load_progress (tenant_id, step_name, completed_at, row_count)
+                VALUES (%s, %s, NOW(), %s)
+                ON CONFLICT (tenant_id, step_name) DO UPDATE
+                SET completed_at = NOW(), row_count = EXCLUDED.row_count
+            """, (tenant_id, step_name, row_count))
+        conn.commit()
+    except Exception:
+        # _load_progress table may not exist yet (pre-reset). Silently skip.
+        conn.rollback()
+
+
+def _check_existing_data(conn, table: str, tenant_id: str, force: bool = False) -> bool:
+    """Check if table already has data for this tenant.
+
+    Returns True if the step should proceed, False if it should skip.
+    If force=True and data exists, deletes existing rows first.
+    """
+    with conn.cursor() as cur:
+        cur.execute(f'SELECT COUNT(*) FROM "{table}" WHERE tenant_id = %s', (tenant_id,))
+        count = cur.fetchone()[0]
+
+    if count == 0:
+        return True  # No data, proceed normally
+
+    if not force:
+        log.warning(f"  {table} already has {count:,} rows for tenant {tenant_id}. Skipping. Use --force to overwrite.")
+        return False  # Skip
+
+    log.info(f"  --force: deleting {count:,} existing rows from {table} for tenant {tenant_id}")
+    with conn.cursor() as cur:
+        cur.execute(f'DELETE FROM "{table}" WHERE tenant_id = %s', (tenant_id,))
+    conn.commit()
+    return True  # Proceed after delete
+
+
 def load_parquet_to_table(
     conn,
     filepath: Path,
@@ -228,32 +290,80 @@ def load_parquet_to_table(
 # ---------------------------------------------------------------------------
 
 
+# Tenant ID format: lowercase alphanumeric + underscores, 3-100 chars, starts with letter.
+_TENANT_ID_PATTERN = re.compile(r'^[a-z][a-z0-9_]{2,99}$')
+
+
+def _normalise_tenant_slug(slug: str) -> str:
+    """Strip punctuation variants to detect near-miss duplicates.
+
+    Maps ``six-telecom``, ``six_telecom``, ``SixTelecom`` all to ``sixtelecom``.
+    """
+    return slug.lower().replace("-", "").replace("_", "").replace(" ", "")
+
+
+def _validate_tenant_id(tenant_id: str) -> None:
+    """Raise ValueError if tenant_id violates the naming convention."""
+    if not _TENANT_ID_PATTERN.match(tenant_id):
+        raise ValueError(
+            f"Invalid tenant_id '{tenant_id}'. Must match {_TENANT_ID_PATTERN.pattern} "
+            f"(lowercase alphanumeric + underscores, 3-100 chars, starts with a letter). "
+            f"Example: 'six_telecom', not 'six-telecom' or 'Six Telecom'."
+        )
+
+
+def _check_tenant_collision(conn, tenant_id: str) -> None:
+    """Abort if a normalised near-miss of tenant_id already exists in the DB."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tenants")
+        existing = [row[0] for row in cur.fetchall()]
+    candidate_norm = _normalise_tenant_slug(tenant_id)
+    for ex in existing:
+        if _normalise_tenant_slug(ex) == candidate_norm and ex != tenant_id:
+            raise ValueError(
+                f"TENANT COLLISION: '{tenant_id}' normalises to the same slug as "
+                f"existing tenant '{ex}'. Use the existing ID '{ex}' or choose a "
+                f"distinct name."
+            )
+
+
 def step_0_create_tenant(
     conn, tenant_id: str, tenant_display_name: str, dry_run: bool = False
 ) -> str:
-    """Insert the tenant record if it doesn't exist."""
+    """Insert the tenant record if it doesn't exist.
+
+    Validates tenant_id format and checks for near-miss collisions
+    (e.g. ``six-telecom`` vs ``six_telecom``) before creating.
+    """
     log.info("━━━ Step 0: Create tenant ━━━")
+
+    # Stage 1: Format validation
+    _validate_tenant_id(tenant_id)
 
     with conn.cursor() as cur:
         cur.execute("SELECT id, display_name FROM tenants WHERE id = %s", (tenant_id,))
         row = cur.fetchone()
         if row:
-            log.info(f"  ✓ Tenant already exists: id={row[0]}, display_name={row[1]}")
+            log.info(f"  Tenant already exists: id={row[0]}, display_name={row[1]}")
             return row[0]
 
-        if dry_run:
-            log.info(
-                f"  [DRY RUN] Would create tenant: id={tenant_id}, display_name={tenant_display_name}"
-            )
-            return tenant_id
+    # Stage 2: Fuzzy-match collision detection
+    _check_tenant_collision(conn, tenant_id)
 
+    if dry_run:
+        log.info(
+            f"  [DRY RUN] Would create tenant: id={tenant_id}, display_name={tenant_display_name}"
+        )
+        return tenant_id
+
+    with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO tenants (id, display_name, is_active, created_at) VALUES (%s, %s, %s, %s)",
             (tenant_id, tenant_display_name, True, datetime.now(timezone.utc)),
         )
-        conn.commit()
-        log.info(f"  ✓ Created tenant: id={tenant_id}")
-        return tenant_id
+    conn.commit()
+    log.info(f"  Created tenant: id={tenant_id}")
+    return tenant_id
 
 
 def step_1_load_network_entities(conn, output_dir: Path, tenant_id: str, dry_run: bool = False):
@@ -1449,21 +1559,6 @@ def main():
         help="Run only a specific step (0-13).",
     )
     parser.add_argument(
-        "--load-ground-truth",
-        action="store_true",
-        help="Load gt_*.parquet ground-truth tables (evaluation only).",
-    )
-    parser.add_argument(
-        "--load-divergence-manifest",
-        action="store_true",
-        help="Load divergence_manifest.parquet for offline scoring (evaluation only).",
-    )
-    parser.add_argument(
-        "--load-scenarios",
-        action="store_true",
-        help="Load scenario_manifest / scenario_kpi_overrides (optional).",
-    )
-    parser.add_argument(
         "--load-abeyance-memory",
         action="store_true",
         help="Load abeyance memory parquet artifacts (new for Six Telecom).",
@@ -1483,6 +1578,19 @@ def main():
         "--clean",
         action="store_true",
         help="Delete all existing data for this tenant before loading (DANGER).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-load of steps that already have data (deletes existing tenant data for that table, then reinserts).",
+    )
+    parser.add_argument(
+        "--abeyance-step",
+        type=str,
+        default=None,
+        choices=["fragments", "snap_records", "disconfirmation", "bridges",
+                 "causal_pairs", "surprise_events", "temporal_sequences"],
+        help="Run only a specific abeyance memory loader.",
     )
     parser.add_argument(
         "--verbose",
@@ -1557,14 +1665,9 @@ def main():
 
         with graph_conn.cursor() as cur:
             tables_to_clean = [
-                "scenario_kpi_overrides",
-                "scenario_manifest",
                 "telco_events_alarms",
                 "neighbour_relations",
                 "vendor_naming_map",
-                "divergence_manifest",
-                "gt_entity_relationships",
-                "gt_network_entities",
                 "bss_billing_accounts",
                 "entity_relationships",
                 "topology_relationships",
@@ -1610,25 +1713,60 @@ def main():
     # ---------- Execute steps ----------
     overall_t0 = _timer()
 
+    # Complete dispatch table for --step mode (covers all steps 0-12)
+    STEP_DISPATCH = {
+        0: lambda: step_0_create_tenant(graph_conn, tenant_id, tenant_name, dry_run=args.dry_run),
+        1: lambda: step_1_load_network_entities(graph_conn, output_dir, tenant_id, args.dry_run),
+        2: lambda: step_2_load_entity_relationships(graph_conn, output_dir, tenant_id, args.dry_run),
+        3: lambda: step_3_load_topology_relationships(graph_conn, output_dir, tenant_id, args.dry_run),
+        4: lambda: step_4_load_customers_bss(graph_conn, output_dir, tenant_id, args.dry_run),
+        8: lambda: step_8_load_events_alarms(graph_conn, output_dir, tenant_id, args.dry_run),
+        9: lambda: step_9_load_neighbour_relations(graph_conn, output_dir, tenant_id, args.dry_run),
+        10: lambda: step_10_load_vendor_naming(graph_conn, output_dir, tenant_id, args.dry_run),
+        11: lambda: step_11_register_kpi_datasets(graph_conn, output_dir, tenant_id, args.dry_run),
+        12: lambda: step_12_load_kpi_sample(
+            metrics_conn, output_dir, tenant_id,
+            dry_run=args.dry_run, sample_hours=args.kpi_sample_hours,
+        ) if metrics_conn else log.warning("  Metrics DB not connected — cannot run step 12"),
+    }
+
+    # Abeyance sub-step dispatch for --abeyance-step mode
+    ABEYANCE_DISPATCH = {
+        "fragments": ("abeyance_fragments.parquet", "abeyance_fragment", _load_abeyance_fragments),
+        "snap_records": ("snap_decision_records.parquet", "snap_decision_record", _load_snap_decision_records),
+        "disconfirmation": ("disconfirmation_events.parquet", "disconfirmation_events", _load_disconfirmation_events),
+        "bridges": ("bridge_candidates.parquet", "bridge_discovery", _load_bridge_candidates),
+        "causal_pairs": ("causal_pairs.parquet", "causal_evidence_pair", _load_causal_pairs),
+        "surprise_events": ("scenario_surprise_events.parquet", "surprise_event", _load_scenario_surprise_events),
+        "temporal_sequences": ("temporal_sequences.parquet", "entity_sequence_log", _load_temporal_sequences),
+    }
+
     try:
-        if args.step is not None:
-            # Single step mode
-            if args.step == 0:
-                step_0_create_tenant(
-                    graph_conn,
-                    tenant_id=tenant_id,
-                    tenant_display_name=tenant_name,
-                    dry_run=args.dry_run,
-                )
-            elif args.step == 1:
-                step_1_load_network_entities(graph_conn, output_dir, tenant_id, args.dry_run)
-            elif args.step == 2:
-                step_2_load_entity_relationships(
-                    graph_conn, output_dir, tenant_id, args.dry_run
-                )
-            else:
-                log.error(f"Unknown step: {args.step}")
+        if args.abeyance_step is not None:
+            # Single abeyance sub-step mode
+            fname, table, loader_fn = ABEYANCE_DISPATCH[args.abeyance_step]
+            abeyance_path = Path(args.abeyance_dir)
+            base_dir = abeyance_path if abeyance_path.is_absolute() else output_dir / abeyance_path
+            filepath = base_dir / fname
+            if not filepath.exists():
+                log.error(f"Abeyance file not found: {filepath}")
                 sys.exit(1)
+            total_rows = _pq_row_count(filepath)
+            log.info(f"  [{fname}] -> {table} ({total_rows:,} rows)")
+            if not args.dry_run:
+                t0 = _timer()
+                loaded = loader_fn(graph_conn, filepath, tenant_id)
+                log.info(f"  Loaded {loaded:,} rows into {table} in {_elapsed(t0)}")
+            else:
+                log.info(f"  [DRY RUN] Would load {total_rows:,} rows via {loader_fn.__name__}")
+
+        elif args.step is not None:
+            # Single step mode
+            if args.step not in STEP_DISPATCH:
+                log.error(f"Unknown step: {args.step}. Valid steps: {sorted(STEP_DISPATCH.keys())}")
+                sys.exit(1)
+            STEP_DISPATCH[args.step]()
+
         else:
             step_0_create_tenant(
                 graph_conn,
@@ -1844,7 +1982,11 @@ def _load_disconfirmation_events(conn, filepath: Path, tenant_id: str) -> int:
 
     frag_df = df[["id", "fragment_id", "pre_decay_score", "post_decay_score"]].copy()
     frag_df = frag_df.rename(columns={"id": "disconfirmation_event_id"})
-    frag_df["id"] = [str(uuid.uuid4()) for _ in range(len(frag_df))]
+    frag_df["tenant_id"] = tenant_id
+    frag_df["id"] = [
+        str(uuid.UUID(hashlib.md5(f"{eid}:{i}".encode()).hexdigest()))
+        for i, eid in enumerate(frag_df["disconfirmation_event_id"])
+    ]
 
     f_cols = list(frag_df.columns)
     f_col_list = ", ".join([f'"{c}"' for c in f_cols])
@@ -2038,8 +2180,7 @@ def _load_scenario_surprise_events(conn, filepath: Path, tenant_id: str) -> int:
 def _load_temporal_sequences(conn, filepath: Path, tenant_id: str) -> int:
     """Load temporal_sequences.parquet → entity_sequence_log.
 
-    Parquet PK: seq_id (UUID) — DISCARDED because entity_sequence_log uses
-    BIGSERIAL as its PK. We let the DB auto-generate the serial ID.
+    Parquet PK: seq_id (UUID) — renamed to id for ON CONFLICT deduplication.
     New DB columns: is_rare, transition_count_hint (added by migration 015).
     """
     import pandas as pd
@@ -2049,12 +2190,12 @@ def _load_temporal_sequences(conn, filepath: Path, tenant_id: str) -> int:
 
     df["tenant_id"] = tenant_id
 
-    # Drop the parquet UUID PK — entity_sequence_log uses BIGSERIAL
+    # Rename the parquet UUID PK to 'id' for ON CONFLICT deduplication
     if "seq_id" in df.columns:
-        df = df.drop(columns=["seq_id"])
+        df = df.rename(columns={"seq_id": "id"})
 
     keep_cols = [
-        "tenant_id", "entity_id", "entity_domain", "from_state", "to_state",
+        "id", "tenant_id", "entity_id", "entity_domain", "from_state", "to_state",
         "fragment_id", "event_timestamp", "is_rare", "transition_count_hint",
     ]
     df = df[[c for c in keep_cols if c in df.columns]]
@@ -2062,8 +2203,7 @@ def _load_temporal_sequences(conn, filepath: Path, tenant_id: str) -> int:
     insert_cols = list(df.columns)
     col_list = ", ".join([f'"{c}"' for c in insert_cols])
     placeholder = ", ".join(["%s"] * len(insert_cols))
-    # entity_sequence_log has no natural unique constraint other than serial PK;
-    sql = f"INSERT INTO entity_sequence_log ({col_list}) VALUES %s"
+    sql = f"INSERT INTO entity_sequence_log ({col_list}) VALUES %s ON CONFLICT (id) DO NOTHING"
 
     rows = [[row.get(c) for c in insert_cols] for row in df.to_dict(orient="records")]
     with conn.cursor() as cur:

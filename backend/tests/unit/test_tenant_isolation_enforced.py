@@ -63,3 +63,47 @@ def test_all_tables_have_tenant_id() -> None:
         + "\n\nAdd 'tenant_id = Column(String(100), nullable=False, index=True)' to each "
         "model, or add the table to SYSTEM_TABLES_ALLOWLIST in backend/app/core/database.py."
     )
+
+
+def test_tenant_id_column_width_is_100() -> None:
+    """Assert that every tenant_id column uses String(100) to match TenantORM.id."""
+    wrong_width: list[str] = []
+    for table_name, table in Base.metadata.tables.items():
+        if table_name in SYSTEM_TABLES_ALLOWLIST:
+            continue
+        if "tenant_id" not in {col.name for col in table.columns}:
+            continue
+        col = table.columns["tenant_id"]
+        # Check the length attribute of the String type
+        if hasattr(col.type, "length") and col.type.length != 100:
+            wrong_width.append(f"{table_name}: String({col.type.length})")
+
+    assert not wrong_width, (
+        "Tables with non-100 tenant_id width:\n"
+        + "\n".join(f"  - {t}" for t in sorted(wrong_width))
+        + "\n\nAll tenant_id columns must be String(100) to match TenantORM.id."
+    )
+
+
+# Answer tables that must NEVER exist in the ORM metadata — Pedkai operates blindly.
+_ANSWER_TABLES = frozenset({
+    "gt_network_entities",
+    "gt_entity_relationships",
+    "divergence_manifest",
+    "scenario_manifest",
+    "scenario_kpi_overrides",
+})
+
+
+def test_no_answer_tables_in_orm() -> None:
+    """Assert that ground-truth / scenario answer tables are excluded from ORM metadata.
+
+    Pedkai must not have access to the 'answers' from the synthetic data generator.
+    Evaluation is done externally by comparing Pedkai's findings against Parquet files.
+    """
+    present = _ANSWER_TABLES & set(Base.metadata.tables.keys())
+    assert not present, (
+        "Answer tables found in ORM metadata (must be excluded):\n"
+        + "\n".join(f"  - {t}" for t in sorted(present))
+        + "\n\nPedkai must operate blindly. Remove the ORM model for these tables."
+    )

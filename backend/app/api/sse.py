@@ -7,7 +7,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Set
+from typing import Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.config import get_settings
 from backend.app.core.database import get_db
-from backend.app.core.security import User, get_current_user
+from backend.app.core.security import User, decode_token_string, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -156,19 +156,51 @@ async def alarm_event_generator(
 @router.get("/stream/alarms")
 async def stream_alarms(
     request: Request,
-    tenant_id: str,
+    tenant_id: Optional[str] = None,
+    token: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
     SSE endpoint: streams alarm update notifications to connected clients.
-    Auth is intentionally not required — EventSource API cannot send headers.
-    Pass ?tenant_id=<tenant> to scope the stream to a specific tenant.
+    EventSource API cannot send Authorization headers, so the JWT token
+    is passed as a query parameter: ?token=<jwt>&tenant_id=<tenant>.
+
+    Authentication:
+    - If `token` is provided, it is decoded to extract tenant_id and user identity.
+    - If only `tenant_id` is provided (legacy), a deprecation warning is logged
+      and the stream proceeds without authentication.
+    - If neither is provided, returns 401.
 
     Features:
     - Sends heartbeat every 30s to keep connection alive
     - Closes connection after 5 minutes of inactivity
     - Returns HTTP 503 if max concurrent connections exceeded
     """
+    # Resolve user identity and tenant from token or legacy query param
+    user_id = "anonymous"
+    resolved_tenant_id = tenant_id
+
+    if token:
+        user = decode_token_string(token)
+        resolved_tenant_id = user.tenant_id or tenant_id
+        user_id = user.username
+    elif tenant_id:
+        logger.warning(
+            "SSE /stream/alarms called with tenant_id only (no token). "
+            "This is deprecated — pass ?token=<jwt> for authenticated streams."
+        )
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing authentication token. Pass ?token=<jwt> query parameter.",
+        )
+
+    if not resolved_tenant_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not determine tenant_id from token or query parameter.",
+        )
+
     # Check connection limit before setting up the stream
     if len(_active_connections) >= settings.sse_max_connections:
         raise HTTPException(
@@ -177,7 +209,7 @@ async def stream_alarms(
         )
 
     return StreamingResponse(
-        alarm_event_generator(request, db, tenant_id, "anonymous"),
+        alarm_event_generator(request, db, resolved_tenant_id, user_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

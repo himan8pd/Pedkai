@@ -18,7 +18,7 @@ class IncidentAuditEntryORM(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     incident_id = Column(String(36), index=True, nullable=False)
-    tenant_id = Column(String(50), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
     
     timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     action = Column(String(100), nullable=False)

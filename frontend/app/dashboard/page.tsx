@@ -53,8 +53,14 @@ export default function DashboardPage() {
         esRef.current = null;
       }
 
+      // Build SSE URL with token (authenticated) and tenant_id (fallback)
+      const params = new URLSearchParams({ tenant_id: tenantId });
+      if (token) {
+        params.set("token", token);
+      }
+
       const es = new EventSource(
-        `${API_BASE_URL}/api/v1/stream/alarms?tenant_id=${encodeURIComponent(tenantId)}`,
+        `${API_BASE_URL}/api/v1/stream/alarms?${params.toString()}`,
       );
       esRef.current = es;
 
@@ -110,7 +116,7 @@ export default function DashboardPage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId]);
+  }, [tenantId, token]);
 
   return (
     <div className="p-4 md:p-8">

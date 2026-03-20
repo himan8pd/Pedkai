@@ -7,24 +7,29 @@ Exposes the signal-based ReconciliationEngine findings as REST endpoints:
   GET  /divergence/summary          — summary stats from last run
   GET  /divergence/records          — paginated divergence records w/ filters
   GET  /divergence/report/{tid}     — full structured report (Roadmap V8 §1.4)
-
-Evaluation-only (separate from operational pipeline):
-  GET  /divergence/score/{tid}      — detection accuracy vs ground-truth manifest
 """
 
 import logging
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_db, get_metrics_db
+from backend.app.core.security import User, get_current_user
 from backend.app.services.reconciliation_engine import ReconciliationEngine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _tenant_from_jwt(current_user: User) -> str:
+    """Extract tenant_id from JWT, raising 403 if not set."""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant selected. Call /select-tenant first.")
+    return current_user.tenant_id
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +38,7 @@ router = APIRouter()
 
 
 class RunReconciliationRequest(BaseModel):
-    tenant_id: str
+    tenant_id: Optional[str] = None  # Ignored — tenant_id is now extracted from JWT
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +51,7 @@ async def run_reconciliation(
     body: RunReconciliationRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     metrics_db: Annotated[AsyncSession, Depends(get_metrics_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ) -> dict:
     """
     Trigger signal-based divergence detection for a tenant.
@@ -57,9 +63,10 @@ async def run_reconciliation(
 
     No ground-truth data is used during detection.
     """
+    tenant_id = _tenant_from_jwt(current_user)
     try:
         engine = ReconciliationEngine(db, metrics_db)
-        result = await engine.run(body.tenant_id)
+        result = await engine.run(tenant_id)
         return result
     except Exception as exc:
         logger.error(f"Reconciliation failed: {exc}", exc_info=True)
@@ -73,14 +80,16 @@ async def run_reconciliation(
 
 @router.get("/divergence/summary")
 async def get_divergence_summary(
-    tenant_id: Annotated[str, Query(description="Tenant ID to query")],
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ) -> dict:
     """
     Summary statistics from the most recent reconciliation run.
     Returns counts by divergence type, domain breakdown, and operational
     inventory metrics (CMDB count vs observed signal count).
     """
+    tenant_id = _tenant_from_jwt(current_user)
+
     # Get latest run
     run_row = await db.execute(
         text(
@@ -167,8 +176,8 @@ async def get_divergence_summary(
 
 @router.get("/divergence/aggregations")
 async def get_divergence_aggregations(
-    tenant_id: Annotated[str, Query()],
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ) -> dict:
     """
     Multi-dimensional aggregations for the executive summary dashboard.
@@ -176,6 +185,8 @@ async def get_divergence_aggregations(
     and top affected entities — all computed server-side to avoid shipping
     millions of rows to the browser.
     """
+    tenant_id = _tenant_from_jwt(current_user)
+
     # -- By type x domain (heatmap data) --
     type_domain_rows = await db.execute(
         text(
@@ -308,8 +319,8 @@ async def get_divergence_aggregations(
 
 @router.get("/divergence/records")
 async def get_divergence_records(
-    tenant_id: Annotated[str, Query()],
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
     divergence_type: Annotated[Optional[str], Query()] = None,
     domain: Annotated[Optional[str], Query()] = None,
     target_type: Annotated[Optional[str], Query()] = None,
@@ -324,6 +335,7 @@ async def get_divergence_records(
     JOINs network_entities to resolve target_id UUIDs into human-readable
     names and external_ids for entity traceability.
     """
+    tenant_id = _tenant_from_jwt(current_user)
     offset = (page - 1) * page_size
     filters = ["rr.tenant_id = :tid"]
     params: dict = {"tid": tenant_id, "limit": page_size, "offset": offset}
@@ -399,15 +411,20 @@ async def get_divergence_records(
 async def get_divergence_report(
     tenant_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ) -> dict:
     """
     Full structured Divergence Report (Roadmap V8 §1.4 format).
 
     Returns summary + top examples per divergence type.
     Suitable for the Day-1 CIO delivery.
+
+    Note: tenant_id path parameter is kept for URL compatibility but the
+    authoritative tenant comes from the JWT. The path param is ignored.
     """
+    tenant_id = _tenant_from_jwt(current_user)
     try:
-        summary = await get_divergence_summary(tenant_id, db)
+        summary = await get_divergence_summary(db=db, current_user=current_user)
     except HTTPException:
         raise HTTPException(
             status_code=404,
@@ -481,9 +498,9 @@ async def get_divergence_report(
 @router.get("/divergence/evidence/{result_id}")
 async def get_divergence_evidence(
     result_id: str,
-    tenant_id: Annotated[str, Query()],
     db: Annotated[AsyncSession, Depends(get_db)],
     metrics_db: Annotated[AsyncSession, Depends(get_metrics_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ) -> dict:
     """
     Fetch contextual telemetry + CMDB evidence for a specific divergence record.
@@ -494,6 +511,8 @@ async def get_divergence_evidence(
     - phantom_node: signal sources checked, all zero
     - dark_node: signal source summary from KPI metadata
     """
+    tenant_id = _tenant_from_jwt(current_user)
+
     # Fetch the divergence record
     row = await db.execute(
         text(
@@ -767,29 +786,6 @@ async def get_divergence_evidence(
     return evidence
 
 
-# ---------------------------------------------------------------------------
-# GET /divergence/score/{tenant_id}  — EVALUATION ONLY
-# ---------------------------------------------------------------------------
-
-
-@router.get("/divergence/score/{tenant_id}")
-async def get_detection_score(
-    tenant_id: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict:
-    """
-    [EVALUATION ONLY] Detection accuracy vs pre-seeded divergence_manifest.
-
-    This endpoint is NOT part of the operational pipeline. It compares
-    engine output against ground-truth labels for development benchmarking.
-    The engine itself never reads ground-truth data.
-    """
-    from backend.app.services.divergence_scorer import DivergenceScorer
-
-    scorer = DivergenceScorer(db)
-    return await scorer.score(tenant_id)
-
-
 # -- TASK-301: File-based Divergence Analysis endpoints --
 
 import asyncio
@@ -806,9 +802,10 @@ async def analyze_divergence(
     cmdb_file: UploadFile = File(...),
     telemetry_file: UploadFile = File(...),
     ticket_file: UploadFile = File(...),
-    tenant_id: str = "default",
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ):
     """Upload 3 files, trigger file-based divergence analysis. Returns job_id."""
+    tenant_id = _tenant_from_jwt(current_user)
     from backend.app.services.dark_graph.divergence_reporter import DivergenceReporter
 
     job_id = str(__import__("uuid").uuid4())
@@ -847,7 +844,10 @@ async def analyze_divergence(
 
 
 @router.get("/dark-graph/report/{job_id}")
-async def get_file_divergence_report(job_id: str):
+async def get_file_divergence_report(
+    job_id: str,
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
+):
     """Get divergence report by job_id."""
     job = _analysis_jobs.get(job_id)
     if not job:

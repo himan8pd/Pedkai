@@ -279,6 +279,9 @@ class BridgeDiscoveryORM(Base):
     domain_span = Column(Integer, nullable=False)
     severity = Column(String(20), nullable=False)
     component_fingerprint = Column(String(64), nullable=False)
+    # Parquet-alignment columns (migration 015)
+    entity_domains_spanned = Column(JSONB, nullable=True)
+    sub_component_size = Column(Integer, nullable=True)
     created_at = Column(
         DateTime(timezone=True), nullable=False,
         default=lambda: datetime.now(timezone.utc), server_default=func.now(),
@@ -412,7 +415,7 @@ class ConflictDetectionLogORM(Base):
 class EntitySequenceLogORM(Base):
     __tablename__ = "entity_sequence_log"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id = Column(String(100), nullable=False)
     entity_id = Column(UUID(as_uuid=True), nullable=False)
     entity_domain = Column(String(50), nullable=True)
@@ -420,6 +423,9 @@ class EntitySequenceLogORM(Base):
     to_state = Column(String(100), nullable=False)
     fragment_id = Column(UUID(as_uuid=True), nullable=False)
     event_timestamp = Column(DateTime(timezone=True), nullable=False)
+    # Parquet-alignment columns (migration 015)
+    is_rare = Column(Boolean, nullable=False, default=False, server_default='false')
+    transition_count_hint = Column(Integer, nullable=False, default=0, server_default='0')
 
     __table_args__ = (
         Index("ix_esl_tenant_entity", "tenant_id", "entity_id", "event_timestamp"),
@@ -588,6 +594,8 @@ class CausalEvidencePairORM(Base):
     fragment_b_id = Column(UUID(as_uuid=True), nullable=False)
     time_delta_seconds = Column(Float, nullable=False)
     direction = Column(String(10), nullable=False)
+    # Parquet-alignment column (migration 015)
+    direction_category = Column(String(50), nullable=True)
 
     __table_args__ = (
         Index("ix_causal_ev_cand", "causal_candidate_id"),

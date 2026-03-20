@@ -18,7 +18,7 @@ class IncidentORM(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
     # Core fields
-    tenant_id = Column(String(50), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
     title = Column(String(500), nullable=False)
     severity = Column(String(20), nullable=False, index=True)  # Legacy raw severity value
     status = Column(String(30), nullable=False, default="anomaly", index=True)  # IncidentStatus values

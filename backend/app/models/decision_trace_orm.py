@@ -28,7 +28,7 @@ class DecisionTraceORM(Base):
     
     # ... (rest of the fields) ...
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id = Column(String(255), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), server_default=func.now(), nullable=False)
     decision_made_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     trigger_type = Column(String(50), nullable=False, index=True)

@@ -22,7 +22,7 @@ class ActionExecutionORM(Base):
     __tablename__ = "action_executions"
 
     id = Column(String(36), primary_key=True)
-    tenant_id = Column(String(36), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
     action_type = Column(String(64), nullable=False)
     entity_id = Column(String(64), nullable=False)
     parameters = Column(JSON, nullable=True)

@@ -375,11 +375,11 @@ export default function DivergencePage() {
   // ── Fetch evidence for a specific divergence record ─────────────────────
   const fetchEvidence = useCallback(
     async (resultId: string) => {
-      if (!tenantId || !token || evidence[resultId]) return;
+      if (!token || evidence[resultId]) return;
       setLoadingEvidence(resultId);
       try {
         const data = await apiFetch(
-          `/api/v1/reports/divergence/evidence/${encodeURIComponent(resultId)}?tenant_id=${encodeURIComponent(tenantId)}`,
+          `/api/v1/reports/divergence/evidence/${encodeURIComponent(resultId)}`,
           token,
         );
         setEvidence((prev) => ({ ...prev, [resultId]: data }));
@@ -389,16 +389,16 @@ export default function DivergencePage() {
         setLoadingEvidence(null);
       }
     },
-    [tenantId, token, evidence],
+    [token, evidence],
   );
 
   // ── Fetch summary ──────────────────────────────────────────────────────
   const fetchSummary = useCallback(async () => {
-    if (!tenantId || !token) return;
+    if (!token) return;
     setError(null);
     try {
       const s = await apiFetch(
-        `/api/v1/reports/divergence/summary?tenant_id=${encodeURIComponent(tenantId)}`,
+        `/api/v1/reports/divergence/summary`,
         token,
       );
       setSummary(s);
@@ -407,21 +407,21 @@ export default function DivergencePage() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId, token]);
+  }, [token]);
 
   // ── Fetch aggregations ─────────────────────────────────────────────────
   const fetchAggregations = useCallback(async () => {
-    if (!tenantId || !token) return;
+    if (!token) return;
     try {
       const a = await apiFetch(
-        `/api/v1/reports/divergence/aggregations?tenant_id=${encodeURIComponent(tenantId)}`,
+        `/api/v1/reports/divergence/aggregations`,
         token,
       );
       setAggregations(a);
     } catch {
       setAggregations(null);
     }
-  }, [tenantId, token]);
+  }, [token]);
 
   // ── Fetch evaluation score ─────────────────────────────────────────────
   const fetchScore = useCallback(async () => {
@@ -439,8 +439,8 @@ export default function DivergencePage() {
 
   // ── Fetch records page ─────────────────────────────────────────────────
   const fetchRecords = useCallback(async () => {
-    if (!tenantId || !token) return;
-    let path = `/api/v1/reports/divergence/records?tenant_id=${encodeURIComponent(tenantId)}&page=${page}&page_size=${PAGE_SIZE}`;
+    if (!token) return;
+    let path = `/api/v1/reports/divergence/records?page=${page}&page_size=${PAGE_SIZE}`;
     if (filterType) path += `&divergence_type=${encodeURIComponent(filterType)}`;
     if (filterDomain) path += `&domain=${encodeURIComponent(filterDomain)}`;
     if (filterTargetType) path += `&target_type=${encodeURIComponent(filterTargetType)}`;
@@ -452,7 +452,7 @@ export default function DivergencePage() {
     } catch {
       setRecords([]);
     }
-  }, [tenantId, token, page, filterType, filterDomain, filterTargetType, sortBy, sortDir]);
+  }, [token, page, filterType, filterDomain, filterTargetType, sortBy, sortDir]);
 
   useEffect(() => {
     fetchSummary();
@@ -470,13 +470,13 @@ export default function DivergencePage() {
 
   // ── Run reconciliation ─────────────────────────────────────────────────
   async function handleRun() {
-    if (!tenantId || !token) return;
+    if (!token) return;
     setRunning(true);
     setRunError(null);
     try {
       await apiFetch(`/api/v1/reports/divergence/run`, token, {
         method: "POST",
-        body: JSON.stringify({ tenant_id: tenantId }),
+        body: JSON.stringify({}),
       });
       setLoading(true);
       setPage(1);

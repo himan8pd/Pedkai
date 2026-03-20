@@ -26,7 +26,7 @@ class NetworkEntityORM(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Tenancy
-    tenant_id = Column(String(50), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
 
     # Entity Classification
     entity_type = Column(

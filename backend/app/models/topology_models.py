@@ -26,7 +26,7 @@ class EntityRelationshipORM(Base):
     to_entity_type = Column(String(50), nullable=False)
 
     # Multi-tenant isolation (Phase 15.3)
-    tenant_id = Column(String(50), nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
 
     # Metadata (e.g., "fiber", "microwave", "10Gbps")
     properties = Column(String, nullable=True) # JSON or string for simplicity

@@ -30,10 +30,6 @@ NO ground-truth tables are accessed. Detection is pure inference:
   - Dark Attributes    : KPI metadata contradicts CMDB-declared attributes
   - Dark Edges         : Neighbour relation exists but no CMDB topology edge
   - Phantom Edges      : CMDB topology edge where neither endpoint shows activity
-
-Ground-truth tables (gt_network_entities, gt_entity_relationships,
-divergence_manifest) are NEVER referenced here. Scoring against ground
-truth is handled exclusively by the separate DivergenceScorer module.
 """
 
 import hashlib
@@ -124,16 +120,6 @@ def _make_result_id(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:40]
 
 
-# ---------------------------------------------------------------------------
-# Tables that the operational engine must NEVER query.
-# ---------------------------------------------------------------------------
-EVALUATION_TABLES = frozenset({
-    "gt_network_entities",
-    "gt_entity_relationships",
-    "divergence_manifest",
-})
-
-
 class ReconciliationEngine:
     """
     Infers CMDB divergences from operational signals only.
@@ -146,11 +132,6 @@ class ReconciliationEngine:
         - neighbour_relations       (cell-to-cell neighbour data)
       Metrics DB:
         - kpi_metrics               (telemetry time-series, 57M rows)
-
-    Data sources NEVER used:
-      - gt_network_entities       (evaluation only)
-      - gt_entity_relationships   (evaluation only)
-      - divergence_manifest       (evaluation only)
 
     Usage:
         engine = ReconciliationEngine(db_session, metrics_session)

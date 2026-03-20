@@ -33,7 +33,7 @@ class PolicyORM(Base):
     __tablename__ = "policies"
 
     id = Column(String(36), primary_key=True)
-    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(String(100), ForeignKey("tenants.id"), nullable=False, index=True)
 
     # Policy metadata
     name = Column(String(256), nullable=False)  # e.g., "cell_failover_tier1"
@@ -82,7 +82,7 @@ class PolicyEvaluationORM(Base):
     policy_id = Column(String(36), ForeignKey("policies.id"), nullable=False)
     policy = relationship(PolicyORM, back_populates="evaluations")
     
-    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(String(100), ForeignKey("tenants.id"), nullable=False, index=True)
     
     # Request context
     action_type = Column(String(50), nullable=False)  # cell_failover, connection_throttle, etc.
@@ -131,7 +131,7 @@ class PolicyVersionORM(Base):
     
     id = Column(String(36), primary_key=True)
     policy_id = Column(String(36), ForeignKey("policies.id"), nullable=False)
-    tenant_id = Column(String(36), ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(String(100), ForeignKey("tenants.id"), nullable=False, index=True)
     
     version_number = Column(Integer, nullable=False)
     rules = Column(JSON, nullable=False)

@@ -189,6 +189,32 @@ class TokenData(BaseModel):
     tenant_id: Optional[str] = None
 
 
+def decode_token_string(token: str) -> User:
+    """Decode a JWT token string directly (for SSE/WebSocket endpoints).
+
+    EventSource API cannot send Authorization headers, so the token
+    must be passed as a query parameter instead.
+    """
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user_id: str = payload.get("user_id")
+        tenant_id = payload.get("tenant_id")
+        role = payload.get("role", Role.VIEWER)
+        scopes = payload.get("scopes", ROLE_SCOPES.get(role, []))
+        return User(
+            username=username,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            role=role,
+            scopes=scopes,
+        )
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
 async def get_current_user(
     security_scopes: SecurityScopes, token: str = Depends(oauth2_scheme)
 ) -> User:
