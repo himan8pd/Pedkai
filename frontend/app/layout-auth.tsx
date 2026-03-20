@@ -213,63 +213,92 @@ export default function AuthLayout({
   // ═══════════════════════════════════════════════════════════════
   if (phase === "login") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] via-[#030f26] to-[#06203b]">
-        <div className="w-full max-w-md animate-fade-in">
-          <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
-            <div className="flex flex-col items-center mb-8">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.jpeg" alt="pedk.ai" className="w-20 h-20 rounded-2xl mb-4 shadow-[0_0_20px_rgba(7,242,219,0.15)]" />
-              <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
-              <p className="text-sm text-white/60 mt-1">NOC Command Center</p>
-            </div>
+      <div className="flex min-h-screen bg-gradient-to-br from-[#06203b] via-[#030f26] to-[#06203b]">
+        {/* Left: Video showcase — hidden on mobile */}
+        <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 items-center justify-center relative overflow-hidden">
+          {/* Subtle gradient overlay so video blends with bg */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#030f26]/80 z-10 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#06203b]/60 via-transparent to-[#06203b]/40 z-10 pointer-events-none" />
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover opacity-80"
+          >
+            <source src="/hero.mp4" type="video/mp4" />
+          </video>
+          {/* Branding overlay at bottom-left of video */}
+          <div className="absolute bottom-10 left-10 z-20">
+            <h2 className="text-3xl font-bold text-white tracking-tight">
+              Dark Graph Reconciliation
+            </h2>
+            <p className="text-white/70 mt-2 max-w-md text-sm leading-relaxed">
+              Continuous CMDB verification against telemetry ground truth.
+              Detect dark nodes, phantom assets, and identity mutations in real time.
+            </p>
+          </div>
+        </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
-                  placeholder="operator"
-                />
+        {/* Right: Login form */}
+        <div className="flex items-center justify-center w-full lg:w-1/2 xl:w-2/5 px-6">
+          <div className="w-full max-w-md animate-fade-in">
+            <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
+              <div className="flex flex-col items-center mb-8">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.jpeg" alt="pedk.ai" className="w-20 h-20 rounded-2xl mb-4 shadow-[0_0_20px_rgba(7,242,219,0.15)]" />
+                <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
+                <p className="text-sm text-white/60 mt-1">NOC Command Center</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
-                  placeholder="••••••"
-                />
-              </div>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
+                    placeholder="operator"
+                  />
+                </div>
 
-              {authError && (
-                <div className="p-3 rounded-lg bg-red-900 border border-red-700 text-red-200 text-sm">
-                  {authError}
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
+                    placeholder="••••••"
+                  />
+                </div>
+
+                {authError && (
+                  <div className="p-3 rounded-lg bg-red-900 border border-red-700 text-red-200 text-sm">
+                    {authError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full px-4 py-2.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-all duration-200 hover:shadow-[0_0_16px_rgba(7,242,219,0.25)]"
+                >
+                  {isLoading ? "Logging in..." : "Login"}
+                </button>
+              </form>
+
+              {showPasswordWarning && (
+                <div className="mt-4 p-3 rounded-lg bg-yellow-900 border border-yellow-700 text-yellow-200 text-sm">
+                  Default credentials in use. Change password in production.
                 </div>
               )}
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full px-4 py-2.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-all duration-200 hover:shadow-[0_0_16px_rgba(7,242,219,0.25)]"
-              >
-                {isLoading ? "Logging in..." : "Login"}
-              </button>
-            </form>
-
-            {showPasswordWarning && (
-              <div className="mt-4 p-3 rounded-lg bg-yellow-900 border border-yellow-700 text-yellow-200 text-sm">
-                ⚠️ Default credentials in use. Change password in production.
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -281,64 +310,91 @@ export default function AuthLayout({
   // ═══════════════════════════════════════════════════════════════
   if (phase === "tenant-select") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#06203b] via-[#030f26] to-[#06203b]">
-        <div className="w-full max-w-md animate-fade-in">
-          <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
-            <div className="flex flex-col items-center mb-6">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3 shadow-[0_0_16px_rgba(7,242,219,0.1)]" />
-              <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
-              <p className="text-white/60 text-sm mt-1">
-                Select a tenant to continue
-              </p>
-            </div>
+      <div className="flex min-h-screen bg-gradient-to-br from-[#06203b] via-[#030f26] to-[#06203b]">
+        {/* Left: Video showcase — hidden on mobile */}
+        <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 items-center justify-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#030f26]/80 z-10 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#06203b]/60 via-transparent to-[#06203b]/40 z-10 pointer-events-none" />
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover opacity-80"
+          >
+            <source src="/hero.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute bottom-10 left-10 z-20">
+            <h2 className="text-3xl font-bold text-white tracking-tight">
+              Dark Graph Reconciliation
+            </h2>
+            <p className="text-white/70 mt-2 max-w-md text-sm leading-relaxed">
+              Continuous CMDB verification against telemetry ground truth.
+              Detect dark nodes, phantom assets, and identity mutations in real time.
+            </p>
+          </div>
+        </div>
 
-            <form onSubmit={handleSelectTenant} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Tenant
-                </label>
-                <select
-                  value={selectedTenantId ?? ""}
-                  onChange={(e) => setSelectedTenantId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
-                >
-                  {tenants.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.display_name}
-                    </option>
-                  ))}
-                </select>
+        {/* Right: Tenant selection form */}
+        <div className="flex items-center justify-center w-full lg:w-1/2 xl:w-2/5 px-6">
+          <div className="w-full max-w-md animate-fade-in">
+            <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
+              <div className="flex flex-col items-center mb-6">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3 shadow-[0_0_16px_rgba(7,242,219,0.1)]" />
+                <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
+                <p className="text-white/60 text-sm mt-1">
+                  Select a tenant to continue
+                </p>
               </div>
 
-              <p className="text-xs text-white/80">
-                You have access to {tenants.length} tenant
-                {tenants.length > 1 ? "s" : ""}. To switch tenants later you
-                must log out and log back in.
-              </p>
-
-              {tenantError && (
-                <div className="p-3 rounded-lg bg-red-900 border border-red-700 text-red-200 text-sm">
-                  {tenantError}
+              <form onSubmit={handleSelectTenant} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Tenant
+                  </label>
+                  <select
+                    value={selectedTenantId ?? ""}
+                    onChange={(e) => setSelectedTenantId(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
+                  >
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.display_name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
 
-              <button
-                type="submit"
-                disabled={isTenantLoading || !selectedTenantId}
-                className="w-full px-4 py-2.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-all duration-200 hover:shadow-[0_0_16px_rgba(7,242,219,0.25)]"
-              >
-                {isTenantLoading ? "Selecting..." : "Continue"}
-              </button>
+                <p className="text-xs text-white/80">
+                  You have access to {tenants.length} tenant
+                  {tenants.length > 1 ? "s" : ""}. To switch tenants later you
+                  must log out and log back in.
+                </p>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="w-full px-4 py-2 rounded-lg border border-cyan-900/50 text-slate-400 hover:text-white hover:border-cyan-700/50 text-sm transition-colors"
-              >
-                Back to login
-              </button>
-            </form>
+                {tenantError && (
+                  <div className="p-3 rounded-lg bg-red-900 border border-red-700 text-red-200 text-sm">
+                    {tenantError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isTenantLoading || !selectedTenantId}
+                  className="w-full px-4 py-2.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-all duration-200 hover:shadow-[0_0_16px_rgba(7,242,219,0.25)]"
+                >
+                  {isTenantLoading ? "Selecting..." : "Continue"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full px-4 py-2 rounded-lg border border-cyan-900/50 text-slate-400 hover:text-white hover:border-cyan-700/50 text-sm transition-colors"
+                >
+                  Back to login
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>
