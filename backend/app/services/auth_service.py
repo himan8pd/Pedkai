@@ -379,17 +379,30 @@ async def seed_default_users(db: AsyncSession) -> None:
     # 1. Seed the global pedkai_admin user (idempotent)
     admin_user = await get_user_by_username(db, "pedkai_admin")
     if not admin_user:
+        # The legacy tenant_id column is NOT NULL, so we must supply a value.
+        # Fetch the first active tenant from the DB rather than hardcoding one.
+        first_tenant = await db.execute(
+            select(TenantORM).where(TenantORM.is_active.is_(True)).limit(1)
+        )
+        first_tenant_id = (t := first_tenant.scalar_one_or_none()) and t.id
+        if not first_tenant_id:
+            logger.error(
+                "Cannot seed pedkai_admin: no active tenants exist. "
+                "Load tenant data first (e.g., load_telco2_tenant.py)."
+            )
+            return
+
         admin_user = UserORM(
             username="pedkai_admin",
             hashed_password=hash_password(
                 os.getenv("PEDKAI_ADMIN_PASSWORD", "CHANGE_ME")
             ),
             role=Role.ADMIN,
-            tenant_id=None,  # Global user — not scoped to any single tenant
+            tenant_id=first_tenant_id,  # Legacy NOT NULL column; user_tenant_access is authoritative
         )
         db.add(admin_user)
         await db.flush()
-        logger.info("Seeded global user 'pedkai_admin'")
+        logger.info(f"Seeded global user 'pedkai_admin' (legacy tenant_id='{first_tenant_id}')")
 
     await db.commit()
 
