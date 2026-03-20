@@ -1,6 +1,8 @@
 """
 Pedkai - AI-Native Telco Operating System
 
+Adding a comment to commit the file again.
+
 FastAPI application entry point.
 """
 
