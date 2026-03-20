@@ -176,10 +176,10 @@ export default function IncidentsPage() {
         </div>
         {/* ITIL Matrix legend */}
         <div className="text-xs bg-[#0a2d4a] border border-cyan-900/40 rounded-lg p-3 hidden lg:block">
-          <p className="font-semibold text-white/55 mb-1">
+          <p className="font-semibold text-white/70 mb-1">
             Priority = Impact × Urgency
           </p>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-0.5 font-mono text-white/55">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-0.5 font-mono text-white/70">
             <span></span>
             <span className="text-red-400">High</span>
             <span className="text-amber-400">Med</span>
@@ -216,7 +216,7 @@ export default function IncidentsPage() {
               "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
               filterStatus === key
                 ? "bg-cyan-500 text-gray-950 font-bold"
-                : "bg-[#0a2d4a] text-white/55 hover:text-white hover:bg-[#0d3b5e] border border-cyan-900/40",
+                : "bg-[#0a2d4a] text-white/70 hover:text-white hover:bg-[#0d3b5e] border border-cyan-900/40",
             )}
           >
             {label} <span className="ml-1 text-xs opacity-70">({count})</span>
@@ -241,9 +241,9 @@ export default function IncidentsPage() {
                   : "border-cyan-900/40 bg-[#0a2d4a] hover:bg-[#0d3b5e]",
               )}
             >
-              <p className="text-sm text-white/55">{meta.label}</p>
+              <p className="text-sm text-white/70">{meta.label}</p>
               <p className="text-2xl font-bold text-white">{count}</p>
-              <p className="text-[10px] text-white/55 mt-1">{meta.desc}</p>
+              <p className="text-[10px] text-white/70 mt-1">{meta.desc}</p>
             </button>
           );
         })}
@@ -265,26 +265,26 @@ export default function IncidentsPage() {
           <table className="w-full">
             <thead className="bg-[#06203b] border-b border-cyan-900/40">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider w-8"></th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider w-8"></th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">
                   Title
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">
                   Entity
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">
                   Priority
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">
                   Impact
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">
                   Urgency
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/55 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider">
                   Created
                 </th>
               </tr>
@@ -298,7 +298,7 @@ export default function IncidentsPage() {
                       onClick={() => setExpandedId(isExpanded ? null : inc.id)}
                       className="border-b border-cyan-900/20 hover:bg-white/5 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 text-white/55">
+                      <td className="px-4 py-3 text-white/70">
                         {isExpanded ? (
                           <ChevronUp className="w-4 h-4" />
                         ) : (
@@ -308,7 +308,7 @@ export default function IncidentsPage() {
                       <td className="px-4 py-3 text-sm text-white font-medium max-w-xs truncate">
                         {inc.title}
                       </td>
-                      <td className="px-4 py-3 text-sm text-white/55 font-mono text-xs">
+                      <td className="px-4 py-3 text-sm text-white/70 font-mono text-xs">
                         {inc.entity_external_id || inc.entity_id || "—"}
                       </td>
                       <td className="px-4 py-3">
@@ -377,7 +377,7 @@ export default function IncidentsPage() {
                                         key={idx}
                                         className="flex gap-3 text-sm"
                                       >
-                                        <span className="text-white/55 font-mono text-xs mt-0.5">
+                                        <span className="text-white/70 font-mono text-xs mt-0.5">
                                           {idx + 1}.
                                         </span>
                                         <span className="text-white">
@@ -392,7 +392,7 @@ export default function IncidentsPage() {
                                   )}
                                 </div>
                               ) : (
-                                <p className="text-white/55 text-sm italic">
+                                <p className="text-white/70 text-sm italic">
                                   No reasoning chain recorded
                                 </p>
                               )}
@@ -407,7 +407,7 @@ export default function IncidentsPage() {
                                 </h4>
                                 <div className="grid grid-cols-3 gap-3 text-sm">
                                   <div>
-                                    <p className="text-[10px] text-white/55 uppercase">
+                                    <p className="text-[10px] text-white/70 uppercase">
                                       Impact
                                     </p>
                                     <p
@@ -420,7 +420,7 @@ export default function IncidentsPage() {
                                     </p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] text-white/55 uppercase">
+                                    <p className="text-[10px] text-white/70 uppercase">
                                       Urgency
                                     </p>
                                     <p
@@ -433,7 +433,7 @@ export default function IncidentsPage() {
                                     </p>
                                   </div>
                                   <div>
-                                    <p className="text-[10px] text-white/55 uppercase">
+                                    <p className="text-[10px] text-white/70 uppercase">
                                       Priority
                                     </p>
                                     <p className="font-bold text-white">
@@ -463,7 +463,7 @@ export default function IncidentsPage() {
                                   </pre>
                                 </div>
                               )}
-                              <div className="text-xs text-white/55">
+                              <div className="text-xs text-white/70">
                                 ID: <span className="font-mono">{inc.id}</span>
                               </div>
                               <div>

@@ -143,7 +143,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
                         Ingestion & Reporting Control
                     </h2>
                     <p className="text-sm text-white/80 mt-1">
-                        Manage synthetic data ingestion from Telco2 dataset and generate Day 1 Divergence Reports.
+                        Manage data ingestion and generate Day 1 Divergence Reports.
                     </p>
                 </div>
                 <div className="flex space-x-3 mt-4 md:mt-0">

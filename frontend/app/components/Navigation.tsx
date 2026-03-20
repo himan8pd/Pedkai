@@ -85,7 +85,7 @@ export default function Navigation() {
             href="/dashboard"
             className="flex items-center space-x-2.5 hover:opacity-80 transition-opacity"
           >
-            <Image src="/logo.jpeg" alt="pedk.ai" width={32} height={32} className="rounded-lg" />
+            <Image src="/logo.jpeg" alt="pedk.ai" width={36} height={36} className="rounded-lg object-cover" />
             <span className="text-lg font-bold text-white tracking-tight">pedk.ai</span>
           </Link>
 

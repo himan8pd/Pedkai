@@ -151,7 +151,7 @@ function CopyButton({ text }: { text: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      className="inline-flex items-center text-white/40 hover:text-white/80 transition-colors"
+      className="inline-flex items-center text-white/60 hover:text-white/80 transition-colors"
       title="Copy to clipboard"
     >
       {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
@@ -189,7 +189,7 @@ function HBar({
             </div>
             <span className="w-24 text-white text-xs text-right tabular-nums">
               {item.value.toLocaleString()}{" "}
-              <span className="text-white/50">({pct}%)</span>
+              <span className="text-white/70">({pct}%)</span>
             </span>
           </button>
         );
@@ -255,7 +255,7 @@ function DonutChart({
       </svg>
       <div className="text-center -mt-[104px] mb-[60px]">
         <div className="text-xl font-bold text-white">{total.toLocaleString()}</div>
-        <div className="text-[10px] text-white/50 uppercase tracking-wider">{label}</div>
+        <div className="text-[10px] text-white/70 uppercase tracking-wider">{label}</div>
       </div>
     </div>
   );
@@ -292,7 +292,7 @@ function ScoreBadge({ label, value }: { label: string; value: number | null }) {
   return (
     <div className={`flex flex-col items-center rounded-xl border px-5 py-3 ${colour}`}>
       <span className="text-2xl font-bold">{pct}%</span>
-      <span className="text-xs opacity-75 mt-0.5">{label}</span>
+      <span className="text-xs text-white/80 mt-0.5">{label}</span>
     </div>
   );
 }
@@ -757,7 +757,7 @@ export default function DivergencePage() {
                             style={{ backgroundColor: TYPE_META[t].hex }}
                           />
                           <span className="text-white/80">{TYPE_META[t].label}</span>
-                          <span className="text-white/50">
+                          <span className="text-white/70">
                             {(byType[t] ?? 0).toLocaleString()}
                           </span>
                         </button>
@@ -787,7 +787,7 @@ export default function DivergencePage() {
                           <span className={`text-2xl font-bold ${meta.colour}`}>
                             {count.toLocaleString()}
                           </span>
-                          <span className="text-xs text-white/50">
+                          <span className="text-xs text-white/70">
                             {pct}% of total -- {meta.desc}
                           </span>
                         </button>
@@ -810,10 +810,10 @@ export default function DivergencePage() {
                         ["CMDB edges", inv.cmdb_edge_count, "Declared topology"],
                         ["Observed edges", inv.observed_edge_count, "Neighbour relations"],
                       ] as [string, number, string][]).map(([lbl, val, sub]) => (
-                        <div key={lbl} className="bg-white/5 rounded-lg p-3">
-                          <div className="text-white/60 text-xs">{lbl}</div>
+                        <div key={lbl} className="bg-white/8 rounded-lg p-3">
+                          <div className="text-white/80 text-xs">{lbl}</div>
                           <div className="text-white font-bold mt-0.5">{val?.toLocaleString()}</div>
-                          <div className="text-white/60 text-xs">{sub}</div>
+                          <div className="text-white/70 text-xs">{sub}</div>
                         </div>
                       ))}
                     </div>
@@ -846,7 +846,7 @@ export default function DivergencePage() {
                       <h2 className="font-semibold text-white text-sm">
                         Key Divergences
                       </h2>
-                      <span className="text-xs text-white/50 ml-1">
+                      <span className="text-xs text-white/70 ml-1">
                         Highest confidence findings
                       </span>
                     </div>
@@ -894,7 +894,7 @@ export default function DivergencePage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="text-white/50 text-left border-b border-cyan-900/40">
+                          <tr className="text-white/70 text-left border-b border-cyan-900/40">
                             <th className="pb-2 pr-3">Entity</th>
                             <th className="pb-2 pr-3">Type</th>
                             <th className="pb-2 pr-3">Domain</th>
@@ -957,7 +957,7 @@ export default function DivergencePage() {
                           <span className={`text-sm font-medium ${meta.colour}`}>
                             {meta.label}
                           </span>
-                          <span className="text-xs text-white/50">
+                          <span className="text-xs text-white/70">
                             {(byType[t] ?? 0).toLocaleString()}
                           </span>
                         </div>
@@ -1042,7 +1042,7 @@ export default function DivergencePage() {
                               {bucket}
                             </div>
                             <div className="text-2xl font-bold mt-1">{total.toLocaleString()}</div>
-                            <div className="text-xs opacity-60 mt-0.5">{label} confidence</div>
+                            <div className="text-xs text-white/80 mt-0.5">{label} confidence</div>
                           </div>
                         );
                       })}
@@ -1098,7 +1098,7 @@ export default function DivergencePage() {
                           setFilterTargetType("");
                           setPage(1);
                         }}
-                        className="text-xs text-white/50 hover:text-white/80 underline"
+                        className="text-xs text-white/70 hover:text-white/80 underline"
                       >
                         Clear all
                       </button>
@@ -1213,7 +1213,7 @@ export default function DivergencePage() {
                                 isExpanded ? "bg-white/[0.06]" : "hover:bg-white/[0.03]"
                               }`}
                             >
-                              <td className="px-2 py-2 text-center text-white/40">
+                              <td className="px-2 py-2 text-center text-white/60">
                                 {isExpanded ? (
                                   <ChevronDown className="w-3.5 h-3.5" />
                                 ) : (
@@ -1257,7 +1257,7 @@ export default function DivergencePage() {
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                                     {/* Left column: description + identifiers */}
                                     <div className="space-y-2">
-                                      <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                      <h4 className="text-white/70 uppercase tracking-wider text-[10px] font-semibold">
                                         Description
                                       </h4>
                                       <p className="text-white/80 leading-relaxed whitespace-pre-wrap">
@@ -1268,7 +1268,7 @@ export default function DivergencePage() {
                                           <>
                                             {r.entity_external_id && (
                                               <div>
-                                                <span className="text-white/40">External ID: </span>
+                                                <span className="text-white/60">External ID: </span>
                                                 <span className="font-mono text-white/70">
                                                   {r.entity_external_id}
                                                 </span>
@@ -1278,7 +1278,7 @@ export default function DivergencePage() {
                                           </>
                                         ) : (
                                           <div>
-                                            <span className="text-white/40">Signal ID: </span>
+                                            <span className="text-white/60">Signal ID: </span>
                                             <span className="font-mono text-white/70">
                                               {r.target_id}
                                             </span>
@@ -1293,7 +1293,7 @@ export default function DivergencePage() {
                                       {/* Attribute mismatch (for dark_attribute / identity_mutation) */}
                                       {r.attribute_name && (
                                         <div>
-                                          <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold mb-1">
+                                          <h4 className="text-white/70 uppercase tracking-wider text-[10px] font-semibold mb-1">
                                             Attribute Mismatch
                                           </h4>
                                           <div className="bg-white/5 rounded-lg p-3 font-mono">
@@ -1302,13 +1302,13 @@ export default function DivergencePage() {
                                             </span>
                                             <div className="mt-1 space-y-0.5">
                                               <div>
-                                                <span className="text-white/40">CMDB: </span>
+                                                <span className="text-white/60">CMDB: </span>
                                                 <span className="text-red-400 line-through">
                                                   {r.cmdb_value}
                                                 </span>
                                               </div>
                                               <div>
-                                                <span className="text-white/40">Signal: </span>
+                                                <span className="text-white/60">Signal: </span>
                                                 <span className="text-green-400">
                                                   {r.observed_value}
                                                 </span>
@@ -1320,7 +1320,7 @@ export default function DivergencePage() {
 
                                       {/* Evidence panel — loaded from API */}
                                       {loadingEvidence === r.result_id && (
-                                        <div className="text-white/40 animate-pulse py-2">
+                                        <div className="text-white/60 animate-pulse py-2">
                                           Loading evidence...
                                         </div>
                                       )}
@@ -1331,30 +1331,30 @@ export default function DivergencePage() {
                                         if (r.divergence_type === "dark_attribute" && ev.cmdb && ev.telemetry) {
                                           return (
                                             <div className="space-y-2">
-                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                              <h4 className="text-white/70 uppercase tracking-wider text-[10px] font-semibold">
                                                 Source Evidence
                                               </h4>
                                               <div className="grid grid-cols-2 gap-2">
                                                 <div className="bg-white/5 rounded-lg p-3">
-                                                  <div className="text-white/40 text-[10px] uppercase mb-1">CMDB Record</div>
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">CMDB Record</div>
                                                   <div className="space-y-0.5">
-                                                    {ev.cmdb.entity_name && <div><span className="text-white/40">Name: </span><span className="text-white">{ev.cmdb.entity_name}</span></div>}
-                                                    {ev.cmdb.entity_type && <div><span className="text-white/40">Type: </span><span className="text-white font-mono">{ev.cmdb.entity_type}</span></div>}
-                                                    {ev.cmdb.vendor && <div><span className="text-white/40">Vendor: </span><span className="text-white">{ev.cmdb.vendor}</span></div>}
-                                                    {ev.cmdb.band && <div><span className="text-white/40">Band: </span><span className="text-white">{ev.cmdb.band}</span></div>}
-                                                    {ev.cmdb.configured_value && <div><span className="text-white/40">Configured {ev.cmdb.attribute}: </span><span className="text-red-400">{ev.cmdb.configured_value}</span></div>}
+                                                    {ev.cmdb.entity_name && <div><span className="text-white/60">Name: </span><span className="text-white">{ev.cmdb.entity_name}</span></div>}
+                                                    {ev.cmdb.entity_type && <div><span className="text-white/60">Type: </span><span className="text-white font-mono">{ev.cmdb.entity_type}</span></div>}
+                                                    {ev.cmdb.vendor && <div><span className="text-white/60">Vendor: </span><span className="text-white">{ev.cmdb.vendor}</span></div>}
+                                                    {ev.cmdb.band && <div><span className="text-white/60">Band: </span><span className="text-white">{ev.cmdb.band}</span></div>}
+                                                    {ev.cmdb.configured_value && <div><span className="text-white/60">Configured {ev.cmdb.attribute}: </span><span className="text-red-400">{ev.cmdb.configured_value}</span></div>}
                                                   </div>
                                                 </div>
                                                 <div className="bg-white/5 rounded-lg p-3">
-                                                  <div className="text-white/40 text-[10px] uppercase mb-1">Telemetry Evidence</div>
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">Telemetry Evidence</div>
                                                   <div className="space-y-0.5">
-                                                    <div><span className="text-white/40">Observed: </span><span className="text-green-400">{ev.telemetry.observed_value}</span></div>
-                                                    <div><span className="text-white/40">Samples: </span><span className="text-white">{ev.telemetry.total_samples?.toLocaleString()}</span></div>
+                                                    <div><span className="text-white/60">Observed: </span><span className="text-green-400">{ev.telemetry.observed_value}</span></div>
+                                                    <div><span className="text-white/60">Samples: </span><span className="text-white">{ev.telemetry.total_samples?.toLocaleString()}</span></div>
                                                     {ev.telemetry.samples?.[0]?.first_seen && (
-                                                      <div><span className="text-white/40">First seen: </span><span className="text-white/70">{ev.telemetry.samples[0].first_seen?.split("T")[0]}</span></div>
+                                                      <div><span className="text-white/60">First seen: </span><span className="text-white/70">{ev.telemetry.samples[0].first_seen?.split("T")[0]}</span></div>
                                                     )}
                                                     {ev.telemetry.samples?.[0]?.last_seen && (
-                                                      <div><span className="text-white/40">Last seen: </span><span className="text-white/70">{ev.telemetry.samples[0].last_seen?.split("T")[0]}</span></div>
+                                                      <div><span className="text-white/60">Last seen: </span><span className="text-white/70">{ev.telemetry.samples[0].last_seen?.split("T")[0]}</span></div>
                                                     )}
                                                   </div>
                                                 </div>
@@ -1368,18 +1368,18 @@ export default function DivergencePage() {
                                           const nr = ev.neighbour_relation;
                                           return (
                                             <div className="space-y-2">
-                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                              <h4 className="text-white/70 uppercase tracking-wider text-[10px] font-semibold">
                                                 Traffic Evidence
                                               </h4>
                                               <div className="bg-white/5 rounded-lg p-3 space-y-1">
-                                                <div><span className="text-white/40">From: </span><span className="text-white">{nr.from_cell}</span></div>
-                                                <div><span className="text-white/40">To: </span><span className="text-white">{nr.to_cell}</span></div>
-                                                {nr.neighbour_type && <div><span className="text-white/40">Type: </span><span className="text-white font-mono">{nr.neighbour_type}</span></div>}
-                                                {nr.handover_attempts != null && <div><span className="text-white/40">Handover attempts: </span><span className="text-white">{nr.handover_attempts?.toLocaleString()}</span></div>}
-                                                {nr.handover_success_rate != null && <div><span className="text-white/40">Success rate: </span><span className="text-white">{(nr.handover_success_rate * 100).toFixed(1)}%</span></div>}
+                                                <div><span className="text-white/60">From: </span><span className="text-white">{nr.from_cell}</span></div>
+                                                <div><span className="text-white/60">To: </span><span className="text-white">{nr.to_cell}</span></div>
+                                                {nr.neighbour_type && <div><span className="text-white/60">Type: </span><span className="text-white font-mono">{nr.neighbour_type}</span></div>}
+                                                {nr.handover_attempts != null && <div><span className="text-white/60">Handover attempts: </span><span className="text-white">{nr.handover_attempts?.toLocaleString()}</span></div>}
+                                                {nr.handover_success_rate != null && <div><span className="text-white/60">Success rate: </span><span className="text-white">{(nr.handover_success_rate * 100).toFixed(1)}%</span></div>}
                                               </div>
                                               <div className="bg-white/5 rounded-lg p-3">
-                                                <div className="text-white/40 text-[10px] uppercase mb-1">CMDB Status</div>
+                                                <div className="text-white/60 text-[10px] uppercase mb-1">CMDB Status</div>
                                                 <span className={ev.cmdb_edge_exists ? "text-amber-400" : "text-red-400"}>
                                                   {ev.cmdb_edge_exists ? "Edge exists in CMDB" : "No matching edge in CMDB topology"}
                                                 </span>
@@ -1393,23 +1393,23 @@ export default function DivergencePage() {
                                           const sc = ev.signal_check;
                                           return (
                                             <div className="space-y-2">
-                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                              <h4 className="text-white/70 uppercase tracking-wider text-[10px] font-semibold">
                                                 Signal Absence Proof
                                               </h4>
                                               <div className="bg-white/5 rounded-lg p-3 space-y-1">
-                                                <div><span className="text-white/40">KPI samples: </span><span className={sc.kpi_samples === 0 ? "text-red-400" : "text-green-400"}>{sc.kpi_samples}</span></div>
-                                                <div><span className="text-white/40">Alarm events: </span><span className={sc.alarm_events === 0 ? "text-red-400" : "text-green-400"}>{sc.alarm_events}</span></div>
-                                                <div><span className="text-white/40">Neighbour relations: </span><span className={sc.neighbour_relations === 0 ? "text-red-400" : "text-green-400"}>{sc.neighbour_relations}</span></div>
+                                                <div><span className="text-white/60">KPI samples: </span><span className={sc.kpi_samples === 0 ? "text-red-400" : "text-green-400"}>{sc.kpi_samples}</span></div>
+                                                <div><span className="text-white/60">Alarm events: </span><span className={sc.alarm_events === 0 ? "text-red-400" : "text-green-400"}>{sc.alarm_events}</span></div>
+                                                <div><span className="text-white/60">Neighbour relations: </span><span className={sc.neighbour_relations === 0 ? "text-red-400" : "text-green-400"}>{sc.neighbour_relations}</span></div>
                                                 <div className="pt-1 border-t border-white/10 mt-1">
-                                                  <span className="text-white/40">Detection: </span>
+                                                  <span className="text-white/60">Detection: </span>
                                                   <span className="text-white/70">{sc.detection_method} (entity name not used)</span>
                                                 </div>
                                               </div>
                                               {ev.cmdb && (
                                                 <div className="bg-white/5 rounded-lg p-3">
-                                                  <div className="text-white/40 text-[10px] uppercase mb-1">CMDB Record</div>
-                                                  {ev.cmdb.entity_name && <div><span className="text-white/40">Name: </span><span className="text-white">{ev.cmdb.entity_name}</span></div>}
-                                                  {ev.cmdb.entity_type && <div><span className="text-white/40">Type: </span><span className="text-white font-mono">{ev.cmdb.entity_type}</span></div>}
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">CMDB Record</div>
+                                                  {ev.cmdb.entity_name && <div><span className="text-white/60">Name: </span><span className="text-white">{ev.cmdb.entity_name}</span></div>}
+                                                  {ev.cmdb.entity_type && <div><span className="text-white/60">Type: </span><span className="text-white font-mono">{ev.cmdb.entity_type}</span></div>}
                                                 </div>
                                               )}
                                             </div>
@@ -1421,30 +1421,30 @@ export default function DivergencePage() {
                                           const ss = ev.signal_summary;
                                           return (
                                             <div className="space-y-2">
-                                              <h4 className="text-white/50 uppercase tracking-wider text-[10px] font-semibold">
+                                              <h4 className="text-white/70 uppercase tracking-wider text-[10px] font-semibold">
                                                 Signal Source
                                               </h4>
                                               {ss.kpi_profiles?.length > 0 && (
                                                 <div className="bg-white/5 rounded-lg p-3 space-y-1">
-                                                  <div className="text-white/40 text-[10px] uppercase mb-1">KPI Telemetry</div>
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">KPI Telemetry</div>
                                                   {ss.kpi_profiles.map((p: any, i: number) => (
                                                     <div key={i} className="flex gap-3 text-white/80">
                                                       {p.domain && <span>{p.domain}</span>}
-                                                      {p.vendor && <span className="text-white/40">{p.vendor}</span>}
-                                                      {p.rat_type && <span className="text-white/40">{p.rat_type}</span>}
-                                                      <span className="text-white/40 ml-auto">{p.sample_count?.toLocaleString()} samples</span>
+                                                      {p.vendor && <span className="text-white/60">{p.vendor}</span>}
+                                                      {p.rat_type && <span className="text-white/60">{p.rat_type}</span>}
+                                                      <span className="text-white/60 ml-auto">{p.sample_count?.toLocaleString()} samples</span>
                                                     </div>
                                                   ))}
                                                 </div>
                                               )}
                                               {ss.alarm_profiles?.length > 0 && (
                                                 <div className="bg-white/5 rounded-lg p-3 space-y-1">
-                                                  <div className="text-white/40 text-[10px] uppercase mb-1">Alarms</div>
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">Alarms</div>
                                                   {ss.alarm_profiles.map((p: any, i: number) => (
                                                     <div key={i} className="flex gap-3 text-white/80">
                                                       {p.domain && <span>{p.domain}</span>}
-                                                      <span className="text-white/40">{p.severity}</span>
-                                                      <span className="text-white/40 ml-auto">{p.count} events</span>
+                                                      <span className="text-white/60">{p.severity}</span>
+                                                      <span className="text-white/60 ml-auto">{p.count} events</span>
                                                     </div>
                                                   ))}
                                                 </div>
@@ -1497,7 +1497,7 @@ export default function DivergencePage() {
                   <div className="p-4 border-t border-cyan-900/40 flex items-center justify-between text-xs text-white/80">
                     <span className="tabular-nums">
                       Page {page} of {Math.ceil(totalRecords / PAGE_SIZE).toLocaleString()}
-                      <span className="text-white/50 ml-2">
+                      <span className="text-white/70 ml-2">
                         ({((page - 1) * PAGE_SIZE + 1).toLocaleString()} - {Math.min(page * PAGE_SIZE, totalRecords).toLocaleString()} of {totalRecords.toLocaleString()})
                       </span>
                     </span>
