@@ -20,6 +20,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    # Ensure pgvector extension exists (required for the embedding column).
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     # Create decision_traces if it doesn't exist (was created outside Alembic on legacy DBs).
     # All subsequent migrations (004, 005, 007, 008) add columns on top of this base schema.
     op.execute("""

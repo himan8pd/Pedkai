@@ -20,7 +20,7 @@ class ReconciliationResultORM(Base):
     __tablename__ = "reconciliation_results"
 
     result_id = Column(String, primary_key=True)          # SHA256 hash of (tenant+type+target)
-    tenant_id = Column(String, nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
     run_id = Column(String, nullable=False, index=True)   # Groups results per run
 
     # Divergence classification
@@ -53,7 +53,7 @@ class ReconciliationRunORM(Base):
     __tablename__ = "reconciliation_runs"
 
     run_id = Column(String, primary_key=True)
-    tenant_id = Column(String, nullable=False, index=True)
+    tenant_id = Column(String(100), nullable=False, index=True)
     triggered_by = Column(String, default="manual")       # 'manual' | 'scheduled'
     status = Column(String, default="running")            # 'running' | 'complete' | 'error'
 

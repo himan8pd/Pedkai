@@ -415,7 +415,7 @@ class CmdbExportLogORM(Base):
     __tablename__ = "cmdb_export_log"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    tenant_id = Column(String(100), nullable=False)
+    tenant_id = Column(String(100), nullable=False, index=True)
     relationship_id = Column(UUID(as_uuid=True), nullable=True)
     entity_id = Column(UUID(as_uuid=True), nullable=True)
     export_type = Column(String(30), nullable=False)
