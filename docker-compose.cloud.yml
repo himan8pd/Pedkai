@@ -35,8 +35,8 @@ services:
     container_name: pedkai-frontend
     volumes:
       - frontend_static:/srv/frontend
-    # This container exits after build — it just holds the static files
-    command: ["sh", "-c", "cp -r /srv/frontend/* /srv/frontend/ 2>/dev/null; echo 'Frontend files ready'; sleep infinity"]
+    # Copy fresh build output to volume on every start, then idle
+    command: ["sh", "-c", "rm -rf /srv/frontend/* && cp -r /build-output/* /srv/frontend/ && echo 'Frontend files ready' && sleep infinity"]
     restart: unless-stopped
 
   # Kafka (KRaft mode — no Zookeeper)

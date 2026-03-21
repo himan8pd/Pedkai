@@ -1,0 +1,181 @@
+Frontend Guidance: Using the Updated Pedkai Data Model
+
+You’re currently working with legacy logic that no longer matches the backend. The backend data model has evolved significantly, so the frontend must align with the current database structure and tenant rules.
+
+1. Data Sources You Should Use
+	•	The tenant list must be fetched directly from the main tenants table in the Pedkai database.
+	•	Do not rely on older joins or derived sources that were used in legacy code.
+
+2. Database Structure (High Level)
+There are two databases:
+	•	Pedkai DB
+	•	Main operational data
+	•	Supports UUIDs and vector extensions
+	•	Pedkai Metrics DB
+	•	Used only for analytics and metrics
+	•	Not a source for operational UI data
+
+Your UI should only pull operational data from the Pedkai DB.
+
+3. User Roles and Access Model
+The system is tenant-isolated, which means each customer organization (tenant) operates in its own secure data space.
+	•	Global User
+	•	pedkai_admin is the only system-wide (global) user.
+	•	Tenant Admins
+	•	Each tenant has its own admin account:
+
+<tenant_id>_admin
+
+
+	•	This admin manages only users within their tenant.
+
+	•	Tenant Users
+	•	Roles like Operator, Shift Lead, etc., exist only within a tenant.
+	•	They must never be treated as global users.
+
+4. Critical Rule: Tenant Isolation
+All data must be scoped to a tenant.
+
+This prevents:
+	•	Users from one tenant seeing another tenant’s data
+	•	Cross-tenant joins pulling incorrect customer or BSS accounts
+
+Every relevant table must enforce tenant separation.
+
+Frontend implication:
+Always ensure queries, filters, and API calls include the tenant context. Never assume shared/global datasets.
+
+5. Multi-Tenant Individuals (Important UX Detail)
+The same person or legal entity may appear under multiple tenants.
+
+However:
+	•	These must be treated as completely separate accounts
+	•	Do not merge, compare, or cross-reference them
+	•	Their shared identity is coincidental from the platform’s perspective
+
+Why:
+Their relationship is with individual tenant companies, and those companies expect strict separation of customer records.
+
+Frontend implication:
+Never design UI that:
+	•	Suggests linked profiles across tenants
+	•	Auto-merges accounts
+	•	Flags duplicate identities across tenants
+
+If two accounts share the same email/name but belong to different tenants, treat them as unrelated users.
+
+⸻
+
+Summary for Implementation
+
+When building UI and data flows:
+	1.	Pull tenants from the tenants table
+	2.	Scope all data by tenant ID
+	3.	Treat users as tenant-local, not global
+	4.	Do not perform cross-tenant joins
+	5.	Do not merge identities across tenants
+	6.	Only pedkai_admin operates globally
+
+
+Database schema for Pedkai application for your information:
+
+DB - pedkai:
+
+pedkai=# \dt
+                     List of relations
+ Schema |               Name               | Type  | Owner  
+--------+----------------------------------+-------+--------
+ public | abeyance_fragment                | table | pedkai
+ public | accumulation_edge                | table | pedkai
+ public | action_executions                | table | pedkai
+ public | alembic_version                  | table | pedkai
+ public | bridge_discovery                 | table | pedkai
+ public | bridge_discovery_provenance      | table | pedkai
+ public | bss_billing_accounts             | table | pedkai
+ public | bss_service_plans                | table | pedkai
+ public | calibration_history              | table | pedkai
+ public | causal_analysis_run              | table | pedkai
+ public | causal_candidate                 | table | pedkai
+ public | causal_evidence_pair             | table | pedkai
+ public | cluster_snapshot                 | table | pedkai
+ public | cmdb_export_log                  | table | pedkai
+ public | compression_discovery_event      | table | pedkai
+ public | conflict_detection_log           | table | pedkai
+ public | conflict_record                  | table | pedkai
+ public | counterfactual_candidate_queue   | table | pedkai
+ public | counterfactual_job_run           | table | pedkai
+ public | counterfactual_pair_delta        | table | pedkai
+ public | counterfactual_simulation_result | table | pedkai
+ public | customers                        | table | pedkai
+ public | decision_feedback                | table | pedkai
+ public | decision_traces                  | table | pedkai
+ public | densification_requests           | table | pedkai
+ public | disconfirmation_events           | table | pedkai
+ public | disconfirmation_fragments        | table | pedkai
+ public | disconfirmation_patterns         | table | pedkai
+ public | discovery_ledger                 | table | pedkai
+ public | entity_relationships             | table | pedkai
+ public | entity_sequence_log              | table | pedkai
+ public | evolution_generation_log         | table | pedkai
+ public | evolution_partition_state        | table | pedkai
+ public | expectation_violation            | table | pedkai
+ public | exploration_directive            | table | pedkai
+ public | fragment_entity_ref              | table | pedkai
+ public | fragment_history                 | table | pedkai
+ public | hypothesis                       | table | pedkai
+ public | hypothesis_evidence              | table | pedkai
+ public | hypothesis_generation_queue      | table | pedkai
+ public | ignorance_extraction_stat        | table | pedkai
+ public | ignorance_job_run                | table | pedkai
+ public | ignorance_map_entry              | table | pedkai
+ public | ignorance_mask_distribution      | table | pedkai
+ public | ignorance_silent_decay_record    | table | pedkai
+ public | ignorance_silent_decay_stat      | table | pedkai
+ public | incident_audit_entries           | table | pedkai
+ public | incidents                        | table | pedkai
+ public | investment_plans                 | table | pedkai
+ public | kpi_dataset_registry             | table | pedkai
+ public | kpi_samples                      | table | pedkai
+ public | maintenance_job_history          | table | pedkai
+ public | meta_memory_area                 | table | pedkai
+ public | meta_memory_bias                 | table | pedkai
+ public | meta_memory_job_run              | table | pedkai
+ public | meta_memory_productivity         | table | pedkai
+ public | meta_memory_tenant_state         | table | pedkai
+ public | meta_memory_topological_region   | table | pedkai
+ public | neighbour_relations              | table | pedkai
+ public | network_entities                 | table | pedkai
+ public | pattern_individual               | table | pedkai
+ public | pattern_individual_archive       | table | pedkai
+ public | policies                         | table | pedkai
+ public | policy_evaluations               | table | pedkai
+ public | policy_versions                  | table | pedkai
+ public | proactive_care_records           | table | pedkai
+ public | reconciliation_results           | table | pedkai
+ public | reconciliation_runs              | table | pedkai
+ public | shadow_entity                    | table | pedkai
+ public | shadow_relationship              | table | pedkai
+ public | snap_decision_record             | table | pedkai
+ public | snap_outcome_feedback            | table | pedkai
+ public | surprise_distribution_state      | table | pedkai
+ public | surprise_event                   | table | pedkai
+ public | telco_events_alarms              | table | pedkai
+ public | tenants                          | table | pedkai
+ public | topology_relationships           | table | pedkai
+ public | transition_matrix                | table | pedkai
+ public | transition_matrix_version        | table | pedkai
+ public | user_tenant_access               | table | pedkai
+ public | users                            | table | pedkai
+ public | value_event                      | table | pedkai
+ public | vendor_naming_map                | table | pedkai
+ public | weight_profile_active            | table | pedkai
+(84 rows)
+
+DB - pedkai_metrics
+
+pedkai_metrics=# \dt
+           List of relations
+ Schema |    Name     | Type  | Owner  
+--------+-------------+-------+--------
+ public | kpi_metrics | table | pedkai
+(1 row)

@@ -11,4 +11,5 @@ RUN npm run build
 
 # Minimal image to hold the static files (copied out via Docker volume)
 FROM alpine:3.19
-COPY --from=builder /app/out /srv/frontend
+# Stage to /build-output so the volume mount at /srv/frontend doesn't shadow new files
+COPY --from=builder /app/out /build-output

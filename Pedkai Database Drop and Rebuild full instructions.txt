@@ -1,0 +1,123 @@
+DROP DATABASE IF EXISTS pedkai;
+DROP DATABASE IF EXISTS pedkai_metrics;
+
+CREATE DATABASE pedkai;
+CREATE DATABASE pedkai_metrics;
+GRANT ALL ON SCHEMA public TO pedkai; 
+GRANT ALL ON DATABASE pedkai TO pedkai;
+
+\c pedkai;
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+GRANT ALL ON SCHEMA public TO pedkai; 
+GRANT ALL ON DATABASE pedkai TO pedkai;
+ALTER SCHEMA public OWNER TO pedkai;
+
+
+\c pedkai_metrics;
+GRANT ALL ON SCHEMA public TO pedkai; 
+GRANT ALL ON DATABASE pedkai_metrics TO pedkai;
+ALTER SCHEMA public OWNER TO pedkai;
+
+# VM 1 — init all tables from ORM (correct for fresh DB)
+docker exec pedkai-backend python -m backend.app.core.init_db
+
+# Mark Alembic as current — no migrations need to run
+docker exec -w /app/backend pedkai-backend alembic stamp head
+
+# Verify
+docker exec -w /app/backend pedkai-backend alembic current
+
+# Transfer Parquet files to VM1 if not already there
+# Then:
+docker exec pedkai-backend python -m backend.scripts.load_telco2_tenant --tenant-id telco2
+
+/home/ubuntu/Pedkai-data/output
+
+/home/ubuntu/Pedkai-data/output
+
+scripts/cloud/load-six-telecom-cloud.sh
+
+bash scripts/cloud/load-six-telecom-cloud.sh \
+/home/ubuntu/Pedkai-data/output \
+--tenant-id "six_telecom" \
+--tenant-name "Six Telecom" \
+--dry-run
+
+CREATE TABLE IF NOT EXISTS neighbour_relations (
+    relation_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    from_cell_id TEXT NOT NULL,
+    from_cell_rat TEXT,
+    from_cell_band TEXT,
+    to_cell_id TEXT NOT NULL,
+    to_cell_rat TEXT,
+    to_cell_band TEXT,
+    neighbour_type TEXT,
+    is_intra_site BOOLEAN,
+    distance_m DOUBLE PRECISION,
+    handover_attempts DOUBLE PRECISION,
+    handover_success_rate DOUBLE PRECISION,
+    cio_offset_db DOUBLE PRECISION,
+    no_remove_flag BOOLEAN,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_nbr_tenant ON neighbour_relations(tenant_id);
+CREATE INDEX IF NOT EXISTS ix_nbr_from ON neighbour_relations(from_cell_id);
+CREATE INDEX IF NOT EXISTS ix_nbr_to ON neighbour_relations(to_cell_id);
+
+CREATE TABLE IF NOT EXISTS telco_events_alarms (
+    alarm_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    entity_type TEXT,
+    alarm_type TEXT NOT NULL,
+    severity TEXT,
+    raised_at TIMESTAMPTZ,
+    cleared_at TIMESTAMPTZ,
+    source_system TEXT,
+    probable_cause TEXT,
+    domain TEXT,
+    scenario_id TEXT,
+    is_synthetic_scenario BOOLEAN DEFAULT false,
+    additional_text TEXT,
+    correlation_group_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_tea_tenant ON telco_events_alarms(tenant_id);
+CREATE INDEX IF NOT EXISTS ix_tea_entity ON telco_events_alarms(entity_id);
+CREATE INDEX IF NOT EXISTS ix_tea_type ON telco_events_alarms(alarm_type);
+CREATE INDEX IF NOT EXISTS ix_tea_raised ON telco_events_alarms(raised_at);
+CREATE INDEX IF NOT EXISTS ix_tea_scenario ON telco_events_alarms(scenario_id);
+CREATE INDEX IF NOT EXISTS ix_tea_corr ON telco_events_alarms(correlation_group_id);
+
+CREATE TABLE IF NOT EXISTS vendor_naming_map (
+    mapping_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    internal_name TEXT,
+    domain TEXT,
+    vendor TEXT,
+    vendor_counter_name TEXT,
+    vendor_system TEXT,
+    unit TEXT,
+    description TEXT,
+    counter_family TEXT,
+    three_gpp_ref TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_vnm_tenant ON vendor_naming_map(tenant_id);
+
+CREATE TABLE IF NOT EXISTS kpi_dataset_registry (
+    dataset_name TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    total_rows BIGINT,
+    total_columns INT,
+    file_size_bytes BIGINT,
+    schema_json JSONB,
+    registered_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (dataset_name, tenant_id)
+);
+
+
+PedkaiAdmin2026!

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd frontend && NEXT_PUBLIC_API_BASE_URL=https://pedk.ai npx next dev -p 3001"],
+      "port": 3001
+    }
+  ]
+}
