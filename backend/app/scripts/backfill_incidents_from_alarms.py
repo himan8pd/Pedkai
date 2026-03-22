@@ -49,7 +49,7 @@ import psycopg2.extras
 # Configuration
 # ---------------------------------------------------------------------------
 
-TENANT_ID = "pedkai_telco2_01"
+TENANT_ID = "pedkai_telco2_01"  # default; overridden by --tenant-id CLI arg
 
 import os
 
@@ -610,7 +610,17 @@ def main():
         default=DEFAULT_BATCH_SIZE,
         help=f"Commit batch size (default: {DEFAULT_BATCH_SIZE})",
     )
+    parser.add_argument(
+        "--tenant-id",
+        type=str,
+        default=None,
+        help=f"Tenant ID to backfill (default: {TENANT_ID})",
+    )
     args = parser.parse_args()
+
+    global TENANT_ID
+    if args.tenant_id:
+        TENANT_ID = args.tenant_id
 
     log.info("=" * 70)
     log.info("Historic Backfill: telco_events_alarms → incidents + decision_traces")
