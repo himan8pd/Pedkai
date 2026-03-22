@@ -591,6 +591,8 @@ def delete_existing(conn) -> Tuple[int, int]:
 
 
 def main():
+    global TENANT_ID
+
     parser = argparse.ArgumentParser(
         description="Backfill incidents and decision traces from telco_events_alarms"
     )
@@ -618,7 +620,6 @@ def main():
     )
     args = parser.parse_args()
 
-    global TENANT_ID
     if args.tenant_id:
         TENANT_ID = args.tenant_id
 
