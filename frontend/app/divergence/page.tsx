@@ -26,6 +26,11 @@ import {
   TrendingUp,
   X,
   ChevronLeft,
+  Brain,
+  Cpu,
+  Network,
+  Wrench,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -364,6 +369,10 @@ export default function DivergencePage() {
   const [evidence, setEvidence] = useState<Record<string, any>>({});
   const [loadingEvidence, setLoadingEvidence] = useState<string | null>(null);
 
+  // Enriched profile state (intelligence/inference)
+  const [enrichedProfiles, setEnrichedProfiles] = useState<Record<string, any>>({});
+  const [loadingEnriched, setLoadingEnriched] = useState<string | null>(null);
+
   // Loading state
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -394,6 +403,27 @@ export default function DivergencePage() {
       }
     },
     [token, evidence],
+  );
+
+  // ── Fetch enriched profile (intelligence/inference) ──────────────────
+  const fetchEnrichedProfile = useCallback(
+    async (resultId: string) => {
+      if (!token || enrichedProfiles[resultId]) return;
+      setLoadingEnriched(resultId);
+      try {
+        const data = await apiFetch(
+          `/api/v1/reports/divergence/enriched-profile/${encodeURIComponent(resultId)}`,
+          token,
+        );
+        setEnrichedProfiles((prev) => ({ ...prev, [resultId]: data }));
+      } catch (e) {
+        console.error("Enriched profile fetch failed:", e);
+        setEnrichedProfiles((prev) => ({ ...prev, [resultId]: { error: true } }));
+      } finally {
+        setLoadingEnriched(null);
+      }
+    },
+    [token, enrichedProfiles],
   );
 
   // ── Fetch summary ──────────────────────────────────────────────────────
@@ -1454,6 +1484,246 @@ export default function DivergencePage() {
                                         }
 
                                         return null;
+                                      })()}
+
+                                      {/* Intelligence / Enriched Profile Panel */}
+                                      {!enrichedProfiles[r.result_id] && loadingEnriched !== r.result_id && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            fetchEnrichedProfile(r.result_id);
+                                          }}
+                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 text-xs font-medium hover:bg-violet-500/25 transition-colors border border-violet-500/30"
+                                        >
+                                          <Sparkles className="w-3.5 h-3.5" />
+                                          Analyse with AI Inference
+                                        </button>
+                                      )}
+                                      {loadingEnriched === r.result_id && (
+                                        <div className="text-violet-300/70 animate-pulse py-2 text-xs flex items-center gap-2">
+                                          <Brain className="w-4 h-4 animate-pulse" />
+                                          Running inference engine...
+                                        </div>
+                                      )}
+                                      {enrichedProfiles[r.result_id] && !enrichedProfiles[r.result_id].error && (() => {
+                                        const ep = enrichedProfiles[r.result_id];
+                                        const enr = ep.enrichment;
+                                        if (!enr) return null;
+
+                                        return (
+                                          <div className="space-y-3 border-t border-violet-500/20 pt-3 mt-2">
+                                            <h4 className="text-violet-300 uppercase tracking-wider text-[10px] font-semibold flex items-center gap-1.5">
+                                              <Brain className="w-3.5 h-3.5" />
+                                              AI Inference
+                                            </h4>
+
+                                            {/* Dark Node enrichment */}
+                                            {r.divergence_type === "dark_node" && (
+                                              <div className="space-y-3">
+                                                {/* Classification */}
+                                                <div className="grid grid-cols-2 gap-2">
+                                                  <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-3">
+                                                    <div className="flex items-center gap-1.5 text-white/60 text-[10px] uppercase mb-1.5">
+                                                      <Cpu className="w-3 h-3" /> Inferred Type
+                                                    </div>
+                                                    <div className="text-white font-semibold text-sm">{enr.inferred_device_type}</div>
+                                                    <div className="mt-1">
+                                                      <ConfBadge value={enr.device_type_confidence} />
+                                                    </div>
+                                                  </div>
+                                                  <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-3">
+                                                    <div className="flex items-center gap-1.5 text-white/60 text-[10px] uppercase mb-1.5">
+                                                      <Network className="w-3 h-3" /> Inferred Role
+                                                    </div>
+                                                    <div className="text-white font-semibold text-sm">{enr.inferred_role}</div>
+                                                    {enr.domain && <div className="text-white/60 text-xs mt-1">{enr.domain}</div>}
+                                                  </div>
+                                                </div>
+
+                                                {/* Metadata hints */}
+                                                <div className="flex flex-wrap gap-2">
+                                                  {enr.vendor_hint && (
+                                                    <span className="px-2 py-0.5 bg-white/5 rounded text-white/70 text-xs">Vendor: {enr.vendor_hint}</span>
+                                                  )}
+                                                  {enr.rat_type && (
+                                                    <span className="px-2 py-0.5 bg-white/5 rounded text-white/70 text-xs">RAT: {enr.rat_type}</span>
+                                                  )}
+                                                  {enr.band && (
+                                                    <span className="px-2 py-0.5 bg-white/5 rounded text-white/70 text-xs">Band: {enr.band}</span>
+                                                  )}
+                                                  {enr.site_association && (
+                                                    <span className="px-2 py-0.5 bg-white/5 rounded text-white/70 text-xs">Site: {enr.site_association}</span>
+                                                  )}
+                                                </div>
+
+                                                {/* Observation window */}
+                                                {enr.observation_window && (
+                                                  <div className="bg-white/5 rounded-lg p-3 text-xs space-y-0.5">
+                                                    <div className="text-white/60 text-[10px] uppercase mb-1">Observation Window</div>
+                                                    <div><span className="text-white/60">First seen: </span><span className="text-white/80">{enr.observation_window.first_seen?.split("T")[0] || "N/A"}</span></div>
+                                                    <div><span className="text-white/60">Last seen: </span><span className="text-white/80">{enr.observation_window.last_seen?.split("T")[0] || "N/A"}</span></div>
+                                                    <div><span className="text-white/60">Total samples: </span><span className="text-white">{enr.observation_window.total_samples?.toLocaleString()}</span></div>
+                                                    <div><span className="text-white/60">Distinct KPIs: </span><span className="text-white">{enr.observation_window.distinct_kpis}</span></div>
+                                                  </div>
+                                                )}
+
+                                                {/* Topology context */}
+                                                {enr.topology_context?.neighbour_count > 0 && (
+                                                  <div className="bg-white/5 rounded-lg p-3 text-xs space-y-1">
+                                                    <div className="text-white/60 text-[10px] uppercase mb-1">
+                                                      Topology Context ({enr.topology_context.neighbour_count} neighbours)
+                                                    </div>
+                                                    {enr.topology_context.neighbours.slice(0, 5).map((n: any, i: number) => (
+                                                      <div key={i} className="flex gap-3 text-white/80">
+                                                        <span className="font-mono">{n.peer_id}</span>
+                                                        {n.neighbour_type && <span className="text-white/60">{n.neighbour_type}</span>}
+                                                        {n.handover_attempts != null && <span className="text-white/60 ml-auto">{n.handover_attempts} HOs</span>}
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )}
+
+                                                {/* Reasoning chain */}
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase">Reasoning</div>
+                                                  {[...(enr.device_type_reasoning || []), ...(enr.role_reasoning || [])].map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-violet-400 shrink-0">--</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Phantom Node enrichment */}
+                                            {r.divergence_type === "phantom_node" && (
+                                              <div className="space-y-3">
+                                                <div className="bg-white/5 rounded-lg p-3 text-xs space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">Signal Absence Analysis</div>
+                                                  {enr.signals_checked?.map((s: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-white/70">
+                                                      <X className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
+                                                      <span>No activity in <span className="font-mono text-white/80">{s}</span></span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase">Reasoning</div>
+                                                  {enr.reasoning?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-violet-400 shrink-0">--</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase flex items-center gap-1"><Wrench className="w-3 h-3" /> Remediation</div>
+                                                  {enr.remediation_options?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-cyan-400 shrink-0">{i + 1}.</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Dark Edge enrichment */}
+                                            {r.divergence_type === "dark_edge" && (
+                                              <div className="space-y-3">
+                                                <div className="bg-white/5 rounded-lg p-3 text-xs space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">Relationship Analysis</div>
+                                                  <div><span className="text-white/60">From: </span><span className="text-white">{enr.from_entity}</span></div>
+                                                  <div><span className="text-white/60">To: </span><span className="text-white">{enr.to_entity}</span></div>
+                                                  {enr.neighbour_type && <div><span className="text-white/60">Type: </span><span className="text-white font-mono">{enr.neighbour_type}</span></div>}
+                                                  {enr.handover_attempts != null && <div><span className="text-white/60">Handover attempts: </span><span className="text-white">{enr.handover_attempts?.toLocaleString()}</span></div>}
+                                                  {enr.handover_success_rate != null && <div><span className="text-white/60">Success rate: </span><span className="text-white">{(enr.handover_success_rate * 100).toFixed(1)}%</span></div>}
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase">Reasoning</div>
+                                                  {enr.reasoning?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-violet-400 shrink-0">--</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase flex items-center gap-1"><Wrench className="w-3 h-3" /> Remediation</div>
+                                                  {enr.remediation_options?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-cyan-400 shrink-0">{i + 1}.</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Dark Attribute enrichment */}
+                                            {r.divergence_type === "dark_attribute" && (
+                                              <div className="space-y-3">
+                                                <div className="bg-white/5 rounded-lg p-3 text-xs space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase mb-1">Attribute Discrepancy</div>
+                                                  <div><span className="text-white/60">Attribute: </span><span className="text-white font-mono">{enr.attribute}</span></div>
+                                                  <div><span className="text-white/60">CMDB value: </span><span className="text-red-400 line-through">{enr.cmdb_value}</span></div>
+                                                  <div><span className="text-white/60">Observed: </span><span className="text-green-400">{enr.observed_value}</span></div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase">Reasoning</div>
+                                                  {enr.reasoning?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-violet-400 shrink-0">--</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase flex items-center gap-1"><Wrench className="w-3 h-3" /> Remediation</div>
+                                                  {enr.remediation_options?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-cyan-400 shrink-0">{i + 1}.</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Phantom Edge / Identity Mutation enrichment */}
+                                            {(r.divergence_type === "phantom_edge" || r.divergence_type === "identity_mutation") && (
+                                              <div className="space-y-3">
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase">Reasoning</div>
+                                                  {enr.reasoning?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-violet-400 shrink-0">--</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <div className="text-white/60 text-[10px] uppercase flex items-center gap-1"><Wrench className="w-3 h-3" /> Remediation</div>
+                                                  {enr.remediation_options?.map((r: string, i: number) => (
+                                                    <div key={i} className="flex gap-2 text-xs text-white/70">
+                                                      <span className="text-cyan-400 shrink-0">{i + 1}.</span>
+                                                      <span>{r}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Confidence */}
+                                            {enr.confidence != null && (
+                                              <div className="flex items-center gap-2 pt-1">
+                                                <span className="text-white/60 text-[10px] uppercase">Confidence:</span>
+                                                <ConfBadge value={enr.confidence} />
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
                                       })()}
 
                                       {/* Topology link — for node-based types only */}

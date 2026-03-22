@@ -2,22 +2,23 @@
 
 import React, { useEffect, useState } from 'react'
 import { TrendingUp, AlertCircle, DollarSign, Zap, Info } from 'lucide-react'
+import { useAuth } from '@/app/context/AuthContext'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
 
 export default function ROIDashboardPage() {
+  const { token } = useAuth()
   const [roiData, setRoiData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchROIData()
-  }, [])
+    if (token) fetchROIData()
+  }, [token])
 
   const fetchROIData = async () => {
     try {
       setLoading(true)
-      const token = localStorage.getItem('access_token') || ''
       const response = await fetch(`${API_BASE_URL}/api/v1/autonomous/roi-dashboard`, {
         method: 'GET',
         headers: {
@@ -36,27 +37,12 @@ export default function ROIDashboardPage() {
     } catch (err: any) {
       console.error('Error fetching ROI data:', err)
       setError(err.message || 'Failed to load ROI data')
-      // Use mock data for demo when API unavailable
-      setRoiData(getMockROIData())
+      // No mock fallback — show error state only
+      setRoiData(null)
     } finally {
       setLoading(false)
     }
   }
-
-  const getMockROIData = () => ({
-    period: '30d',
-    incidents_prevented: 37,
-    revenue_protected: {
-      value: 2412500.50,
-      is_estimate: true,
-      confidence_interval: '±15%',
-    },
-    mttr_reduction_pct: 28.5,
-    methodology_url: '/docs/value_methodology.md',
-    data_sources: { bss: 'mock', kpi: 'live' },
-    period_start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    period_end: new Date().toISOString(),
-  })
 
   const formatCurrency = (value: number | null | undefined) => {
     if (value === null || value === undefined) {
@@ -67,23 +53,6 @@ export default function ROIDashboardPage() {
       currency: 'GBP',
       maximumFractionDigits: 0,
     }).format(value)
-  }
-
-  const generateMTTRTrendData = () => {
-    // Generate mock MTTR trend data over 30 days
-    const data = []
-    for (let i = 0; i < 30; i++) {
-      const day = i + 1
-      const baseline = 65 + Math.sin(i / 5) * 10
-      const actual = baseline * (1 - (roiData?.mttr_reduction_pct ?? 0) / 100)
-      data.push({
-        day,
-        baseline: Math.round(baseline),
-        actual: Math.round(actual),
-        reduction: Math.round(baseline - actual),
-      })
-    }
-    return data
   }
 
   if (loading) {
@@ -113,11 +82,6 @@ export default function ROIDashboardPage() {
       </div>
     )
   }
-
-  const trendData = generateMTTRTrendData()
-  const minMTTR = Math.min(...trendData.map(d => d.actual))
-  const maxMTTR = Math.max(...trendData.map(d => d.baseline))
-  const chartHeight = 200
 
   return (
     <div className="space-y-8 p-4 md:p-8">
@@ -186,51 +150,15 @@ export default function ROIDashboardPage() {
         </div>
       </div>
 
-      {/* MTTR Trend Chart */}
+      {/* MTTR Trend Chart — requires real time-series data from backend */}
       <div className="bg-[#0a2d4a] rounded-xl border border-[rgba(7,242,219,0.12)] p-6">
-        <h2 className="text-xl font-bold text-white mb-4">MTTR Reduction Trend (30 days)</h2>
-        <div className="h-80 flex flex-col">
-          {/* Simple ASCII-style chart */}
-          <div className="flex-1 flex items-end gap-1">
-            {trendData.map((point, idx) => {
-              const baselineRatio = (point.baseline - minMTTR) / (maxMTTR - minMTTR) || 0.5
-              const actualRatio = (point.actual - minMTTR) / (maxMTTR - minMTTR) || 0.3
-              const baselineHeight = Math.max(10, baselineRatio * 100)
-              const actualHeight = Math.max(10, actualRatio * 100)
-
-              return (
-                <div key={idx} className="flex-1 flex flex-col gap-1 items-center justify-end">
-                  <div className="w-full flex gap-0.5 items-end justify-center h-64">
-                    {/* Baseline bar */}
-                    <div
-                      className="flex-1 bg-white/20 opacity-50 rounded-t"
-                      style={{ height: `${baselineHeight}%` }}
-                      title={`Day ${point.day} Baseline: ${point.baseline}min`}
-                    />
-                    {/* Actual bar */}
-                    <div
-                      className="flex-1 bg-green-500 rounded-t"
-                      style={{ height: `${actualHeight}%` }}
-                      title={`Day ${point.day} Actual: ${point.actual}min (−${point.reduction}min)`}
-                    />
-                  </div>
-                  {idx % 5 === 0 && (
-                    <span className="text-xs text-white/50 mt-2">D{point.day}</span>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex gap-4 mt-6 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-white/20 opacity-50 rounded"></div>
-              <span className="text-white/60">Baseline MTTR</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-green-500 rounded"></div>
-              <span className="text-white/60">Pedkai Actual MTTR</span>
-            </div>
-          </div>
+        <h2 className="text-xl font-bold text-white mb-4">MTTR Reduction Trend</h2>
+        <div className="py-8 text-center">
+          <p className="text-white/80 text-lg font-medium mb-2">No Trend Data Available</p>
+          <p className="text-white/60 text-sm max-w-md mx-auto">
+            MTTR trend visualization requires at least 7 days of incident resolution data.
+            Trend data will populate automatically as incidents are processed.
+          </p>
         </div>
       </div>
 

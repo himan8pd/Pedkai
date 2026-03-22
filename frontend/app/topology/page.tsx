@@ -73,6 +73,13 @@ export default function TopologyPage() {
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Layer filter state
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [showInferred, setShowInferred] = useState(true);
+  // Shadow topology
+  const [shadowEntities, setShadowEntities] = useState<TopologyEntity[]>([]);
+  const [shadowRelationships, setShadowRelationships] = useState<TopologyRelationship[]>([]);
+
   // View state
   const [selectedEntity, setSelectedEntity] = useState<TopologyEntity | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -142,7 +149,27 @@ export default function TopologyPage() {
       // Auto-select the seed node
       const seedNode = mappedEntities.find((e: any) => e.id === seed);
       if (seedNode) setSelectedEntity(seedNode);
-      
+
+      // Fetch shadow topology overlay
+      try {
+        const shadowRes = await fetch(
+          `${API_BASE_URL}/api/v1/topology/${encodeURIComponent(tenantId)}/neighborhood-with-shadow/${encodeURIComponent(seed)}?hops=${hopCount}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (shadowRes.ok) {
+          const shadowData = await shadowRes.json();
+          setShadowEntities((shadowData.shadow_entities || []).map((e: any) => ({
+            ...e,
+            status: "inferred",
+          })));
+          setShadowRelationships(shadowData.shadow_relationships || []);
+        }
+      } catch {
+        // Shadow data optional — fail silently
+        setShadowEntities([]);
+        setShadowRelationships([]);
+      }
+
     } catch (e: any) {
       setError(e.message);
       setEntities([]);
@@ -286,6 +313,24 @@ export default function TopologyPage() {
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
 
+    // Draw shadow (inferred) edges — dashed lines
+    if (showInferred) {
+      ctx.strokeStyle = "rgba(139,92,246,0.4)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      shadowRelationships.forEach((rel) => {
+        const from = positions[rel.source_entity_id];
+        const to = positions[rel.target_entity_id];
+        if (from && to) {
+          ctx.beginPath();
+          ctx.moveTo(from.x, from.y);
+          ctx.lineTo(to.x, to.y);
+          ctx.stroke();
+        }
+      });
+      ctx.setLineDash([]);
+    }
+
     // Draw edges
     ctx.strokeStyle = "rgba(100,116,139,0.3)";
     ctx.lineWidth = 0.5;
@@ -343,7 +388,7 @@ export default function TopologyPage() {
     });
 
     ctx.restore();
-  }, [positions, relationships, entities, zoom, pan, selectedEntity, seedId]);
+  }, [positions, relationships, entities, zoom, pan, selectedEntity, seedId, shadowRelationships, showInferred]);
 
   // 5. Canvas Interactions
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -544,6 +589,54 @@ export default function TopologyPage() {
                     {t}
                   </span>
                 ))}
+              </div>
+
+              {/* Layer Filter */}
+              <div className="mt-4">
+                <p className="text-[10px] uppercase tracking-wider text-white font-bold mb-2">
+                  Layer Filter
+                </p>
+                <label className="flex items-center gap-2 text-xs text-white/80 mb-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showInferred}
+                    onChange={(e) => setShowInferred(e.target.checked)}
+                    className="accent-violet-500"
+                  />
+                  Show inferred links
+                </label>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {[...new Set(entities.map((e) => e.entity_type))].sort().map((t) => (
+                    <label key={t} className="flex items-center gap-2 text-[11px] text-white/80 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={typeFilter.size === 0 || typeFilter.has(t)}
+                        onChange={(e) => {
+                          setTypeFilter(prev => {
+                            const next = new Set(prev);
+                            if (e.target.checked) {
+                              next.delete(t);
+                              // If all are checked, clear filter
+                              if (next.size === 0 || [...new Set(entities.map(e => e.entity_type))].every(et => !next.has(et) || et === t)) {
+                                return new Set();
+                              }
+                            } else {
+                              // If clearing first time, add ALL types first then remove this one
+                              if (next.size === 0) {
+                                [...new Set(entities.map(e => e.entity_type))].forEach(et => next.add(et));
+                              }
+                              next.delete(t);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="accent-cyan-400"
+                      />
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: getColor(t) }} />
+                      {t}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

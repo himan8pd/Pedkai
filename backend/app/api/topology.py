@@ -621,3 +621,110 @@ async def get_neighborhood(
         "relationships": edges
     }
 
+
+@router.get("/{tenant_id}/neighborhood-with-shadow/{entity_id}")
+async def get_neighborhood_with_shadow(
+    tenant_id: str,
+    entity_id: str,
+    hops: int = Query(2, ge=1, le=5),
+    max_nodes: int = Query(300, ge=10, le=1000),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[TOPOLOGY_READ]),
+):
+    """
+    Get N-hop neighborhood including shadow (inferred) topology links.
+    Shadow links are marked with source='inferred' for visual distinction.
+    """
+    # Get regular neighborhood first
+    regular = await get_neighborhood(
+        tenant_id=tenant_id,
+        entity_id=entity_id,
+        hops=hops,
+        max_nodes=max_nodes,
+        db=db,
+        current_user=current_user,
+    )
+
+    # Now find shadow relationships connected to any entity in the regular neighborhood
+    entity_ids = [e["id"] for e in regular.get("entities", [])]
+    if not entity_ids:
+        regular["shadow_entities"] = []
+        regular["shadow_relationships"] = []
+        return regular
+
+    try:
+        # Find shadow entities that match our entity identifiers
+        from sqlalchemy import bindparam
+        shadow_rels = await db.execute(
+            text("""
+                SELECT sr.id, sr.from_entity_id, sr.to_entity_id,
+                       sr.relationship_type, sr.confidence,
+                       se_from.entity_identifier AS from_identifier,
+                       se_to.entity_identifier AS to_identifier,
+                       se_from.entity_domain AS from_domain,
+                       se_to.entity_domain AS to_domain
+                FROM shadow_relationship sr
+                JOIN shadow_entity se_from ON sr.from_entity_id = se_from.id AND se_from.tenant_id = :tid
+                JOIN shadow_entity se_to ON sr.to_entity_id = se_to.id AND se_to.tenant_id = :tid
+                WHERE sr.tenant_id = :tid
+                  AND (se_from.entity_identifier IN :ids OR se_to.entity_identifier IN :ids)
+                  AND sr.exported_to_cmdb = false
+                LIMIT 200
+            """).bindparams(bindparam("ids", expanding=True)),
+            {"tid": tenant_id, "ids": entity_ids},
+        )
+
+        shadow_edges = []
+        shadow_node_ids = set()
+        for r in shadow_rels.fetchall():
+            shadow_edges.append({
+                "id": f"shadow-{r[0]}",
+                "source_entity_id": r[5],  # from_identifier
+                "target_entity_id": r[6],  # to_identifier
+                "relationship_type": r[3],
+                "source": "inferred",
+                "confidence": float(r[4]) if r[4] else None,
+            })
+            # Track shadow-only nodes (not already in CMDB view)
+            if r[5] not in entity_ids:
+                shadow_node_ids.add(r[5])
+            if r[6] not in entity_ids:
+                shadow_node_ids.add(r[6])
+
+        # Resolve shadow-only nodes
+        shadow_entities = []
+        if shadow_node_ids:
+            for sid in shadow_node_ids:
+                se_row = await db.execute(
+                    text("""
+                        SELECT entity_identifier, entity_domain, enrichment_value, origin
+                        FROM shadow_entity
+                        WHERE tenant_id = :tid AND entity_identifier = :ident
+                    """),
+                    {"tid": tenant_id, "ident": sid},
+                )
+                se = se_row.fetchone()
+                if se:
+                    shadow_entities.append({
+                        "id": se[0],
+                        "name": f"[Inferred] {se[0][:20]}",
+                        "entity_type": "INFERRED",
+                        "external_id": se[0],
+                        "status": "inferred",
+                        "source": "shadow_topology",
+                        "domain": se[1],
+                        "confidence": float(se[2]) if se[2] else None,
+                        "origin": se[3],
+                        "properties": {"status": "inferred"},
+                    })
+
+        regular["shadow_entities"] = shadow_entities
+        regular["shadow_relationships"] = shadow_edges
+
+    except Exception as e:
+        logger.warning(f"Shadow topology lookup failed: {e}")
+        regular["shadow_entities"] = []
+        regular["shadow_relationships"] = []
+
+    return regular
+

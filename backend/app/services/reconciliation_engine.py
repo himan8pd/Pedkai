@@ -211,6 +211,8 @@ class ReconciliationEngine:
             counts["dark_edges"] = await self._detect_dark_edges()
             counts["phantom_edges"] = await self._detect_phantom_edges()
 
+            shadow_count = await self._populate_shadow_topology()
+
             total = sum(counts.values())
 
             completed_at = datetime.now(timezone.utc)
@@ -1081,6 +1083,148 @@ class ReconciliationEngine:
             f"({skipped_passive:,} passive infrastructure edges excluded)"
         )
         return len(records)
+
+    async def _populate_shadow_topology(self) -> int:
+        """
+        Post-reconciliation: create shadow entities for dark nodes and
+        shadow relationships for dark edges. These populate Pedkai's
+        private topology graph for inferred network intelligence.
+        """
+        logger.info("[Reconciliation] Populating shadow topology from divergence results...")
+        created = 0
+
+        # Create shadow entities for dark nodes
+        dark_nodes = await self._fetch(
+            """
+            SELECT target_id, domain, description, confidence,
+                   extra->>'signal_source' AS signal_source
+            FROM reconciliation_results
+            WHERE tenant_id = :tid AND run_id = :rid AND divergence_type = 'dark_node'
+            """,
+            {"tid": self.tenant_id, "rid": self.run_id},
+        )
+
+        for dn in dark_nodes:
+            try:
+                await self.session.execute(
+                    text(
+                        """
+                        INSERT INTO shadow_entity (
+                            id, tenant_id, entity_identifier, entity_domain,
+                            origin, enrichment_value, first_seen, last_evidence
+                        ) VALUES (
+                            :id, :tid, :ident, :domain,
+                            'PEDKAI_DISCOVERED', :confidence, NOW(), NOW()
+                        )
+                        ON CONFLICT (tenant_id, entity_identifier) DO UPDATE
+                        SET enrichment_value = EXCLUDED.enrichment_value,
+                            last_evidence = NOW()
+                        """
+                    ),
+                    {
+                        "id": str(uuid.uuid4()),
+                        "tid": self.tenant_id,
+                        "ident": dn["target_id"],
+                        "domain": dn.get("domain"),
+                        "confidence": float(dn.get("confidence", 0.85)),
+                    },
+                )
+                created += 1
+            except Exception as e:
+                logger.debug(f"Shadow entity insert skipped for {dn['target_id']}: {e}")
+
+        # Create shadow relationships for dark edges
+        dark_edges = await self._fetch(
+            """
+            SELECT rr.target_id, rr.confidence,
+                   nr.from_cell_id, nr.to_cell_id, nr.neighbour_type
+            FROM reconciliation_results rr
+            LEFT JOIN neighbour_relations nr
+              ON nr.relation_id = rr.target_id AND nr.tenant_id = :tid
+            WHERE rr.tenant_id = :tid AND rr.run_id = :rid
+              AND rr.divergence_type = 'dark_edge'
+              AND nr.from_cell_id IS NOT NULL
+            """,
+            {"tid": self.tenant_id, "rid": self.run_id},
+        )
+
+        for de in dark_edges:
+            try:
+                # Ensure both endpoints exist as shadow entities
+                for endpoint_id in [de["from_cell_id"], de["to_cell_id"]]:
+                    await self.session.execute(
+                        text(
+                            """
+                            INSERT INTO shadow_entity (
+                                id, tenant_id, entity_identifier, origin,
+                                enrichment_value, first_seen, last_evidence
+                            ) VALUES (
+                                :id, :tid, :ident, 'CMDB_DECLARED',
+                                0.0, NOW(), NOW()
+                            )
+                            ON CONFLICT (tenant_id, entity_identifier) DO NOTHING
+                            """
+                        ),
+                        {
+                            "id": str(uuid.uuid4()),
+                            "tid": self.tenant_id,
+                            "ident": endpoint_id,
+                        },
+                    )
+
+                # Get shadow entity IDs
+                from_se = await self.session.execute(
+                    text(
+                        "SELECT id FROM shadow_entity WHERE tenant_id = :tid AND entity_identifier = :ident"
+                    ),
+                    {"tid": self.tenant_id, "ident": de["from_cell_id"]},
+                )
+                to_se = await self.session.execute(
+                    text(
+                        "SELECT id FROM shadow_entity WHERE tenant_id = :tid AND entity_identifier = :ident"
+                    ),
+                    {"tid": self.tenant_id, "ident": de["to_cell_id"]},
+                )
+                from_id = from_se.scalar()
+                to_id = to_se.scalar()
+
+                if from_id and to_id:
+                    await self.session.execute(
+                        text(
+                            """
+                            INSERT INTO shadow_relationship (
+                                id, tenant_id, from_entity_id, to_entity_id,
+                                relationship_type, confidence, evidence_summary,
+                                exported_to_cmdb, discovered_at
+                            ) VALUES (
+                                :id, :tid, :from_id, :to_id,
+                                :rel_type, :confidence, :evidence,
+                                false, NOW()
+                            )
+                            ON CONFLICT DO NOTHING
+                            """
+                        ),
+                        {
+                            "id": str(uuid.uuid4()),
+                            "tid": self.tenant_id,
+                            "from_id": from_id,
+                            "to_id": to_id,
+                            "rel_type": de.get("neighbour_type", "INFERRED_NEIGHBOUR"),
+                            "confidence": float(de.get("confidence", 0.75)),
+                            "evidence": json.dumps({
+                                "source": "reconciliation_engine",
+                                "run_id": self.run_id,
+                                "neighbour_relation_id": de["target_id"],
+                            }),
+                        },
+                    )
+                    created += 1
+            except Exception as e:
+                logger.debug(f"Shadow relationship insert skipped: {e}")
+
+        await self.session.commit()
+        logger.info(f"  -> {created} shadow topology entries created/updated")
+        return created
 
     # ------------------------------------------------------------------
     # Query helpers

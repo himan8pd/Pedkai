@@ -5,7 +5,7 @@ import { AlertCircle, Zap } from 'lucide-react'
 import StatCard from '@/app/components/StatCard'
 import AlarmCard from '@/app/components/AlarmCard'
 import SitrepPanel from '@/app/components/SitrepPanel'
-import IngestionControlPanel from '@/app/components/IngestionControlPanel'
+import DataHealthPanel from '@/app/components/DataHealthPanel'
 
 interface DashboardProps {
   token: string
@@ -53,7 +53,7 @@ export default function Dashboard({
         />
         <StatCard
           label="SLA Score"
-          value="98.5%"
+          value={scorecard?.sla_score ? `${scorecard.sla_score}%` : 'No Data'}
           icon={<AlertCircle className="w-6 h-6" />}
         />
       </div>
@@ -88,8 +88,8 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Ingestion & Reports */}
-      <IngestionControlPanel onIngestionComplete={onRefetchData} />
+      {/* Tenant Data Health */}
+      <DataHealthPanel onIngestionComplete={onRefetchData} />
     </div>
   )
 }

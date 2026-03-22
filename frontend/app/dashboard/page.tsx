@@ -77,12 +77,10 @@ export default function DashboardPage() {
             if (data.alarms && Array.isArray(data.alarms)) {
               setAlarms(data.alarms);
             }
-            // Update scorecard with alarm count
+            // Update scorecard with alarm count — no fallback values
             setScorecard((prev: any) => ({
               ...(prev || {}),
               active_alarms: data.count,
-              avg_mttr: prev?.avg_mttr ?? 12.4,
-              uptime_pct: prev?.uptime_pct ?? 99.2,
             }));
           }
         } catch (e) {

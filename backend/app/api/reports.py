@@ -857,6 +857,540 @@ async def get_divergence_evidence(
     return evidence
 
 
+# ---------------------------------------------------------------------------
+# GET /data-health
+# ---------------------------------------------------------------------------
+
+
+@router.get("/data-health")
+async def get_data_health(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    metrics_db: Annotated[AsyncSession, Depends(get_metrics_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
+) -> dict:
+    """
+    Data health summary for the dashboard. Returns entity counts, alarm counts,
+    KPI coverage, last ingestion timestamp, and last reconciliation status.
+    """
+    tenant_id = _tenant_from_jwt(current_user)
+
+    # Entity count
+    entity_count = 0
+    try:
+        r = await db.execute(
+            text("SELECT COUNT(*) FROM network_entities WHERE tenant_id = :tid"),
+            {"tid": tenant_id},
+        )
+        entity_count = r.scalar() or 0
+    except Exception:
+        pass
+
+    # Relationship count
+    rel_count = 0
+    try:
+        r = await db.execute(
+            text("SELECT COUNT(*) FROM topology_relationships WHERE tenant_id = :tid"),
+            {"tid": tenant_id},
+        )
+        rel_count = r.scalar() or 0
+    except Exception:
+        pass
+
+    # Alarm count + severity breakdown
+    alarm_count = 0
+    alarm_by_severity = {}
+    try:
+        r = await db.execute(
+            text(
+                "SELECT severity, COUNT(*) FROM telco_events_alarms "
+                "WHERE tenant_id = :tid GROUP BY severity ORDER BY COUNT(*) DESC"
+            ),
+            {"tid": tenant_id},
+        )
+        for sev, cnt in r.fetchall():
+            alarm_by_severity[sev or "unknown"] = cnt
+            alarm_count += cnt
+    except Exception:
+        pass
+
+    # Customer count
+    customer_count = 0
+    try:
+        r = await db.execute(
+            text("SELECT COUNT(*) FROM customers WHERE tenant_id = :tid"),
+            {"tid": tenant_id},
+        )
+        customer_count = r.scalar() or 0
+    except Exception:
+        pass
+
+    # KPI coverage (metrics DB)
+    kpi_entity_count = 0
+    kpi_sample_count = 0
+    kpi_time_range = None
+    try:
+        r = await metrics_db.execute(
+            text(
+                "SELECT COUNT(DISTINCT entity_id), COUNT(*), MIN(time), MAX(time) "
+                "FROM kpi_metrics WHERE tenant_id = :tid"
+            ),
+            {"tid": tenant_id},
+        )
+        row = r.fetchone()
+        if row:
+            kpi_entity_count = row[0] or 0
+            kpi_sample_count = row[1] or 0
+            if row[2] and row[3]:
+                kpi_time_range = {
+                    "earliest": str(row[2]),
+                    "latest": str(row[3]),
+                }
+    except Exception:
+        pass
+
+    # Incident count
+    incident_count = 0
+    open_incidents = 0
+    try:
+        r = await db.execute(
+            text("SELECT COUNT(*) FROM incidents WHERE tenant_id = :tid"),
+            {"tid": tenant_id},
+        )
+        incident_count = r.scalar() or 0
+        r2 = await db.execute(
+            text(
+                "SELECT COUNT(*) FROM incidents WHERE tenant_id = :tid "
+                "AND status NOT IN ('closed')"
+            ),
+            {"tid": tenant_id},
+        )
+        open_incidents = r2.scalar() or 0
+    except Exception:
+        pass
+
+    # Last reconciliation run
+    last_recon = None
+    try:
+        r = await db.execute(
+            text(
+                "SELECT run_id, status, total_divergences, dark_nodes, phantom_nodes, "
+                "dark_edges, phantom_edges, started_at, completed_at "
+                "FROM reconciliation_runs WHERE tenant_id = :tid "
+                "ORDER BY started_at DESC LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        )
+        row = r.mappings().fetchone()
+        if row:
+            last_recon = {
+                "run_id": row["run_id"],
+                "status": row["status"],
+                "total_divergences": int(row["total_divergences"] or 0),
+                "dark_nodes": int(row["dark_nodes"] or 0),
+                "phantom_nodes": int(row["phantom_nodes"] or 0),
+                "dark_edges": int(row["dark_edges"] or 0),
+                "phantom_edges": int(row["phantom_edges"] or 0),
+                "completed_at": str(row["completed_at"]) if row["completed_at"] else None,
+            }
+    except Exception:
+        pass
+
+    # Neighbour relations count
+    nr_count = 0
+    try:
+        r = await db.execute(
+            text("SELECT COUNT(*) FROM neighbour_relations WHERE tenant_id = :tid"),
+            {"tid": tenant_id},
+        )
+        nr_count = r.scalar() or 0
+    except Exception:
+        pass
+
+    return {
+        "tenant_id": tenant_id,
+        "entities": entity_count,
+        "relationships": rel_count,
+        "alarms": alarm_count,
+        "alarm_by_severity": alarm_by_severity,
+        "customers": customer_count,
+        "neighbour_relations": nr_count,
+        "kpi": {
+            "entities_with_kpi": kpi_entity_count,
+            "total_samples": kpi_sample_count,
+            "time_range": kpi_time_range,
+        },
+        "incidents": {
+            "total": incident_count,
+            "open": open_incidents,
+        },
+        "last_reconciliation": last_recon,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /divergence/enriched-profile/{result_id}
+# ---------------------------------------------------------------------------
+
+
+@router.get("/divergence/enriched-profile/{result_id}")
+async def get_enriched_profile(
+    result_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    metrics_db: Annotated[AsyncSession, Depends(get_metrics_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
+) -> dict:
+    """
+    Generate an intelligence-enriched profile for a divergence entity.
+
+    For dark nodes: infers device type, vendor, protocols, traffic role,
+    and probable network position from telemetry signals.
+
+    For phantom nodes: explains why the entity is considered phantom
+    and suggests remediation actions.
+
+    For dark edges: analyzes the operational relationship evidence.
+
+    Returns classification confidence and reasoning chain.
+    """
+    tenant_id = _tenant_from_jwt(current_user)
+
+    # Fetch the divergence record
+    row = await db.execute(
+        text(
+            """
+            SELECT rr.*, ne.name AS entity_name, ne.external_id AS entity_external_id,
+                   ne.attributes AS entity_attributes, ne.entity_type AS cmdb_entity_type
+            FROM reconciliation_results rr
+            LEFT JOIN network_entities ne
+              ON CAST(ne.id AS TEXT) = rr.target_id AND ne.tenant_id = :tid
+            WHERE rr.result_id = :rid AND rr.tenant_id = :tid
+            """
+        ),
+        {"rid": result_id, "tid": tenant_id},
+    )
+    record = row.mappings().fetchone()
+    if not record:
+        raise HTTPException(status_code=404, detail="Divergence record not found")
+
+    div_type = record["divergence_type"]
+    target_id = record["target_id"]
+    profile: dict = {
+        "result_id": result_id,
+        "divergence_type": div_type,
+        "target_id": target_id,
+        "entity_name": record.get("entity_name"),
+        "description": record["description"],
+    }
+
+    if div_type == "dark_node":
+        # Infer device characteristics from KPI metadata
+        kpi_meta = await metrics_db.execute(
+            text(
+                """
+                SELECT
+                    metadata->>'domain' AS domain,
+                    metadata->>'vendor' AS vendor,
+                    metadata->>'rat_type' AS rat_type,
+                    metadata->>'band' AS band,
+                    metadata->>'deployment_profile' AS deployment_profile,
+                    metadata->>'site_id' AS site_id,
+                    COUNT(*) AS sample_count,
+                    COUNT(DISTINCT kpi_name) AS distinct_kpis,
+                    MIN(time) AS first_seen,
+                    MAX(time) AS last_seen,
+                    AVG(metric_value) AS avg_value
+                FROM kpi_metrics
+                WHERE tenant_id = :tid AND entity_id = :eid
+                GROUP BY metadata->>'domain', metadata->>'vendor', metadata->>'rat_type',
+                         metadata->>'band', metadata->>'deployment_profile', metadata->>'site_id'
+                ORDER BY sample_count DESC
+                LIMIT 5
+                """
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        signal_profiles = []
+        for r in kpi_meta.fetchall():
+            signal_profiles.append({
+                "domain": r[0], "vendor": r[1], "rat_type": r[2],
+                "band": r[3], "deployment_profile": r[4], "site_id": r[5],
+                "sample_count": r[6], "distinct_kpis": r[7],
+                "first_seen": str(r[8]) if r[8] else None,
+                "last_seen": str(r[9]) if r[9] else None,
+                "avg_value": float(r[10]) if r[10] else None,
+            })
+
+        # Get distinct KPI names to infer device role
+        kpi_names_row = await metrics_db.execute(
+            text(
+                """
+                SELECT DISTINCT kpi_name FROM kpi_metrics
+                WHERE tenant_id = :tid AND entity_id = :eid
+                ORDER BY kpi_name
+                LIMIT 50
+                """
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        kpi_names = [r[0] for r in kpi_names_row.fetchall()]
+
+        # Get alarm profile
+        alarm_row = await db.execute(
+            text(
+                """
+                SELECT alarm_type, severity, probable_cause, domain, COUNT(*) AS cnt,
+                       MIN(raised_at) AS first_alarm, MAX(raised_at) AS last_alarm
+                FROM telco_events_alarms
+                WHERE tenant_id = :tid AND entity_id = :eid
+                GROUP BY alarm_type, severity, probable_cause, domain
+                ORDER BY cnt DESC
+                LIMIT 10
+                """
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        alarm_profiles = [
+            {
+                "alarm_type": r[0], "severity": r[1], "probable_cause": r[2],
+                "domain": r[3], "count": r[4],
+                "first_alarm": str(r[5]) if r[5] else None,
+                "last_alarm": str(r[6]) if r[6] else None,
+            }
+            for r in alarm_row.fetchall()
+        ]
+
+        # Check neighbour relations for topology context
+        nr_row = await db.execute(
+            text(
+                """
+                SELECT
+                    CASE WHEN from_cell_id = :eid THEN to_cell_id ELSE from_cell_id END AS peer_id,
+                    neighbour_type,
+                    handover_attempts,
+                    handover_success_rate,
+                    distance_m
+                FROM neighbour_relations
+                WHERE tenant_id = :tid AND (from_cell_id = :eid OR to_cell_id = :eid)
+                ORDER BY handover_attempts DESC NULLS LAST
+                LIMIT 10
+                """
+            ),
+            {"tid": tenant_id, "eid": target_id},
+        )
+        neighbours = [
+            {
+                "peer_id": r[0], "neighbour_type": r[1],
+                "handover_attempts": r[2], "handover_success_rate": float(r[3]) if r[3] else None,
+                "distance_m": float(r[4]) if r[4] else None,
+            }
+            for r in nr_row.fetchall()
+        ]
+
+        # --- INFERENCE ---
+        primary = signal_profiles[0] if signal_profiles else {}
+
+        # Infer device type
+        inferred_type = "UNKNOWN"
+        type_confidence = 0.0
+        type_reasoning = []
+
+        if primary.get("rat_type"):
+            rat = primary["rat_type"].upper() if primary["rat_type"] else ""
+            if "NR" in rat or "5G" in rat:
+                inferred_type = "NR_CELL"
+                type_confidence = 0.85
+                type_reasoning.append(f"RAT type '{primary['rat_type']}' indicates 5G NR cell")
+            elif "LTE" in rat or "4G" in rat:
+                inferred_type = "LTE_CELL"
+                type_confidence = 0.85
+                type_reasoning.append(f"RAT type '{primary['rat_type']}' indicates LTE cell")
+            elif "UMTS" in rat or "3G" in rat:
+                inferred_type = "UMTS_CELL"
+                type_confidence = 0.80
+                type_reasoning.append(f"RAT type '{primary['rat_type']}' indicates UMTS cell")
+
+        if primary.get("domain"):
+            domain = primary["domain"].upper() if primary["domain"] else ""
+            if "TRANSPORT" in domain and inferred_type == "UNKNOWN":
+                inferred_type = "PE_ROUTER"
+                type_confidence = 0.65
+                type_reasoning.append(f"Domain '{primary['domain']}' suggests transport element")
+            elif "CORE" in domain and inferred_type == "UNKNOWN":
+                inferred_type = "CORE_ELEMENT"
+                type_confidence = 0.60
+                type_reasoning.append(f"Domain '{primary['domain']}' suggests core network element")
+
+        if neighbours:
+            type_reasoning.append(f"{len(neighbours)} neighbour relations found — entity participates in handover/routing")
+            if type_confidence > 0:
+                type_confidence = min(0.95, type_confidence + 0.05)
+
+        if not type_reasoning:
+            type_reasoning.append("Insufficient telemetry metadata to classify device type")
+
+        # Infer role
+        role = "Unknown"
+        role_reasoning = []
+        if kpi_names:
+            ran_kpis = [k for k in kpi_names if any(x in k.lower() for x in ["throughput", "prb", "rsrp", "sinr", "cqi", "bler", "handover"])]
+            transport_kpis = [k for k in kpi_names if any(x in k.lower() for x in ["latency", "jitter", "packet_loss", "bandwidth", "utilization"])]
+
+            if ran_kpis:
+                role = "RAN Access Point"
+                role_reasoning.append(f"Reports {len(ran_kpis)} RAN-specific KPIs: {', '.join(ran_kpis[:5])}")
+            elif transport_kpis:
+                role = "Transport Node"
+                role_reasoning.append(f"Reports {len(transport_kpis)} transport KPIs: {', '.join(transport_kpis[:5])}")
+            else:
+                role = "Network Element"
+                role_reasoning.append(f"Reports {len(kpi_names)} KPIs but no clear domain signature")
+
+        profile["enrichment"] = {
+            "inferred_device_type": inferred_type,
+            "device_type_confidence": round(type_confidence, 2),
+            "device_type_reasoning": type_reasoning,
+            "inferred_role": role,
+            "role_reasoning": role_reasoning,
+            "vendor_hint": primary.get("vendor"),
+            "domain": primary.get("domain"),
+            "rat_type": primary.get("rat_type"),
+            "band": primary.get("band"),
+            "deployment_profile": primary.get("deployment_profile"),
+            "site_association": primary.get("site_id"),
+            "observation_window": {
+                "first_seen": primary.get("first_seen"),
+                "last_seen": primary.get("last_seen"),
+                "total_samples": sum(p.get("sample_count", 0) for p in signal_profiles),
+                "distinct_kpis": len(kpi_names),
+            },
+            "kpi_names": kpi_names[:20],
+            "signal_profiles": signal_profiles,
+            "alarm_profiles": alarm_profiles,
+            "topology_context": {
+                "neighbour_count": len(neighbours),
+                "neighbours": neighbours,
+            },
+        }
+
+    elif div_type == "phantom_node":
+        # Explain why phantom and suggest remediation
+        profile["enrichment"] = {
+            "entity_type": record.get("cmdb_entity_type"),
+            "entity_name": record.get("entity_name"),
+            "external_id": record.get("entity_external_id"),
+            "detection_method": "signal_absence",
+            "signals_checked": ["kpi_metrics", "telco_events_alarms", "neighbour_relations"],
+            "reasoning": [
+                f"Entity '{record.get('entity_name')}' ({record.get('cmdb_entity_type')}) is declared in CMDB",
+                "Zero KPI telemetry samples found",
+                "Zero alarm events found",
+                "Zero neighbour relation references found",
+                "Entity type is expected to independently emit operational signals",
+            ],
+            "remediation_options": [
+                "Verify physical equipment status on-site",
+                "Check if entity has been decommissioned but not removed from CMDB",
+                "Investigate if telemetry collection is misconfigured for this entity",
+                "Consider reclassifying as passive infrastructure if no signals expected",
+            ],
+            "confidence": float(record["confidence"]),
+        }
+
+    elif div_type == "dark_edge":
+        # Get the neighbour relation details
+        nr = await db.execute(
+            text(
+                """
+                SELECT nr.*, ne_from.name AS from_name, ne_to.name AS to_name
+                FROM neighbour_relations nr
+                LEFT JOIN network_entities ne_from
+                  ON CAST(ne_from.id AS TEXT) = nr.from_cell_id AND ne_from.tenant_id = :tid
+                LEFT JOIN network_entities ne_to
+                  ON CAST(ne_to.id AS TEXT) = nr.to_cell_id AND ne_to.tenant_id = :tid
+                WHERE nr.relation_id = :rid AND nr.tenant_id = :tid
+                """
+            ),
+            {"rid": target_id, "tid": tenant_id},
+        )
+        nr_rec = nr.mappings().fetchone()
+
+        reasoning = [
+            "Operational neighbour relation exists between two entities",
+            "No corresponding CMDB topology edge found",
+        ]
+        if nr_rec:
+            if nr_rec.get("handover_attempts"):
+                reasoning.append(f"Handover evidence: {nr_rec['handover_attempts']} attempts observed")
+            if nr_rec.get("handover_success_rate"):
+                reasoning.append(f"Handover success rate: {float(nr_rec['handover_success_rate']):.1%}")
+            if nr_rec.get("distance_m"):
+                reasoning.append(f"Inter-site distance: {float(nr_rec['distance_m']):.0f}m")
+
+        profile["enrichment"] = {
+            "from_entity": nr_rec.get("from_name") or (nr_rec["from_cell_id"] if nr_rec else target_id),
+            "to_entity": nr_rec.get("to_name") or (nr_rec["to_cell_id"] if nr_rec else "unknown"),
+            "neighbour_type": nr_rec.get("neighbour_type") if nr_rec else None,
+            "handover_attempts": nr_rec.get("handover_attempts") if nr_rec else None,
+            "handover_success_rate": float(nr_rec["handover_success_rate"]) if nr_rec and nr_rec.get("handover_success_rate") else None,
+            "reasoning": reasoning,
+            "confidence": float(record["confidence"]),
+            "remediation_options": [
+                "Add this relationship to CMDB topology",
+                "Verify neighbour relation is intentional (not a temporary handover path)",
+                "Review ANR (Automatic Neighbour Relation) configuration",
+            ],
+        }
+
+    elif div_type == "dark_attribute":
+        profile["enrichment"] = {
+            "attribute": record.get("attribute_name"),
+            "cmdb_value": record.get("cmdb_value"),
+            "observed_value": record.get("observed_value"),
+            "reasoning": [
+                f"CMDB declares {record.get('attribute_name')} = '{record.get('cmdb_value')}'",
+                f"Operational telemetry consistently reports {record.get('attribute_name')} = '{record.get('observed_value')}'",
+                "Discrepancy detected between declared and observed values",
+            ],
+            "confidence": float(record["confidence"]),
+            "remediation_options": [
+                f"Update CMDB {record.get('attribute_name')} from '{record.get('cmdb_value')}' to '{record.get('observed_value')}'",
+                "Investigate if hardware swap occurred without CMDB update",
+                "Verify telemetry source configuration",
+            ],
+        }
+
+    elif div_type == "phantom_edge":
+        profile["enrichment"] = {
+            "reasoning": [
+                "CMDB topology declares this relationship",
+                "Neither endpoint shows operational activity (KPI, alarms, or neighbour relations)",
+                "Relationship may represent decommissioned or incorrectly configured infrastructure",
+            ],
+            "confidence": float(record["confidence"]),
+            "remediation_options": [
+                "Verify both endpoints are physically connected",
+                "Remove relationship from CMDB if endpoints are decommissioned",
+                "Check if telemetry collection is misconfigured for either endpoint",
+            ],
+        }
+
+    elif div_type == "identity_mutation":
+        profile["enrichment"] = {
+            "reasoning": [
+                "Evidence suggests the physical equipment behind this CMDB record has changed",
+                record.get("description", ""),
+            ],
+            "confidence": float(record["confidence"]),
+            "remediation_options": [
+                "Audit hardware inventory records for this entity",
+                "Verify serial numbers and hardware IDs match CMDB records",
+                "Update CMDB if hardware replacement was performed",
+            ],
+        }
+
+    return profile
+
+
 # -- TASK-301: File-based Divergence Analysis endpoints --
 
 import asyncio
