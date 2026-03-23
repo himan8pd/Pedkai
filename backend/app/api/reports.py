@@ -627,8 +627,8 @@ async def get_divergence_evidence(
                 SELECT
                     metadata->>'{attr_name}' AS observed_value,
                     COUNT(*) AS sample_count,
-                    MIN(time) AS first_seen,
-                    MAX(time) AS last_seen
+                    MIN(timestamp) AS first_seen,
+                    MAX(timestamp) AS last_seen
                 FROM kpi_metrics
                 WHERE tenant_id = :tid
                   AND entity_id = :eid
@@ -658,8 +658,8 @@ async def get_divergence_evidence(
                     SELECT
                         metadata->>'{attr_name}' AS observed_value,
                         COUNT(*) AS sample_count,
-                        MIN(time) AS first_seen,
-                        MAX(time) AS last_seen
+                        MIN(timestamp) AS first_seen,
+                        MAX(timestamp) AS last_seen
                     FROM kpi_metrics
                     WHERE tenant_id = :tid
                       AND entity_id = :eid
@@ -806,8 +806,8 @@ async def get_divergence_evidence(
                     metadata->>'vendor' AS vendor,
                     metadata->>'rat_type' AS rat_type,
                     COUNT(*) AS sample_count,
-                    MIN(time) AS first_seen,
-                    MAX(time) AS last_seen
+                    MIN(timestamp) AS first_seen,
+                    MAX(timestamp) AS last_seen
                 FROM kpi_metrics
                 WHERE tenant_id = :tid AND entity_id = :eid
                 GROUP BY metadata->>'domain', metadata->>'vendor', metadata->>'rat_type'
@@ -931,7 +931,7 @@ async def get_data_health(
     try:
         r = await metrics_db.execute(
             text(
-                "SELECT COUNT(DISTINCT entity_id), COUNT(*), MIN(time), MAX(time) "
+                "SELECT COUNT(DISTINCT entity_id), COUNT(*), MIN(timestamp), MAX(timestamp) "
                 "FROM kpi_metrics WHERE tenant_id = :tid"
             ),
             {"tid": tenant_id},
@@ -1096,9 +1096,9 @@ async def get_enriched_profile(
                     metadata->>'site_id' AS site_id,
                     COUNT(*) AS sample_count,
                     COUNT(DISTINCT kpi_name) AS distinct_kpis,
-                    MIN(time) AS first_seen,
-                    MAX(time) AS last_seen,
-                    AVG(metric_value) AS avg_value
+                    MIN(timestamp) AS first_seen,
+                    MAX(timestamp) AS last_seen,
+                    AVG(kpi_value) AS avg_value
                 FROM kpi_metrics
                 WHERE tenant_id = :tid AND entity_id = :eid
                 GROUP BY metadata->>'domain', metadata->>'vendor', metadata->>'rat_type',
