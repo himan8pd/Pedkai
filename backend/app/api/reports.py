@@ -1388,6 +1388,16 @@ async def get_enriched_profile(
             ],
         }
 
+    # Augment rule-based enrichment with LLM analysis (graceful fallback)
+    if profile.get("enrichment"):
+        from backend.app.services.enrichment_llm import augment_enrichment
+
+        ai_analysis = await augment_enrichment(
+            profile["enrichment"], div_type, target_id
+        )
+        if ai_analysis:
+            profile["enrichment"]["ai_analysis"] = ai_analysis
+
     return profile
 
 

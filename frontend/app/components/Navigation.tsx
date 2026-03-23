@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  LayoutDashboard,
   AlertTriangle,
   BarChart3,
   Network,
@@ -16,10 +15,13 @@ import {
   MessageSquare,
   Settings,
   Users,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
+import { useTheme } from "@/app/context/ThemeContext";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -27,6 +29,7 @@ const API_BASE_URL =
 export default function Navigation() {
   const pathname = usePathname();
   const { onLogout, tenantName, tenantId, role } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [dataMode, setDataMode] = useState<string | null>(null);
   const [dataPeriod, setDataPeriod] = useState<string | null>(null);
 
@@ -63,7 +66,6 @@ export default function Navigation() {
   }, [tenantId]);
 
   const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/incidents", label: "Incidents", icon: AlertTriangle },
     { href: "/scorecard", label: "Scorecard", icon: BarChart3 },
     { href: "/divergence", label: "Divergence", icon: GitCompare },
@@ -78,15 +80,21 @@ export default function Navigation() {
 
   return (
     <nav className="bg-[#06203b]/95 backdrop-blur-md border-b border-[rgba(7,242,219,0.12)] sticky top-0 z-50 shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
-      <div className="w-full px-4 md:px-8">
-        <div className="flex items-center justify-between h-14">
-          {/* Logo — clickable link to dashboard */}
+      <div className="w-full pr-4 md:pr-8">
+        <div className="flex items-center justify-between h-[52px] md:h-[70px] lg:h-[86px]">
+          {/* Logo — clickable home link to dashboard, flush top-left */}
           <Link
             href="/dashboard"
-            className="flex items-center space-x-2.5 hover:opacity-80 transition-opacity"
+            className="flex-shrink-0 flex items-center hover:opacity-80 transition-opacity self-start"
           >
-            <Image src="/logo.jpeg" alt="pedk.ai" width={36} height={36} className="rounded-lg object-cover" />
-            <span className="text-lg font-bold text-white tracking-tight">pedk.ai</span>
+            <Image
+              src="/logo-v2.jpeg"
+              alt="pedk.ai"
+              width={86}
+              height={86}
+              className="object-cover min-w-[52px] min-h-[52px] w-[52px] h-[52px] md:w-[70px] md:h-[70px] lg:w-[86px] lg:h-[86px]"
+              unoptimized
+            />
           </Link>
 
           {/* Navigation Links */}
@@ -128,6 +136,13 @@ export default function Navigation() {
                 </span>
               </div>
             )}
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-lg text-white/60 hover:text-cyan-300 hover:bg-white/5 transition-all duration-200 border border-transparent hover:border-white/10"
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             <button
               onClick={onLogout}
               className="px-3 py-1.5 rounded-lg text-sm font-medium text-white/60 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 flex items-center space-x-1.5 border border-transparent hover:border-red-500/20"

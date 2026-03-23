@@ -60,6 +60,7 @@ export default function AuthLayout({
 }) {
   // ── Auth state ──────────────────────────────────────────────────
   const [token, setToken] = useState<string | null>(null);
+  const [loginTenantId, setLoginTenantId] = useState("");
   const [username, setUsername] = useState("operator");
   const [password, setPassword] = useState("operator");
   const [authError, setAuthError] = useState("");
@@ -85,6 +86,12 @@ export default function AuthLayout({
       setRole(saved.role);
       setTenantBound(true);
     }
+    // Pre-fill tenant from URL query param (e.g. ?tenant=six_telecom)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const t = params.get("tenant");
+      if (t) setLoginTenantId(t);
+    } catch {}
   }, []);
 
   // ── Phase: 'login' | 'tenant-select' | 'app' ───────────────────
@@ -101,6 +108,7 @@ export default function AuthLayout({
     setRole("");
     setTenantBound(false);
     setTenantError("");
+    setLoginTenantId("");
     setUsername("operator");
     setPassword("operator");
     setAuthError("");
@@ -117,6 +125,9 @@ export default function AuthLayout({
       const formData = new URLSearchParams();
       formData.append("username", username);
       formData.append("password", password);
+      if (loginTenantId.trim()) {
+        formData.append("tenant_id", loginTenantId.trim());
+      }
 
       const res = await fetch(`${API_BASE_URL}/api/v1/auth/token`, {
         method: "POST",
@@ -246,12 +257,25 @@ export default function AuthLayout({
             <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
               <div className="flex flex-col items-center mb-8">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.jpeg" alt="pedk.ai" className="w-20 h-20 rounded-2xl mb-4 shadow-[0_0_20px_rgba(7,242,219,0.15)]" />
+                <img src="/logo-v2.jpeg" alt="pedk.ai" className="w-20 h-20 rounded-2xl mb-4 shadow-[0_0_20px_rgba(7,242,219,0.15)]" />
                 <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
                 <p className="text-sm text-white/60 mt-1">NOC Command Center</p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Tenant
+                  </label>
+                  <input
+                    type="text"
+                    value={loginTenantId}
+                    onChange={(e) => setLoginTenantId(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
+                    placeholder="e.g. six_telecom (leave empty for admin)"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-white mb-2">
                     Username
@@ -341,7 +365,7 @@ export default function AuthLayout({
             <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
               <div className="flex flex-col items-center mb-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3 shadow-[0_0_16px_rgba(7,242,219,0.1)]" />
+                <img src="/logo-v2.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3 shadow-[0_0_16px_rgba(7,242,219,0.1)]" />
                 <h1 className="text-2xl font-bold text-white tracking-tight">pedk.ai</h1>
                 <p className="text-white/60 text-sm mt-1">
                   Select a tenant to continue

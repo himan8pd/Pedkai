@@ -406,9 +406,14 @@ export default function DivergencePage() {
   );
 
   // ── Fetch enriched profile (intelligence/inference) ──────────────────
+  const enrichedProfilesRef = useRef(enrichedProfiles);
+  enrichedProfilesRef.current = enrichedProfiles;
+
   const fetchEnrichedProfile = useCallback(
     async (resultId: string) => {
-      if (!token || enrichedProfiles[resultId]) return;
+      if (!token) return;
+      const cached = enrichedProfilesRef.current[resultId];
+      if (cached && !cached.error) return;
       setLoadingEnriched(resultId);
       try {
         const data = await apiFetch(
@@ -423,7 +428,7 @@ export default function DivergencePage() {
         setLoadingEnriched(null);
       }
     },
-    [token, enrichedProfiles],
+    [token],
   );
 
   // ── Fetch summary ──────────────────────────────────────────────────────
@@ -1722,9 +1727,43 @@ export default function DivergencePage() {
                                                 <ConfBadge value={enr.confidence} />
                                               </div>
                                             )}
+
+                                            {/* AI Analysis (LLM-generated) */}
+                                            {enr.ai_analysis && (
+                                              <div className="mt-3 p-3 rounded-lg bg-[#06203b] border border-cyan-900/40">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                                                  <span className="text-cyan-400 text-[11px] font-semibold uppercase tracking-wide">AI Analysis</span>
+                                                  <span className="text-white/30 text-[10px]">{enr.ai_analysis.model}</span>
+                                                </div>
+                                                <p className="text-white/80 text-xs whitespace-pre-wrap leading-relaxed">
+                                                  {enr.ai_analysis.summary}
+                                                </p>
+                                              </div>
+                                            )}
                                           </div>
                                         );
                                       })()}
+                                      {enrichedProfiles[r.result_id]?.error && (
+                                        <div className="flex items-center gap-3 py-2">
+                                          <span className="text-red-400 text-xs">Inference failed.</span>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEnrichedProfiles((prev) => {
+                                                const next = { ...prev };
+                                                delete next[r.result_id];
+                                                return next;
+                                              });
+                                              fetchEnrichedProfile(r.result_id);
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-violet-500/15 text-violet-300 text-xs hover:bg-violet-500/25 transition-colors border border-violet-500/30"
+                                          >
+                                            <Sparkles className="w-3 h-3" />
+                                            Retry
+                                          </button>
+                                        </div>
+                                      )}
 
                                       {/* Topology link — for node-based types only */}
                                       {(r.divergence_type === "dark_node" || r.divergence_type === "phantom_node" || r.divergence_type === "identity_mutation") && (

@@ -31,16 +31,49 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-async def get_user_by_username(db: AsyncSession, username: str) -> Optional[UserORM]:
-    result = await db.execute(select(UserORM).where(UserORM.username == username))
+async def get_user_by_username(
+    db: AsyncSession, username: str, tenant_id: Optional[str] = None
+) -> Optional[UserORM]:
+    """Look up a user by username, optionally scoped to a tenant.
+
+    When *tenant_id* is provided the lookup uses the composite unique
+    ``(tenant_id, username)`` key.  When omitted, returns the first
+    matching row — only safe for platform-admin lookups where the
+    username is known to be unique in practice (e.g. ``pedkai_admin``).
+    """
+    if tenant_id:
+        result = await db.execute(
+            select(UserORM).where(
+                UserORM.username == username,
+                UserORM.tenant_id == tenant_id,
+            )
+        )
+    else:
+        result = await db.execute(
+            select(UserORM).where(UserORM.username == username)
+        )
     return result.scalar_one_or_none()
 
 
 async def authenticate_user(
-    db: AsyncSession, username: str, password: str
+    db: AsyncSession,
+    username: str,
+    password: str,
+    tenant_id: Optional[str] = None,
 ) -> Optional[UserORM]:
-    user = await get_user_by_username(db, username)
+    """Authenticate a user by credentials.
+
+    If *tenant_id* is supplied, the user is looked up by the composite
+    ``(tenant_id, username)`` key.  If *tenant_id* is ``None`` (admin
+    login), the lookup is by username alone — but authentication only
+    succeeds if the matched user has the ``admin`` role.  This prevents
+    non-admin users from logging in without specifying a tenant.
+    """
+    user = await get_user_by_username(db, username, tenant_id=tenant_id)
     if not user or not user.is_active:
+        return None
+    # When no tenant_id is provided, only platform admins may authenticate.
+    if tenant_id is None and user.role != Role.ADMIN:
         return None
     if not verify_password(password, user.hashed_password):
         return None
@@ -227,16 +260,17 @@ async def create_user_for_tenant(
 ) -> UserORM:
     """
     Create a new user and immediately grant them access to *tenant_id* with
-    *tenant_role*.  Raises ``ValueError`` if the username is already taken.
+    *tenant_role*.  Raises ``ValueError`` if the username already exists
+    within the specified tenant.
     """
-    if await get_user_by_username(db, username):
-        raise ValueError(f"Username '{username}' is already taken.")
+    if await get_user_by_username(db, username, tenant_id=tenant_id):
+        raise ValueError(f"Username '{username}' already exists in this tenant.")
 
     user = UserORM(
         username=username,
         hashed_password=hash_password(password),
         role=tenant_role,   # global default = the role they're being created with
-        tenant_id=tenant_id,  # legacy field
+        tenant_id=tenant_id,  # home tenant (part of composite unique with username)
         is_active=True,
     )
     db.add(user)
@@ -376,8 +410,10 @@ async def seed_default_users(db: AsyncSession) -> None:
     Tenants are loaded via data import scripts (e.g., load_telco2_tenant.py).
     Tenant-local users are created on-demand via the user management API.
     """
-    # 1. Seed the global pedkai_admin user (idempotent)
-    admin_user = await get_user_by_username(db, "pedkai_admin")
+    # 1. Seed the global pedkai_admin user (idempotent).
+    #    The no-tenant lookup is safe here because pedkai_admin is the only
+    #    admin-role user and the name is reserved.
+    admin_user = await get_user_by_username(db, "pedkai_admin")  # tenant_id=None → global lookup
     if not admin_user:
         # The legacy tenant_id column is NOT NULL, so we must supply a value.
         # Fetch the first active tenant from the DB rather than hardcoding one.

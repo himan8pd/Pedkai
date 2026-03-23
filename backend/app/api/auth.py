@@ -18,7 +18,7 @@ Flow:
 from datetime import timedelta
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Form, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,25 +85,35 @@ class SelectTenantResponse(BaseModel):
 @router.post("/token", response_model=TokenResponse)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
+    tenant_id: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """
-    Standard OAuth2 /token endpoint to exchange credentials for a JWT.
+    OAuth2 /token endpoint to exchange credentials for a JWT.
 
-    The returned JWT does **not** contain a ``tenant_id`` yet.  The client
-    must call ``/select-tenant`` to obtain a tenant-scoped token before
-    accessing any data endpoints.
+    Accepts an optional ``tenant_id`` form field to scope the login to a
+    specific tenant.  When omitted, only platform-admin users (role=admin)
+    may authenticate.
+
+    The returned JWT does **not** contain a ``tenant_id`` yet (unless the
+    user has exactly one authorized tenant).  The client must call
+    ``/select-tenant`` to obtain a tenant-scoped token before accessing
+    data endpoints.
 
     The response includes a ``tenants`` array so the frontend knows which
     tenants are available without a second round-trip.
     """
     user = await auth_service.authenticate_user(
-        db, form_data.username, form_data.password
+        db, form_data.username, form_data.password, tenant_id=tenant_id
     )
     if not user:
+        # Provide a helpful hint when tenant_id is missing for non-admin users.
+        detail = "Incorrect username or password"
+        if tenant_id is None:
+            detail += ". Non-admin users must specify a tenant."
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail=detail,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -137,7 +147,8 @@ async def login_for_access_token(
 
     access_token = create_access_token(
         data={
-            "sub": user.username,
+            "sub": user.id,
+            "username": user.username,
             "user_id": user.id,
             "role": role,
             "scopes": scopes,
@@ -171,8 +182,8 @@ async def list_user_tenants(
     This is useful if the frontend needs to re-fetch the list (e.g. after
     a new tenant is provisioned) without forcing a full re-login.
     """
-    # We need the user's DB id — look it up by username
-    user_orm = await auth_service.get_user_by_username(db, current_user.username)
+    # Resolve DB user by the UUID from the JWT
+    user_orm = await auth_service.get_user_by_id(db, current_user.user_id)
     if not user_orm:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -201,8 +212,8 @@ async def select_tenant(
     - Direct API manipulation to switch to an unauthorized tenant is
       rejected with HTTP 403.
     """
-    # Resolve DB user record (we need the id for access-check)
-    user_orm = await auth_service.get_user_by_username(db, current_user.username)
+    # Resolve DB user record by UUID from JWT
+    user_orm = await auth_service.get_user_by_id(db, current_user.user_id)
     if not user_orm:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -238,7 +249,8 @@ async def select_tenant(
 
     access_token = create_access_token(
         data={
-            "sub": user_orm.username,
+            "sub": user_orm.id,
+            "username": user_orm.username,
             "user_id": user_orm.id,
             "role": role,
             "scopes": scopes,

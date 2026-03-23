@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import async_session_maker, get_db
@@ -197,16 +197,20 @@ async def create_incident(
     return _to_response(incident)
 
 
-@router.get("/", response_model=List[IncidentResponse])
+@router.get("/")
 async def list_incidents(
     status: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
     tenant_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    sort_by: Optional[str] = Query("created_at"),
+    sort_dir: Optional[str] = Query("desc"),
+    search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
-    """List incidents with optional filters."""
-    query = select(IncidentORM)
+    """List incidents with optional filters, pagination, and sorting."""
     # Finding S-1 Fix: Mandatory tenant filtering
     # Admins can specify any tenant_id via query param; non-admins are locked to their own tenant
     if current_user.role == "admin":
@@ -218,12 +222,68 @@ async def list_incidents(
             status_code=403, detail="Tenant ID required for non-admin users."
         )
 
+    # Build base filter conditions
+    conditions = []
     if tid:
-        query = query.where(IncidentORM.tenant_id == tid)
+        conditions.append(IncidentORM.tenant_id == tid)
+    if status:
+        conditions.append(IncidentORM.status == status)
+    if severity:
+        conditions.append(IncidentORM.severity == severity)
+    if search:
+        conditions.append(IncidentORM.title.ilike(f"%{search}%"))
 
-    result = await db.execute(query.order_by(IncidentORM.created_at.desc()).limit(500))
+    # Count query — use raw SQL to match data-health endpoint behaviour
+    # (ORM func.count produced incorrect results; see Bug 5 investigation)
+    count_parts = ["SELECT COUNT(*) FROM incidents WHERE 1=1"]
+    count_params: dict = {}
+    if tid:
+        count_parts.append("AND tenant_id = :tid")
+        count_params["tid"] = tid
+    if status:
+        count_parts.append("AND status = :status")
+        count_params["status"] = status
+    if severity:
+        count_parts.append("AND severity = :severity")
+        count_params["severity"] = severity
+    if search:
+        count_parts.append("AND title ILIKE :search")
+        count_params["search"] = f"%{search}%"
+    count_result = await db.execute(text(" ".join(count_parts)), count_params)
+    total = count_result.scalar() or 0
+
+    # Data query with sorting
+    allowed_sort_columns = {
+        "created_at": IncidentORM.created_at,
+        "severity": IncidentORM.severity,
+        "status": IncidentORM.status,
+        "priority": IncidentORM.priority,
+        "title": IncidentORM.title,
+        "impact": IncidentORM.impact,
+        "urgency": IncidentORM.urgency,
+    }
+    sort_column = allowed_sort_columns.get(sort_by or "created_at", IncidentORM.created_at)
+    if sort_dir == "asc":
+        order = sort_column.asc()
+    else:
+        order = sort_column.desc()
+
+    query = select(IncidentORM)
+    if conditions:
+        query = query.where(and_(*conditions))
+
+    offset = (page - 1) * page_size
+    query = query.order_by(order).offset(offset).limit(page_size)
+
+    result = await db.execute(query)
     incidents = result.scalars().all()
-    return [_to_response(i) for i in incidents]
+
+    return {
+        "incidents": [_to_response(i) for i in incidents],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)

@@ -3,9 +3,14 @@
   "configurations": [
     {
       "name": "frontend",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd frontend && NEXT_PUBLIC_API_BASE_URL=https://pedk.ai npx next dev -p 3001"],
-      "port": 3001
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": false,
+      "env": {
+        "NEXT_PUBLIC_API_BASE_URL": "http://localhost:8000"
+      },
+      "cwd": "frontend"
     }
   ]
 }

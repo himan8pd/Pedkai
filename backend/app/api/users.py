@@ -24,11 +24,15 @@ from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from pydantic import BaseModel, field_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_db
+from backend.app.core.logging import get_logger
 from backend.app.core.security import USERS_MANAGE, Role, User, get_current_user
 from backend.app.services import auth_service
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -165,6 +169,20 @@ async def create_user(
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        )
+    except IntegrityError as exc:
+        await db.rollback()
+        logger.error(f"IntegrityError creating user '{body.username}': {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Could not create user '{body.username}'. A user with this name may already exist, or the target tenant is invalid.",
+        )
+    except Exception as exc:
+        await db.rollback()
+        logger.error(f"Unexpected error creating user '{body.username}': {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {type(exc).__name__}",
         )
 
     return UserInTenantResponse(

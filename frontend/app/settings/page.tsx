@@ -9,11 +9,6 @@ interface DetectionThresholds {
   anomalyZScore: number;
 }
 
-interface Integrations {
-  serviceNowUrl: string;
-  datagerryUrl: string;
-}
-
 interface EvaluationSettings {
   benchmarkThreshold: number;
   lookbackDays: number;
@@ -37,7 +32,7 @@ function SectionSaveButton({
           : "bg-cyan-400 hover:bg-cyan-300 text-gray-950",
       )}
     >
-      {saved ? "Saved" : "Save"}
+      {saved ? "Applied (session)" : "Apply"}
     </button>
   );
 }
@@ -74,24 +69,20 @@ function InputRow({
   );
 }
 
-function ConnectionBadge({ connected }: { connected: boolean }) {
+function ReadOnlyField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border",
-        connected
-          ? "bg-emerald-900/50 text-emerald-300 border-emerald-700/60"
-          : "bg-red-900/50 text-red-300 border-red-700/60",
-      )}
-    >
-      <span
-        className={cn(
-          "w-1.5 h-1.5 rounded-full",
-          connected ? "bg-emerald-400" : "bg-red-400",
-        )}
-      />
-      {connected ? "Connected" : "Disconnected"}
-    </span>
+    <div className="space-y-1.5">
+      <p className="text-sm text-white font-medium">{label}</p>
+      <div className="w-full px-4 py-2.5 rounded-lg bg-[#06203b]/60 border border-cyan-900/30 text-white/60 text-sm select-all">
+        {value || "Not Configured"}
+      </div>
+    </div>
   );
 }
 
@@ -103,12 +94,6 @@ export default function SettingsPage() {
   });
   const [detectionSaved, setDetectionSaved] = useState(false);
 
-  const [integrations, setIntegrations] = useState<Integrations>({
-    serviceNowUrl: "https://instance.service-now.com",
-    datagerryUrl: "http://localhost:4000",
-  });
-  const [integrationsSaved, setIntegrationsSaved] = useState(false);
-
   const [evaluation, setEvaluation] = useState<EvaluationSettings>({
     benchmarkThreshold: 0.9,
     lookbackDays: 30,
@@ -118,11 +103,6 @@ export default function SettingsPage() {
   function saveDetection() {
     setDetectionSaved(true);
     setTimeout(() => setDetectionSaved(false), 2000);
-  }
-
-  function saveIntegrations() {
-    setIntegrationsSaved(true);
-    setTimeout(() => setIntegrationsSaved(false), 2000);
   }
 
   function saveEvaluation() {
@@ -136,8 +116,14 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-3xl font-bold text-white mb-1">System Settings</h1>
         <p className="text-white/80">
-          Configure detection thresholds, integrations, and evaluation parameters.
+          Detection thresholds, integrations, and evaluation parameters.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-xs text-amber-300/80">
+        Settings shown below reflect deployment defaults. Changes are applied to
+        the current session only and will reset on page reload. Backend persistence
+        is planned for a future release.
       </div>
 
       {/* Detection Thresholds */}
@@ -168,7 +154,7 @@ export default function SettingsPage() {
           />
           <InputRow
             label="Decay Lambda"
-            hint="Exponential decay rate (0.01 – 0.5)"
+            hint="Exponential decay rate (0.01 -- 0.5)"
             value={detection.decayLambda}
             step="0.001"
             onChange={(v) =>
@@ -187,55 +173,22 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Integrations */}
+      {/* Integrations (read-only) */}
       <div className="bg-[#0a2d4a] border border-cyan-900/40 rounded-lg p-6 space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h2 className="text-base font-bold text-white">Integrations</h2>
-            <p className="text-xs text-white/50 mt-0.5">
-              External system endpoints for ITSM and CMDB.
-            </p>
-          </div>
-          <SectionSaveButton saved={integrationsSaved} onClick={saveIntegrations} />
+        <div>
+          <h2 className="text-base font-bold text-white">Integrations</h2>
+          <p className="text-xs text-white/50 mt-0.5">
+            External system endpoints for ITSM and CMDB.
+          </p>
         </div>
         <div className="border-t border-cyan-900/40 pt-4 space-y-5">
-          {/* ServiceNow */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <p className="text-sm text-white font-medium flex-1">
-                ServiceNow URL
-              </p>
-              <ConnectionBadge connected={integrations.serviceNowUrl.startsWith("https://")} />
-            </div>
-            <input
-              type="text"
-              value={integrations.serviceNowUrl}
-              onChange={(e) =>
-                setIntegrations((p) => ({ ...p, serviceNowUrl: e.target.value }))
-              }
-              placeholder="https://instance.service-now.com"
-              className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-cyan-900/40 text-white placeholder-white/30 text-sm focus:outline-none focus:border-cyan-400/60"
-            />
-          </div>
-          {/* Datagerry */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <p className="text-sm text-white font-medium flex-1">
-                Datagerry URL
-              </p>
-              <ConnectionBadge connected={false} />
-            </div>
-            <input
-              type="text"
-              value={integrations.datagerryUrl}
-              onChange={(e) =>
-                setIntegrations((p) => ({ ...p, datagerryUrl: e.target.value }))
-              }
-              placeholder="http://localhost:4000"
-              className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-cyan-900/40 text-white placeholder-white/30 text-sm focus:outline-none focus:border-cyan-400/60"
-            />
-          </div>
+          <ReadOnlyField label="ServiceNow URL" value="Not Configured" />
+          <ReadOnlyField label="Datagerry URL" value="Not Configured" />
         </div>
+        <p className="text-xs text-white/60 bg-[#06203b]/50 border border-cyan-900/30 rounded-lg px-4 py-3">
+          Integration endpoints are configured in the deployment environment.
+          Contact your administrator to modify.
+        </p>
       </div>
 
       {/* Evaluation */}
@@ -252,7 +205,7 @@ export default function SettingsPage() {
         <div className="border-t border-cyan-900/40 pt-4 space-y-4">
           <InputRow
             label="Benchmark Threshold"
-            hint="Minimum acceptable composite score (0.0 – 1.0)"
+            hint="Minimum acceptable composite score (0.0 -- 1.0)"
             value={evaluation.benchmarkThreshold}
             step="0.01"
             onChange={(v) =>

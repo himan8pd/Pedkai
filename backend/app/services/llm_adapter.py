@@ -89,15 +89,23 @@ class GeminiAdapter(LLMAdapter):
 
 
 class OnPremAdapter(LLMAdapter):
-    """Adapter for on-premises LLM (vLLM, Ollama, TGI)."""
+    """Adapter for on-premises LLM (vLLM, Ollama, TGI).
+
+    Uses OpenAI-compatible ``/v1/chat/completions`` endpoint which is
+    supported by Ollama (>=0.1.24), vLLM, and TGI.  Embedding uses a
+    separately configurable model via ``PEDKAI_ONPREM_EMBED_MODEL``.
+    """
 
     async def embed(self, text: str) -> list[float]:
+        import os
         import httpx
+
+        embed_model = os.getenv("PEDKAI_ONPREM_EMBED_MODEL", self.config.model_name)
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.config.endpoint_url}/v1/embeddings",
                 json={
-                    "model": self.config.model_name,
+                    "model": embed_model,
                     "input": text,
                 },
                 timeout=30.0,
@@ -108,24 +116,29 @@ class OnPremAdapter(LLMAdapter):
 
     async def generate(self, prompt: str, **kwargs) -> LLMResponse:
         import httpx
+
+        max_tokens = kwargs.get("max_tokens", self.config.max_tokens)
+        temperature = kwargs.get("temperature", self.config.temperature)
+
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f"{self.config.endpoint_url}/v1/completions",
+                f"{self.config.endpoint_url}/v1/chat/completions",
                 json={
                     "model": self.config.model_name,
-                    "prompt": prompt,
-                    "max_tokens": self.config.max_tokens,
-                    "temperature": self.config.temperature,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
                 },
-                timeout=60.0,
+                timeout=120.0,
             )
             resp.raise_for_status()
             data = resp.json()
         return LLMResponse(
-            text=data.get("choices", [{}])[0].get("text", ""),
+            text=data.get("choices", [{}])[0].get("message", {}).get("content", ""),
             model_version=self.model_version,
             prompt_hash=self.compute_prompt_hash(prompt),
             timestamp=datetime.now(timezone.utc),
+            token_count=data.get("usage", {}).get("total_tokens"),
             provider="on-prem",
         )
 
@@ -151,7 +164,7 @@ def get_adapter(provider: Optional[str] = None) -> LLMAdapter:
     elif effective_provider == "on-prem":
         return OnPremAdapter(LLMAdapterConfig(
             provider="on-prem",
-            model_name=os.getenv("PEDKAI_ONPREM_MODEL", "llama3"),
+            model_name=os.getenv("PEDKAI_ONPREM_MODEL", "tslam-mini-2b"),
             endpoint_url=os.getenv("PEDKAI_ONPREM_URL", "http://localhost:11434"),
         ))
     else:

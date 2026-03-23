@@ -50,11 +50,9 @@ export default function SleepingCellsPage() {
         const data = await res.json();
         setCells(data.cells ?? []);
         if (data.last_run) setLastRun(data.last_run);
-      } else if (res.status === 404) {
-        // Endpoint not yet implemented — show empty state
-        setCells([]);
       } else {
-        throw new Error(`HTTP ${res.status}`);
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail || `HTTP ${res.status}`);
       }
     } catch (err: any) {
       setError(err.message || "Failed to load sleeping cell data");
@@ -83,9 +81,6 @@ export default function SleepingCellsPage() {
         setLastRun(new Date().toISOString());
         // Refresh data after detection
         await fetchCells();
-      } else if (res.status === 404) {
-        // Endpoint not yet implemented
-        setError("Sleeping cell detection is not yet available. Backend endpoint pending implementation.");
       } else {
         const body = await res.json().catch(() => null);
         setError(body?.detail || `Detection failed (HTTP ${res.status})`);

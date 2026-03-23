@@ -14,6 +14,7 @@ import {
   BarChart3,
   Target,
   Zap,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
@@ -67,6 +68,7 @@ function KpiCard({
   icon,
   trend,
   color = "blue",
+  calculation,
 }: {
   label: string;
   value: string;
@@ -74,7 +76,9 @@ function KpiCard({
   icon: React.ReactNode;
   trend?: "up" | "down" | null;
   color?: string;
+  calculation?: string;
 }) {
+  const [showCalc, setShowCalc] = React.useState(false);
   const colorMap: Record<string, string> = {
     blue: "from-cyan-500/20 to-cyan-600/5 border-cyan-500/30",
     green: "from-emerald-500/20 to-emerald-600/5 border-emerald-500/30",
@@ -86,7 +90,7 @@ function KpiCard({
   return (
     <div
       className={cn(
-        "rounded-xl border p-5 bg-gradient-to-br transition-all hover:scale-[1.02]",
+        "rounded-xl border p-5 bg-gradient-to-br transition-all hover:scale-[1.02] relative",
         colorMap[color] || colorMap.blue,
       )}
     >
@@ -94,7 +98,18 @@ function KpiCard({
         <h3 className="text-sm font-semibold text-white/55 uppercase tracking-wider">
           {label}
         </h3>
-        <div className="text-white/55">{icon}</div>
+        <div className="flex items-center gap-1.5">
+          {calculation && (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowCalc(!showCalc); }}
+              className="text-white/30 hover:text-white/70 transition-colors"
+              title="How this is calculated"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <div className="text-white/55">{icon}</div>
+        </div>
       </div>
       <p className="text-3xl font-bold text-white">{value}</p>
       {subtitle && (
@@ -106,6 +121,11 @@ function KpiCard({
             <TrendingDown className="w-3.5 h-3.5 text-red-400" />
           )}
           <p className="text-sm text-white/55">{subtitle}</p>
+        </div>
+      )}
+      {showCalc && calculation && (
+        <div className="mt-3 pt-3 border-t border-white/10 text-xs text-white/60 leading-relaxed">
+          {calculation}
         </div>
       )}
     </div>
@@ -203,6 +223,7 @@ export default function ScorecardPage() {
             icon={<Clock className="w-5 h-5" />}
             trend={scorecard?.pedkai_zone_mttr_minutes != null ? "down" : null}
             color="cyan"
+            calculation="Average (closed_at - created_at) in minutes across all closed incidents in the Pedkai-managed zone during the reporting period."
           />
         </Link>
         <Link href="/incidents" className="block">
@@ -212,6 +233,7 @@ export default function ScorecardPage() {
             subtitle="Active monitoring window (30d)"
             icon={<AlertCircle className="w-5 h-5" />}
             color="amber"
+            calculation="Total incidents created from correlated alarms within the 30-day monitoring window. Alarms are grouped by temporal proximity and shared topology."
           />
         </Link>
         <Link href="#detections" className="block">
@@ -221,6 +243,7 @@ export default function ScorecardPage() {
             subtitle="KPI anomalies flagged"
             icon={<Activity className="w-5 h-5" />}
             color="purple"
+            calculation="Count of KPI metrics that deviated beyond the configured z-score threshold compared to their 7-day rolling baseline."
           />
         </Link>
         <Link href="/incidents" className="block">
@@ -239,6 +262,7 @@ export default function ScorecardPage() {
             icon={<Target className="w-5 h-5" />}
             trend={valueCapture?.revenue_protected ? "up" : null}
             color="green"
+            calculation="Sum of (MTTR_reduction x revenue_per_minute) for each closed incident, where MTTR reduction is estimated against the non-Pedkai baseline zone."
           />
         </Link>
         <Link href="/incidents" className="block">
@@ -248,6 +272,7 @@ export default function ScorecardPage() {
             subtitle="Proactive shield interventions"
             icon={<Shield className="w-5 h-5" />}
             color="blue"
+            calculation="Count of autonomous shield actions that resolved drift detections before they escalated to customer-impacting incidents."
           />
         </Link>
         <Link href="/incidents" className="block">
@@ -261,12 +286,13 @@ export default function ScorecardPage() {
             subtitle="From automated resolution"
             icon={<Zap className="w-5 h-5" />}
             color="green"
+            calculation="Sum of time saved per incident: (baseline_MTTR - actual_MTTR) across all incidents resolved with autonomous assistance."
           />
         </Link>
       </div>
 
       {/* Baseline Status */}
-      {scorecard?.baseline_status === "pending_shadow_mode_collection" && (
+      {scorecard && (!scorecard.baseline_status || scorecard.baseline_status === "pending_shadow_mode_collection") && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
           <div className="flex items-start gap-3">
             <BarChart3 className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
@@ -275,7 +301,7 @@ export default function ScorecardPage() {
                 Counterfactual Baseline Pending
               </h3>
               <p className="text-white/80 text-sm mt-1">
-                {scorecard.baseline_note}
+                {scorecard.baseline_note ?? "Counterfactual baseline data has not yet been collected. MTTR comparisons against a non-Pedkai zone require a parallel observation period."}
               </p>
               <p className="text-white/60 text-xs mt-2">
                 Non-Pedkai zone comparison will be available after 30-day

@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { ZoomIn, ZoomOut, Maximize2, Search, ArrowRight, Layers, Network } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
+import { useTheme } from "@/app/context/ThemeContext";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -58,6 +59,8 @@ const STATUS_RING: Record<string, string> = {
 
 export default function TopologyPage() {
   const { tenantId, token } = useAuth();
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const searchParams = useSearchParams();
 
   // Search state
@@ -74,7 +77,7 @@ export default function TopologyPage() {
   const [error, setError] = useState<string | null>(null);
   
   // Layer filter state
-  const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [showInferred, setShowInferred] = useState(true);
   // Shadow topology
   const [shadowEntities, setShadowEntities] = useState<TopologyEntity[]>([]);
@@ -309,14 +312,18 @@ export default function TopologyPage() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
 
+    // Fill canvas background based on theme
+    ctx.fillStyle = isLight ? "#f0f4f8" : "#06203b";
+    ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
     ctx.save();
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
 
     // Draw shadow (inferred) edges — dashed lines
     if (showInferred) {
-      ctx.strokeStyle = "rgba(139,92,246,0.4)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = isLight ? "rgba(139,92,246,0.5)" : "rgba(139,92,246,0.6)";
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
       shadowRelationships.forEach((rel) => {
         const from = positions[rel.source_entity_id];
@@ -331,10 +338,18 @@ export default function TopologyPage() {
       ctx.setLineDash([]);
     }
 
-    // Draw edges
-    ctx.strokeStyle = "rgba(100,116,139,0.3)";
-    ctx.lineWidth = 0.5;
+    // Build visible node set based on hiddenTypes filter
+    const entMap = new Map(entities.map((e) => [e.id, e]));
+    const visibleNodes = new Set<string>();
+    entities.forEach((e) => {
+      if (!hiddenTypes.has(e.entity_type)) visibleNodes.add(e.id);
+    });
+
+    // Draw edges (only between visible nodes)
+    ctx.strokeStyle = isLight ? "rgba(15,23,42,0.2)" : "rgba(0,212,255,0.45)";
+    ctx.lineWidth = 1.5;
     relationships.forEach((rel) => {
+      if (!visibleNodes.has(rel.source_entity_id) || !visibleNodes.has(rel.target_entity_id)) return;
       const from = positions[rel.source_entity_id];
       const to = positions[rel.target_entity_id];
       if (from && to) {
@@ -345,11 +360,10 @@ export default function TopologyPage() {
       }
     });
 
-    // Draw nodes
-    const entMap = new Map(entities.map((e) => [e.id, e]));
+    // Draw nodes (only visible types)
     Object.entries(positions).forEach(([id, pos]) => {
       const ent = entMap.get(id);
-      if (!ent) return;
+      if (!ent || !visibleNodes.has(id)) return;
       
       const isSeed = id === seedId;
       const isSelected = selectedEntity?.id === id;
@@ -371,14 +385,14 @@ export default function TopologyPage() {
       ctx.fill();
 
       if (isSelected || isSeed) {
-        ctx.strokeStyle = isSeed ? "#fbbf24" : "#fff"; // Amber outline for seed
+        ctx.strokeStyle = isSeed ? "#fbbf24" : (isLight ? "#0f172a" : "#fff"); // Amber outline for seed
         ctx.lineWidth = isSeed ? 3 : 2;
         ctx.stroke();
       }
 
       // Label (only at sufficient zoom or if seed/selected)
       if (zoom >= 0.5 || isSelected || isSeed) {
-        ctx.fillStyle = isSelected || isSeed ? "#fff" : "#cbd5e1";
+        ctx.fillStyle = isSelected || isSeed ? (isLight ? "#0f172a" : "#fff") : (isLight ? "#334155" : "#cbd5e1");
         const fontSize = Math.max(8, Math.min(isSeed ? 12 : 11, 9 / zoom));
         ctx.font = `${isSeed || isSelected ? 'bold ' : ''}${fontSize}px sans-serif`;
         ctx.textAlign = "center";
@@ -388,7 +402,7 @@ export default function TopologyPage() {
     });
 
     ctx.restore();
-  }, [positions, relationships, entities, zoom, pan, selectedEntity, seedId, shadowRelationships, showInferred]);
+  }, [positions, relationships, entities, zoom, pan, selectedEntity, seedId, shadowRelationships, showInferred, hiddenTypes, isLight]);
 
   // 5. Canvas Interactions
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -610,22 +624,15 @@ export default function TopologyPage() {
                     <label key={t} className="flex items-center gap-2 text-[11px] text-white/80 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={typeFilter.size === 0 || typeFilter.has(t)}
+                        checked={!hiddenTypes.has(t)}
                         onChange={(e) => {
-                          setTypeFilter(prev => {
+                          const isChecked = e.target.checked;
+                          setHiddenTypes(prev => {
                             const next = new Set(prev);
-                            if (e.target.checked) {
+                            if (isChecked) {
                               next.delete(t);
-                              // If all are checked, clear filter
-                              if (next.size === 0 || [...new Set(entities.map(e => e.entity_type))].every(et => !next.has(et) || et === t)) {
-                                return new Set();
-                              }
                             } else {
-                              // If clearing first time, add ALL types first then remove this one
-                              if (next.size === 0) {
-                                [...new Set(entities.map(e => e.entity_type))].forEach(et => next.add(et));
-                              }
-                              next.delete(t);
+                              next.add(t);
                             }
                             return next;
                           });

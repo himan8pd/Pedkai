@@ -43,7 +43,7 @@ class UserTenantAccessORM(Base):
     role = Column(String(50), nullable=True)
     # Audit: which user granted this access (NULL for seed / legacy rows).
     granted_by = Column(String(36), nullable=True)
-    granted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    granted_at = Column(DateTime, default=lambda: datetime.utcnow())
 
     __table_args__ = (UniqueConstraint("user_id", "tenant_id", name="uq_user_tenant"),)
 

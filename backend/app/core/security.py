@@ -189,6 +189,27 @@ class TokenData(BaseModel):
     tenant_id: Optional[str] = None
 
 
+def _resolve_sub_claim(payload: dict) -> tuple:
+    """Resolve ``sub`` claim from JWT payload.
+
+    New tokens set ``sub`` = user_id (UUID) with ``username`` as a
+    separate claim.  Legacy tokens set ``sub`` = username with
+    ``user_id`` as a separate claim.  This helper detects the format
+    and returns ``(user_id, username)`` in both cases.
+    """
+    sub = payload.get("sub", "")
+    # UUIDs are 36 chars with 4 hyphens (e.g. "550e8400-e29b-41d4-a716-446655440000")
+    if sub and "-" in sub and len(sub) == 36:
+        # New format: sub = user_id
+        user_id = sub
+        username = payload.get("username", sub)
+    else:
+        # Legacy format: sub = username
+        username = sub
+        user_id = payload.get("user_id")
+    return user_id, username
+
+
 def decode_token_string(token: str) -> User:
     """Decode a JWT token string directly (for SSE/WebSocket endpoints).
 
@@ -197,10 +218,9 @@ def decode_token_string(token: str) -> User:
     """
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        username: str = payload.get("sub")
-        if username is None:
+        user_id, username = _resolve_sub_claim(payload)
+        if not username and not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
-        user_id: str = payload.get("user_id")
         tenant_id = payload.get("tenant_id")
         role = payload.get("role", Role.VIEWER)
         scopes = payload.get("scopes", ROLE_SCOPES.get(role, []))
@@ -237,11 +257,10 @@ async def get_current_user(
         payload = jwt.decode(
             token, settings.secret_key, algorithms=[settings.algorithm]
         )
-        username: str = payload.get("sub")
-        if username is None:
+        user_id, username = _resolve_sub_claim(payload)
+        if not username and not user_id:
             raise credentials_exception
 
-        user_id: Optional[str] = payload.get("user_id")
         role: str = payload.get("role", Role.VIEWER)
         tenant_id: Optional[str] = payload.get("tenant_id")
         # Assign scopes based on role if not present in token

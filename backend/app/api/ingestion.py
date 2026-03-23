@@ -40,7 +40,13 @@ async def run_ingestion_subprocess(params: IngestionParams, tenant_id: str):
     _ingestion_progress = 0
     _ingestion_logs.clear()
 
+    import os
+    data_store_root = os.environ.get("PEDKAI_DATA_STORE_ROOT", "")
+    output_dir = str(Path(data_store_root) / tenant_id / "output") if data_store_root else None
+
     cmd = [sys.executable, "-m", "backend.app.scripts.load_tenant", "--tenant-id", tenant_id]
+    if output_dir:
+        cmd.extend(["--output-dir", output_dir])
     if params.dry_run:
         cmd.append("--dry-run")
     # skip_kpi_sample: kpi-sample-hours defaults to 0 (skip) in load_tenant, so no flag needed.
@@ -50,7 +56,6 @@ async def run_ingestion_subprocess(params: IngestionParams, tenant_id: str):
 
     await _publish("ingestion_started", {"cmd": cmd})
 
-    import os
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 

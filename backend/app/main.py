@@ -9,6 +9,11 @@ FastAPI application entry point.
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+# Load .env so os.getenv() works for modules that read env vars directly
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -331,6 +336,16 @@ app.include_router(
     shadow_topology.router,
     prefix=f"{settings.api_prefix}/shadow-topology",
     tags=["Shadow Topology"],
+    dependencies=[Depends(oauth2_scheme)],
+)
+
+# Sleeping Cells API (P2.4)
+from backend.app.api import sleeping_cells
+
+app.include_router(
+    sleeping_cells.router,
+    prefix=f"{settings.api_prefix}/sleeping-cells",
+    tags=["Sleeping Cells"],
     dependencies=[Depends(oauth2_scheme)],
 )
 
