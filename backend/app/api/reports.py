@@ -1388,17 +1388,66 @@ async def get_enriched_profile(
             ],
         }
 
-    # Augment rule-based enrichment with LLM analysis (graceful fallback)
+    # Kick off LLM analysis in the background (non-blocking)
     if profile.get("enrichment"):
-        from backend.app.services.enrichment_llm import augment_enrichment
-
-        ai_analysis = await augment_enrichment(
-            profile["enrichment"], div_type, target_id
-        )
-        if ai_analysis:
-            profile["enrichment"]["ai_analysis"] = ai_analysis
+        _enqueue_ai_analysis(result_id, profile["enrichment"], div_type, target_id)
 
     return profile
+
+
+# ---------------------------------------------------------------------------
+# Async AI Analysis — background job pattern
+# ---------------------------------------------------------------------------
+
+_ai_analysis_cache: dict = {}  # result_id -> {"status": "pending"|"completed"|"failed", "data": ...}
+
+
+def _enqueue_ai_analysis(result_id: str, enrichment: dict, div_type: str, target_id: str) -> None:
+    """Start AI analysis in background if not already running/completed."""
+    if result_id in _ai_analysis_cache:
+        return  # Already queued or completed
+    _ai_analysis_cache[result_id] = {"status": "pending", "data": None}
+    import threading
+    t = threading.Thread(
+        target=_run_ai_analysis_sync,
+        args=(result_id, enrichment, div_type, target_id),
+        daemon=True,
+    )
+    t.start()
+
+
+def _run_ai_analysis_sync(result_id: str, enrichment: dict, div_type: str, target_id: str) -> None:
+    """Run LLM inference in a background thread."""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        result = loop.run_until_complete(_run_ai_analysis(result_id, enrichment, div_type, target_id))
+    finally:
+        loop.close()
+
+
+async def _run_ai_analysis(result_id: str, enrichment: dict, div_type: str, target_id: str) -> None:
+    from backend.app.services.enrichment_llm import augment_enrichment
+    try:
+        ai_analysis = await augment_enrichment(enrichment, div_type, target_id)
+        if ai_analysis:
+            _ai_analysis_cache[result_id] = {"status": "completed", "data": ai_analysis}
+        else:
+            _ai_analysis_cache[result_id] = {"status": "failed", "data": None}
+    except Exception:
+        _ai_analysis_cache[result_id] = {"status": "failed", "data": None}
+
+
+@router.get("/divergence/ai-analysis/{result_id}")
+async def get_ai_analysis(
+    result_id: str,
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
+) -> dict:
+    """Poll for AI analysis status. Returns status and data when complete."""
+    entry = _ai_analysis_cache.get(result_id)
+    if not entry:
+        return {"status": "not_started", "data": None}
+    return entry
 
 
 # -- TASK-301: File-based Divergence Analysis endpoints --

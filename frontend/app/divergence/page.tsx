@@ -421,11 +421,48 @@ export default function DivergencePage() {
           token,
         );
         setEnrichedProfiles((prev) => ({ ...prev, [resultId]: data }));
+        // Start polling for AI analysis in background
+        pollAiAnalysis(resultId);
       } catch (e) {
         console.error("Enriched profile fetch failed:", e);
         setEnrichedProfiles((prev) => ({ ...prev, [resultId]: { error: true } }));
       } finally {
         setLoadingEnriched(null);
+      }
+    },
+    [token],
+  );
+
+  const pollAiAnalysis = useCallback(
+    async (resultId: string) => {
+      if (!token) return;
+      const maxAttempts = 60; // 5 minutes at 5s intervals
+      for (let i = 0; i < maxAttempts; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          const res = await apiFetch(
+            `/api/v1/reports/divergence/ai-analysis/${encodeURIComponent(resultId)}`,
+            token,
+          );
+          if (res.status === "completed" && res.data) {
+            setEnrichedProfiles((prev) => {
+              const existing = prev[resultId];
+              if (!existing || !existing.enrichment) return prev;
+              return {
+                ...prev,
+                [resultId]: {
+                  ...existing,
+                  enrichment: { ...existing.enrichment, ai_analysis: res.data },
+                },
+              };
+            });
+            return;
+          }
+          if (res.status === "failed") return;
+          // status is "pending" or "not_started" — keep polling
+        } catch {
+          return; // Network error, stop polling
+        }
       }
     },
     [token],
@@ -1729,7 +1766,7 @@ export default function DivergencePage() {
                                             )}
 
                                             {/* AI Analysis (LLM-generated) */}
-                                            {enr.ai_analysis && (
+                                            {enr.ai_analysis ? (
                                               <div className="mt-3 p-3 rounded-lg bg-[#06203b] border border-cyan-900/40">
                                                 <div className="flex items-center gap-2 mb-2">
                                                   <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
@@ -1739,6 +1776,13 @@ export default function DivergencePage() {
                                                 <p className="text-white/80 text-xs whitespace-pre-wrap leading-relaxed">
                                                   {enr.ai_analysis.summary}
                                                 </p>
+                                              </div>
+                                            ) : (
+                                              <div className="mt-3 p-3 rounded-lg bg-[#06203b]/50 border border-cyan-900/20">
+                                                <div className="flex items-center gap-2">
+                                                  <Sparkles className="w-3.5 h-3.5 text-violet-400 animate-pulse" />
+                                                  <span className="text-violet-300 text-[11px] font-medium">AI analysis in progress...</span>
+                                                </div>
                                               </div>
                                             )}
                                           </div>
