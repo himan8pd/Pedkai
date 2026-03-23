@@ -53,7 +53,7 @@ def _make_job(tenant_id: str) -> dict:
 
 
 async def _run_reconciliation_job(job_id: str, tenant_id: str) -> None:
-    """Background task: run reconciliation and update job state when done."""
+    """Background task: run reconciliation, then batch pre-compute AI analysis."""
     try:
         async with async_session_maker() as db, metrics_session_maker() as metrics_db:
             engine = ReconciliationEngine(db, metrics_db)
@@ -62,6 +62,27 @@ async def _run_reconciliation_job(job_id: str, tenant_id: str) -> None:
         _jobs[job_id]["result"] = result
         _jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(f"Reconciliation job {job_id} complete for tenant '{tenant_id}'")
+
+        # Batch pre-compute AI analysis for all divergences (non-blocking)
+        run_id = result.get("run_id")
+        if run_id:
+            try:
+                from backend.app.services.batch_ai_precompute import (
+                    precompute_ai_for_run, backfill_ai_for_tenant,
+                )
+                # Pass 1: priority — top-N for every UI view
+                logger.info(f"Starting batch AI pre-compute for run {run_id}")
+                async with async_session_maker() as db2, metrics_session_maker() as mdb2:
+                    ai_summary = await precompute_ai_for_run(db2, mdb2, tenant_id, run_id)
+                logger.info(f"Batch AI priority pass done for run {run_id}: {ai_summary}")
+
+                # Pass 2: backfill — grow coverage incrementally
+                logger.info(f"Starting backfill pass for tenant {tenant_id}")
+                async with async_session_maker() as db3, metrics_session_maker() as mdb3:
+                    bf_summary = await backfill_ai_for_tenant(db3, mdb3, tenant_id)
+                logger.info(f"Batch AI backfill done for tenant {tenant_id}: {bf_summary}")
+            except Exception as ai_exc:
+                logger.warning(f"Batch AI pre-compute failed (non-fatal): {ai_exc}", exc_info=True)
     except Exception as exc:
         _jobs[job_id]["status"] = "failed"
         _jobs[job_id]["error"] = str(exc)
@@ -142,6 +163,38 @@ async def get_reconciliation_job(
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     return job
+
+
+# ---------------------------------------------------------------------------
+# POST /divergence/backfill-ai  — trigger incremental AI coverage growth
+# ---------------------------------------------------------------------------
+
+
+@router.post("/divergence/backfill-ai")
+async def trigger_ai_backfill(
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: User = Security(get_current_user, scopes=["topology:read"]),
+    budget: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> dict:
+    """Trigger an incremental backfill of AI analysis for items not yet covered.
+
+    Processes the next `budget` items (confidence DESC) that lack AI analysis.
+    Can be called by a daily cron or manually.  Runs in the background.
+    """
+    tenant_id = _tenant_from_jwt(current_user)
+
+    async def _backfill_task(tid: str, b: int) -> None:
+        try:
+            from backend.app.services.batch_ai_precompute import backfill_ai_for_tenant
+            async with async_session_maker() as db2, metrics_session_maker() as mdb2:
+                result = await backfill_ai_for_tenant(db2, mdb2, tid, budget=b)
+            logger.info(f"Backfill task complete for tenant {tid}: {result}")
+        except Exception as exc:
+            logger.warning(f"Backfill task failed for tenant {tid}: {exc}", exc_info=True)
+
+    background_tasks.add_task(_backfill_task, tenant_id, budget)
+    return {"status": "started", "tenant_id": tenant_id, "budget": budget}
 
 
 # ---------------------------------------------------------------------------
@@ -1388,8 +1441,16 @@ async def get_enriched_profile(
             ],
         }
 
-    # Kick off LLM analysis in the background (non-blocking)
-    if profile.get("enrichment"):
+    # Check for pre-computed AI analysis in DB first
+    ai_row = await db.execute(
+        text("SELECT ai_analysis FROM reconciliation_results WHERE result_id = :rid"),
+        {"rid": result_id},
+    )
+    precomputed = ai_row.scalar()
+    if precomputed and profile.get("enrichment"):
+        profile["enrichment"]["ai_analysis"] = precomputed
+    elif profile.get("enrichment"):
+        # No pre-computed analysis — fall back to on-demand LLM (background)
         _enqueue_ai_analysis(result_id, profile["enrichment"], div_type, target_id)
 
     return profile
@@ -1441,9 +1502,22 @@ async def _run_ai_analysis(result_id: str, enrichment: dict, div_type: str, targ
 @router.get("/divergence/ai-analysis/{result_id}")
 async def get_ai_analysis(
     result_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
     current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ) -> dict:
-    """Poll for AI analysis status. Returns status and data when complete."""
+    """Poll for AI analysis status. Checks DB (pre-computed) first, then in-memory cache."""
+    _tenant_from_jwt(current_user)
+
+    # Check DB for pre-computed analysis
+    row = await db.execute(
+        text("SELECT ai_analysis FROM reconciliation_results WHERE result_id = :rid"),
+        {"rid": result_id},
+    )
+    db_result = row.scalar()
+    if db_result:
+        return {"status": "completed", "data": db_result}
+
+    # Fall back to in-memory cache (on-demand analysis)
     entry = _ai_analysis_cache.get(result_id)
     if not entry:
         return {"status": "not_started", "data": None}
