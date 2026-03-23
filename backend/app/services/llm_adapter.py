@@ -129,7 +129,7 @@ class OnPremAdapter(LLMAdapter):
                     "max_tokens": max_tokens,
                     "temperature": temperature,
                 },
-                timeout=120.0,
+                timeout=600.0,
             )
             resp.raise_for_status()
             data = resp.json()

@@ -157,5 +157,5 @@ async def augment_enrichment(
             "generated_at": response.timestamp.isoformat(),
         }
     except Exception as e:
-        logger.warning("LLM enrichment failed for %s: %s", target_id, e)
+        logger.warning("LLM enrichment failed for %s: %s: %s", target_id, type(e).__name__, e)
         return None
