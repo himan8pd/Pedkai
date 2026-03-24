@@ -4,14 +4,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, FileText, CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 interface IngestionControlPanelProps {
     onIngestionComplete?: () => void;
 }
 
 export default function IngestionControlPanel({ onIngestionComplete }: IngestionControlPanelProps) {
-    const { tenantId, token } = useAuth();
+    const { tenantId, token, authFetch, getToken } = useAuth();
     const [running, setRunning] = useState(false);
     const [progress, setProgress] = useState(0);
     const [logs, setLogs] = useState<string[]>([]);
@@ -28,9 +28,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
 
     useEffect(() => {
         if (!token) return;
-        fetch(`${API_BASE_URL}/api/v1/ingestion/status`, {
-            headers: { Authorization: `Bearer ${token}` }
-        })
+        authFetch("/api/v1/ingestion/status")
             .then(r => r.json())
             .then(data => {
                 if (data.running) {
@@ -52,7 +50,7 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
         if (esRef.current) esRef.current.close();
 
         // Using standard EventSource — token passed as query param (EventSource cannot set headers)
-        const es = new EventSource(`${API_BASE_URL}/api/v1/ingestion/stream?token=${encodeURIComponent(token ?? '')}`);
+        const es = new EventSource(`${SSE_BASE_URL}/api/v1/ingestion/stream?token=${encodeURIComponent(getToken())}`);
         esRef.current = es;
 
         es.onmessage = (ev) => {
@@ -80,7 +78,9 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
             }
         };
         es.onerror = () => {
-            // Ignore or close on error
+            es.close();
+            // Reconnect after 3s with fresh token
+            setTimeout(() => startSSE(), 3000);
         };
     };
 
@@ -89,14 +89,9 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
         try {
             setLogs(["--- Starting Ingestion ---"]);
             setProgress(0);
-            const res = await fetch(`${API_BASE_URL}/api/v1/ingestion/start`, {
+            const res = await authFetch("/api/v1/ingestion/start", {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                // Run specific small steps or dry_run if full is too slow for demo
-                body: JSON.stringify({ dry_run: false })
+                body: JSON.stringify({ dry_run: false }),
             });
             if (res.ok) {
                 setRunning(true);
@@ -114,13 +109,9 @@ export default function IngestionControlPanel({ onIngestionComplete }: Ingestion
         if (!token || !tenantId) return;
         setReportStatus('generating');
         try {
-            const res = await fetch(`${API_BASE_URL}/api/v1/reports/divergence/generate`, {
+            const res = await authFetch("/api/v1/reports/divergence/generate", {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ tenant_id: tenantId })
+                body: JSON.stringify({ tenant_id: tenantId }),
             });
             if (res.ok) {
                 const data = await res.json();

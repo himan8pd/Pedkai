@@ -18,9 +18,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
 interface Incident {
   id: string;
   title: string;
@@ -122,7 +119,7 @@ const PAGE_SIZE = 50;
 type SortableColumn = "title" | "priority" | "severity" | "status" | "created_at" | "impact" | "urgency";
 
 export default function IncidentsPage() {
-  const { token, tenantId } = useAuth();
+  const { token, tenantId, authFetch } = useAuth();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -147,20 +144,14 @@ export default function IncidentsPage() {
     if (!token || !tenantId) return;
     try {
       // Fetch a large page to get counts -- use page_size=1 just for total, then fetch by severity
-      const countRes = await fetch(
-        `${API_BASE_URL}/api/v1/incidents/?page=1&page_size=1`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const countRes = await authFetch("/api/v1/incidents/?page=1&page_size=1");
       if (countRes.ok) {
         const countData = await countRes.json();
         setSummaryTotal(countData.total);
       }
 
       // Fetch closed count
-      const closedRes = await fetch(
-        `${API_BASE_URL}/api/v1/incidents/?page=1&page_size=1&status=closed`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const closedRes = await authFetch("/api/v1/incidents/?page=1&page_size=1&status=closed");
 
       if (closedRes.ok) {
         const closedData = await closedRes.json();
@@ -170,10 +161,8 @@ export default function IncidentsPage() {
       // Fetch priority counts: P1-P5
       const priResults = await Promise.all(
         ["critical", "major", "minor", "warning", "info"].map((sev) =>
-          fetch(
-            `${API_BASE_URL}/api/v1/incidents/?page=1&page_size=1&severity=${sev}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          ).then((r) => r.json()),
+          authFetch(`/api/v1/incidents/?page=1&page_size=1&severity=${sev}`)
+            .then((r) => r.json()),
         ),
       );
       // Map severity to priority counts
@@ -235,10 +224,7 @@ export default function IncidentsPage() {
         params.set("search", searchText);
       }
 
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/incidents/?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const res = await authFetch(`/api/v1/incidents/?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setIncidents(data.incidents);

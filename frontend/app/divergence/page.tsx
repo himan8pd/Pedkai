@@ -34,9 +34,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
 // ── Type colours ────────────────────────────────────────────────────────────
 const TYPE_META: Record<
   string,
@@ -132,18 +129,7 @@ const DOMAIN_COLOURS: Record<string, string> = {
 type ViewMode = "summary" | "explore" | "table";
 
 // ── API helpers ─────────────────────────────────────────────────────────────
-async function apiFetch(path: string, token: string, opts?: RequestInit) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(opts?.headers ?? {}),
-    },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-  return res.json();
-}
+// apiFetch is defined inside the component (see below) to close over authFetch.
 
 // ── Copy button ─────────────────────────────────────────────────────────────
 function CopyButton({ text }: { text: string }) {
@@ -345,7 +331,15 @@ function EntityLink({
 // MAIN PAGE
 // ═════════════════════════════════════════════════════════════════════════════
 export default function DivergencePage() {
-  const { tenantId, token } = useAuth();
+  const { tenantId, token, authFetch } = useAuth();
+
+  // Local apiFetch that uses authFetch (handles auth + 401 automatically).
+  // Signature kept compatible: second arg `_token` is ignored (kept for minimal diff).
+  async function apiFetch(path: string, _token: string, opts?: RequestInit) {
+    const res = await authFetch(path, opts);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    return res.json();
+  }
 
   // Data state
   const [summary, setSummary] = useState<any>(null);
@@ -421,8 +415,10 @@ export default function DivergencePage() {
           token,
         );
         setEnrichedProfiles((prev) => ({ ...prev, [resultId]: data }));
-        // Start polling for AI analysis in background
-        pollAiAnalysis(resultId);
+        // Only poll if AI analysis wasn't already pre-computed
+        if (!data?.enrichment?.ai_analysis) {
+          pollAiAnalysis(resultId);
+        }
       } catch (e) {
         console.error("Enriched profile fetch failed:", e);
         setEnrichedProfiles((prev) => ({ ...prev, [resultId]: { error: true } }));

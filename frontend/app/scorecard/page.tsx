@@ -19,9 +19,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
 interface ScorecardData {
   pedkai_zone_mttr_minutes: number | null;
   pedkai_zone_incident_count: number;
@@ -133,7 +130,7 @@ function KpiCard({
 }
 
 export default function ScorecardPage() {
-  const { token, tenantId } = useAuth();
+  const { token, tenantId, authFetch } = useAuth();
   const [scorecard, setScorecard] = useState<ScorecardData | null>(null);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [valueCapture, setValueCapture] = useState<ValueCapture | null>(null);
@@ -145,13 +142,11 @@ export default function ScorecardPage() {
   useEffect(() => {
     async function fetchAll() {
       if (!token || !tenantId) return;
-      const headers = { Authorization: `Bearer ${token}` };
-
       try {
         const [scRes, detRes, valRes] = await Promise.allSettled([
-          fetch(`${API_BASE_URL}/api/v1/autonomous/scorecard`, { headers }),
-          fetch(`${API_BASE_URL}/api/v1/autonomous/detections`, { headers }),
-          fetch(`${API_BASE_URL}/api/v1/autonomous/value-capture`, { headers }),
+          authFetch("/api/v1/autonomous/scorecard"),
+          authFetch("/api/v1/autonomous/detections"),
+          authFetch("/api/v1/autonomous/value-capture"),
         ]);
 
         if (scRes.status === "fulfilled" && scRes.value.ok) {

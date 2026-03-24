@@ -167,6 +167,62 @@ async def login_for_access_token(
 
 
 # ---------------------------------------------------------------------------
+# POST /refresh — silently reissue a JWT before it expires
+# ---------------------------------------------------------------------------
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+@router.post("/refresh", response_model=RefreshResponse)
+async def refresh_token(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Reissue a fresh JWT for the currently authenticated user.
+
+    The client should call this periodically (e.g. every 20 minutes)
+    to keep the session alive without forcing a re-login.  The new token
+    preserves the same claims (role, scopes, tenant_id) as the original.
+    """
+    # Verify the user still exists and is active
+    user_orm = await auth_service.get_user_by_id(db, current_user.user_id)
+    if not user_orm or not user_orm.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is inactive or deleted.",
+        )
+
+    # Re-resolve the role/scopes (in case they changed since last login)
+    role = user_orm.role
+    if current_user.tenant_id and user_orm.role != Role.ADMIN:
+        access_row = await auth_service.get_user_tenant_access_row(
+            db, user_orm.id, current_user.tenant_id
+        )
+        role = access_row.role if access_row and access_row.role else user_orm.role
+
+    scopes = ROLE_SCOPES.get(role, [])
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+
+    access_token = create_access_token(
+        data={
+            "sub": user_orm.id,
+            "username": user_orm.username,
+            "user_id": user_orm.id,
+            "role": role,
+            "scopes": scopes,
+            **({"tenant_id": current_user.tenant_id} if current_user.tenant_id else {}),
+        },
+        expires_delta=access_token_expires,
+    )
+
+    return RefreshResponse(access_token=access_token)
+
+
+# ---------------------------------------------------------------------------
 # GET /tenants — list tenants for the current user
 # ---------------------------------------------------------------------------
 

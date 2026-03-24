@@ -5,9 +5,6 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
 import { Loader2, AlertCircle } from "lucide-react";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
 interface SleepingCell {
   cellId: string;
   site: string;
@@ -30,7 +27,7 @@ function statusBadge(status: SleepingCell["status"]) {
 }
 
 export default function SleepingCellsPage() {
-  const { token } = useAuth();
+  const { token, authFetch } = useAuth();
   const [cells, setCells] = useState<SleepingCell[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,10 +39,7 @@ export default function SleepingCellsPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/sleeping-cells`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const res = await authFetch("/api/v1/sleeping-cells");
       if (res.ok) {
         const data = await res.json();
         setCells(data.cells ?? []);
@@ -70,13 +64,9 @@ export default function SleepingCellsPage() {
     if (!token) return;
     setRunning(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/sleeping-cells/detect`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const res = await authFetch("/api/v1/sleeping-cells/detect", {
+        method: "POST",
+      });
       if (res.ok) {
         setLastRun(new Date().toISOString());
         // Refresh data after detection

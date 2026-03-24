@@ -4,11 +4,11 @@ import React, { useEffect, useRef, useState } from "react";
 import Dashboard from "@/app/components/Dashboard";
 import { useAuth } from "@/app/context/AuthContext";
 
-const API_BASE_URL =
+const SSE_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export default function DashboardPage() {
-  const { tenantId, token } = useAuth();
+  const { tenantId, token, authFetch, getToken } = useAuth();
   const [alarms, setAlarms] = useState<any[]>([]);
   const [selectedAlarm, setSelectedAlarm] = useState<any>(null);
   const [scorecard, setScorecard] = useState<any | null>(null);
@@ -21,12 +21,7 @@ export default function DashboardPage() {
     if (!token) return;
     try {
       // Fetch scorecard using real auth token
-      const scRes = await fetch(
-        `${API_BASE_URL}/api/v1/autonomous/scorecard`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      ).catch(() => null);
+      const scRes = await authFetch("/api/v1/autonomous/scorecard").catch(() => null);
       if (scRes && scRes.ok) {
         const scData = await scRes.json();
         setScorecard(scData);
@@ -55,12 +50,10 @@ export default function DashboardPage() {
 
       // Build SSE URL with token (authenticated) and tenant_id (fallback)
       const params = new URLSearchParams({ tenant_id: tenantId });
-      if (token) {
-        params.set("token", token);
-      }
+      params.set("token", getToken());
 
       const es = new EventSource(
-        `${API_BASE_URL}/api/v1/stream/alarms?${params.toString()}`,
+        `${SSE_BASE_URL}/api/v1/stream/alarms?${params.toString()}`,
       );
       esRef.current = es;
 

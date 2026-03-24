@@ -5,7 +5,7 @@ import { Database, AlertTriangle, Users, Activity, GitCompare, Loader2, Play, Ne
 import { useAuth } from '@/app/context/AuthContext';
 import Link from 'next/link';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 interface DataHealth {
     tenant_id: string;
@@ -62,7 +62,7 @@ function MetricCard({ label, value, sublabel, icon, href }: {
 }
 
 export default function DataHealthPanel({ onIngestionComplete }: DataHealthPanelProps) {
-    const { token, role } = useAuth();
+    const { token, role, authFetch, getToken } = useAuth();
     const [health, setHealth] = useState<DataHealth | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -78,9 +78,7 @@ export default function DataHealthPanel({ onIngestionComplete }: DataHealthPanel
         if (!token) return;
         try {
             setLoading(true);
-            const res = await fetch(`${API_BASE_URL}/api/v1/reports/data-health`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const res = await authFetch("/api/v1/reports/data-health");
             if (res.ok) {
                 setHealth(await res.json());
                 setError(null);
@@ -103,18 +101,14 @@ export default function DataHealthPanel({ onIngestionComplete }: DataHealthPanel
         try {
             setIngestionLogs(["--- Starting Ingestion ---"]);
             setIngestionProgress(0);
-            const res = await fetch(`${API_BASE_URL}/api/v1/ingestion/start`, {
+            const res = await authFetch("/api/v1/ingestion/start", {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ dry_run: false })
+                body: JSON.stringify({ dry_run: false }),
             });
             if (res.ok) {
                 setIngestionRunning(true);
                 // Start SSE
-                const es = new EventSource(`${API_BASE_URL}/api/v1/ingestion/stream?token=${encodeURIComponent(token)}`);
+                const es = new EventSource(`${SSE_BASE_URL}/api/v1/ingestion/stream?token=${encodeURIComponent(getToken())}`);
                 es.onmessage = (ev) => {
                     try {
                         const data = JSON.parse(ev.data);
@@ -138,7 +132,7 @@ export default function DataHealthPanel({ onIngestionComplete }: DataHealthPanel
                         console.warn("SSE parse error", e);
                     }
                 };
-                es.onerror = () => { /* silent */ };
+                es.onerror = () => { es.close(); };
             } else {
                 const err = await res.json();
                 setIngestionLogs(prev => [...prev, `Failed to start: ${err.detail || 'Unknown error'}`]);

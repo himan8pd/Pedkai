@@ -5,9 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthContext";
 import { UserPlus, ShieldCheck, Key, Trash2, PowerOff, Power } from "lucide-react";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
 const ROLE_LABELS: Record<string, string> = {
   operator: "Operator",
   shift_lead: "Shift Lead",
@@ -33,14 +30,14 @@ function UserRow({
   user,
   assignableRoles,
   isAdmin,
-  token,
+  authFetch,
   tenantId,
   onRefresh,
 }: {
   user: TenantUser;
   assignableRoles: string[];
   isAdmin: boolean;
-  token: string;
+  authFetch: (path: string, opts?: RequestInit) => Promise<Response>;
   tenantId: string;
   onRefresh: () => void;
 }) {
@@ -56,19 +53,13 @@ function UserRow({
   const [activeBusy, setActiveBusy] = useState(false);
   const [rowError, setRowError] = useState("");
 
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-
   async function saveRole() {
     if (pendingRole === user.tenant_role) return;
     setRoleBusy(true);
     setRowError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/users/${user.user_id}/role`, {
+      const res = await authFetch(`/api/v1/users/${user.user_id}/role`, {
         method: "PATCH",
-        headers,
         body: JSON.stringify({ role: pendingRole }),
       });
       if (!res.ok) {
@@ -89,9 +80,9 @@ function UserRow({
     setResetBusy(true);
     setResetError("");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/users/${user.user_id}/reset-password`,
-        { method: "POST", headers, body: JSON.stringify({ new_password: newPassword }) }
+      const res = await authFetch(
+        `/api/v1/users/${user.user_id}/reset-password`,
+        { method: "POST", body: JSON.stringify({ new_password: newPassword }) },
       );
       if (!res.ok) {
         const b = await res.json().catch(() => null);
@@ -112,9 +103,9 @@ function UserRow({
     setRevokeBusy(true);
     setRowError("");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/users/${user.user_id}/access`,
-        { method: "DELETE", headers }
+      const res = await authFetch(
+        `/api/v1/users/${user.user_id}/access`,
+        { method: "DELETE" },
       );
       if (!res.ok) {
         const b = await res.json().catch(() => null);
@@ -134,9 +125,9 @@ function UserRow({
     setActiveBusy(true);
     setRowError("");
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/users/${user.user_id}/${path}`,
-        { method: "PATCH", headers }
+      const res = await authFetch(
+        `/api/v1/users/${user.user_id}/${path}`,
+        { method: "PATCH" },
       );
       if (!res.ok) {
         const b = await res.json().catch(() => null);
@@ -287,7 +278,7 @@ function UserRow({
 // ---------------------------------------------------------------------------
 
 export default function AdminPage() {
-  const { token, tenantId, tenantName, role } = useAuth();
+  const { token, tenantId, tenantName, role, authFetch } = useAuth();
   const router = useRouter();
 
   const isAdmin = role === "admin";
@@ -321,9 +312,7 @@ export default function AdminPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/users`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await authFetch("/api/v1/users");
       if (!res.ok) {
         const b = await res.json().catch(() => null);
         throw new Error(b?.detail ?? `HTTP ${res.status}`);
@@ -346,12 +335,8 @@ export default function AdminPage() {
     setCreateBusy(true);
     setCreateError("");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/users`, {
+      const res = await authFetch("/api/v1/users", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           username: createUsername,
           password: createPassword,
@@ -496,7 +481,7 @@ export default function AdminPage() {
                   user={u}
                   assignableRoles={assignableRoles}
                   isAdmin={isAdmin}
-                  token={token}
+                  authFetch={authFetch}
                   tenantId={tenantId}
                   onRefresh={fetchUsers}
                 />

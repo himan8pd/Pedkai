@@ -6,9 +6,6 @@ import { ZoomIn, ZoomOut, Maximize2, Search, ArrowRight, Layers, Network } from 
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
 interface TopologyEntity {
   id: string;
   name: string;
@@ -58,7 +55,7 @@ const STATUS_RING: Record<string, string> = {
 };
 
 export default function TopologyPage() {
-  const { tenantId, token } = useAuth();
+  const { tenantId, token, authFetch } = useAuth();
   const { theme } = useTheme();
   const isLight = theme === "light";
   const searchParams = useSearchParams();
@@ -102,9 +99,8 @@ export default function TopologyPage() {
     const delay = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await fetch(
-          `${API_BASE_URL}/api/v1/topology/${encodeURIComponent(tenantId)}/search?q=${encodeURIComponent(searchQuery)}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const res = await authFetch(
+          `/api/v1/topology/${encodeURIComponent(tenantId)}/search?q=${encodeURIComponent(searchQuery)}`,
         );
         if (res.ok) {
           const data = await res.json();
@@ -133,9 +129,8 @@ export default function TopologyPage() {
     setLoadingGraph(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/api/v1/topology/${encodeURIComponent(tenantId)}/neighborhood/${encodeURIComponent(seed)}?hops=${hopCount}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await authFetch(
+        `/api/v1/topology/${encodeURIComponent(tenantId)}/neighborhood/${encodeURIComponent(seed)}?hops=${hopCount}`,
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -155,9 +150,8 @@ export default function TopologyPage() {
 
       // Fetch shadow topology overlay
       try {
-        const shadowRes = await fetch(
-          `${API_BASE_URL}/api/v1/topology/${encodeURIComponent(tenantId)}/neighborhood-with-shadow/${encodeURIComponent(seed)}?hops=${hopCount}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const shadowRes = await authFetch(
+          `/api/v1/topology/${encodeURIComponent(tenantId)}/neighborhood-with-shadow/${encodeURIComponent(seed)}?hops=${hopCount}`,
         );
         if (shadowRes.ok) {
           const shadowData = await shadowRes.json();

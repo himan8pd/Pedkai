@@ -4,10 +4,8 @@ import React, { useEffect, useState } from 'react'
 import { TrendingUp, AlertCircle, DollarSign, Zap, Info } from 'lucide-react'
 import { useAuth } from '@/app/context/AuthContext'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
-
 export default function ROIDashboardPage() {
-  const { token } = useAuth()
+  const { token, authFetch } = useAuth()
   const [roiData, setRoiData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -19,13 +17,7 @@ export default function ROIDashboardPage() {
   const fetchROIData = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/v1/autonomous/roi-dashboard`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await authFetch('/api/v1/autonomous/roi-dashboard')
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: Failed to fetch ROI dashboard`)

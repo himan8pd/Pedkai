@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Navigation from "./components/Navigation";
 import { AuthProvider } from "./context/AuthContext";
 
@@ -94,6 +94,17 @@ export default function AuthLayout({
     } catch {}
   }, []);
 
+  // ── Token refresh handler (called by AuthProvider on silent refresh) ──
+  const handleTokenRefresh = useCallback(
+    (newToken: string) => {
+      setToken(newToken);
+      if (selectedTenantId && tenantName) {
+        persistSession(newToken, selectedTenantId, tenantName, role);
+      }
+    },
+    [selectedTenantId, tenantName, role],
+  );
+
   // ── Phase: 'login' | 'tenant-select' | 'app' ───────────────────
   // Derived from state rather than stored separately to avoid drift.
   const phase = !token ? "login" : !tenantBound ? "tenant-select" : "app";
@@ -114,6 +125,54 @@ export default function AuthLayout({
     setAuthError("");
     setShowPasswordWarning(false);
   };
+
+  // ── Stale page detection (Page Visibility API) ────────────────
+  // When the user returns to a tab that has been idle for >5 minutes,
+  // force a page reload (login page) or attempt immediate token refresh.
+  const hiddenAtRef = useRef<number | null>(null);
+  const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+      } else if (hiddenAtRef.current) {
+        const idleDuration = Date.now() - hiddenAtRef.current;
+        hiddenAtRef.current = null;
+
+        if (idleDuration > STALE_THRESHOLD_MS) {
+          if (!token) {
+            // On the login page — reload to get a fresh connection
+            window.location.reload();
+            return;
+          }
+          // Authenticated: attempt an immediate token refresh since the
+          // periodic interval may have been throttled while the tab was hidden.
+          fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => {
+              if (res.ok) return res.json();
+              // Token fully expired — force re-login
+              handleLogout();
+              return null;
+            })
+            .then((data) => {
+              if (data?.access_token) {
+                handleTokenRefresh(data.access_token);
+              }
+            })
+            .catch(() => {
+              // Network error on resume — don't logout, user can retry
+            });
+        }
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [token, handleTokenRefresh]);
 
   // ── Login handler ───────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
@@ -435,6 +494,7 @@ export default function AuthLayout({
       tenantName={tenantName}
       role={role}
       onLogout={handleLogout}
+      onTokenRefresh={handleTokenRefresh}
     >
       <Navigation />
       <main className="w-full px-4 md:px-8 animate-fade-in">{children}</main>
