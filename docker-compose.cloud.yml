@@ -18,6 +18,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
@@ -66,9 +68,26 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Ollama for inference
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: pedkai-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   # Telemetry Replay Service — streams historical Parquet data into Kafka
-  # Run on-demand: docker compose -f docker-compose.cloud.yml run --rm replay
-  # Or start with the stack: docker compose -f docker-compose.cloud.yml up replay
+  # Run on-demand: docker compose -f docker-compose.cloud.yml run --rm pedkai-replay
+  # Or start with the stack: docker compose -f docker-compose.cloud.yml up pedkai-replay
   pedkai-replay:
     build:
       context: .
@@ -98,3 +117,4 @@ services:
 volumes:
   kafka_data:
   frontend_static:
+  ollama_data:
