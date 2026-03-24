@@ -44,6 +44,10 @@ class ReconciliationResultORM(Base):
     confidence = Column(Float, default=1.0)               # 0.0–1.0 (signal-derived)
     extra = Column(JSONB)                                  # Additional context
 
+    # Pre-computed AI analysis (batch-generated during reconciliation)
+    # Contains: {"summary": str, "model": str, "generated_at": str} or NULL
+    ai_analysis = Column(JSONB)
+
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 

@@ -114,9 +114,28 @@ async def lifespan(app: FastAPI):
             f"tenant={settings.default_tenant_id})"
         )
 
+    # Start telemetry Kafka consumers (if enabled)
+    telemetry_consumer_task = None
+    if settings.telemetry_consumers_enabled:
+        try:
+            from backend.app.telemetry.kafka_consumers import start_telemetry_consumer
+
+            telemetry_consumer_task = await start_telemetry_consumer()
+            logger.info("Telemetry Kafka consumers started")
+        except Exception as e:
+            logger.error(f"Failed to start telemetry consumers: {e}", exc_info=True)
+
     yield
     # Shutdown
     logger.info(f"👋 Shutting down {settings.app_name}")
+
+    # Cancel telemetry consumer
+    if telemetry_consumer_task and not telemetry_consumer_task.done():
+        telemetry_consumer_task.cancel()
+        try:
+            await telemetry_consumer_task
+        except Exception:
+            pass
 
     # Cancel sleeping cell scheduler
     if sleeping_cell_task and not sleeping_cell_task.done():

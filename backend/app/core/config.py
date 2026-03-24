@@ -121,6 +121,26 @@ class Settings(BaseSettings):
     abeyance_cluster_snap_threshold: float = 0.70  # Noisy-OR cluster score ≥ this → cluster snap
     abeyance_cluster_min_members: int = 3           # Minimum fragments for a valid cluster
 
+    # Telemetry Replay Pipeline
+    # Path to Parquet telemetry data directory
+    telemetry_data_path: str = "/Volumes/Projects/Pedkai Data Store/six_telecom/output"
+    # Acceleration factor: 1.0 = real-time, 120 = 1 day in ~12 minutes
+    replay_acceleration: float = 120.0
+    # Skip first N hours of data (already loaded into DB)
+    replay_skip_hours: int = 24
+    # Max messages per Kafka producer batch
+    replay_batch_size: int = 500
+    # Consumer batch size for DB writes
+    consumer_batch_size: int = 1000
+    # Consumer batch flush interval in seconds
+    consumer_flush_interval_seconds: float = 5.0
+    # Enable telemetry Kafka consumers on backend startup
+    telemetry_consumers_enabled: bool = False
+    # Kafka consumer group for telemetry ingestion
+    telemetry_consumer_group: str = "pedkai-telemetry"
+    # TimescaleDB retention: auto-drop chunks older than this (days, 0 = disabled)
+    timescale_retention_days: int = 0
+
 
 @lru_cache
 def get_settings() -> Settings:

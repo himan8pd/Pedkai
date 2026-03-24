@@ -1370,6 +1370,12 @@ class ReconciliationEngine:
         )
         await self.session.execute(
             text(
+                "ALTER TABLE reconciliation_results "
+                "ADD COLUMN IF NOT EXISTS ai_analysis JSONB"
+            )
+        )
+        await self.session.execute(
+            text(
                 "CREATE INDEX IF NOT EXISTS ix_rr_tenant ON reconciliation_results(tenant_id)"
             )
         )

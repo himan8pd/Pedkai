@@ -25,6 +25,9 @@ llama-cpp-python>=0.1.0
 # Kafka
 aiokafka>=0.10.0
 
+# Parquet / Telemetry replay
+pyarrow>=14.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 structlog>=24.1.0
