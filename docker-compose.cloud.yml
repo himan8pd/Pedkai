@@ -11,12 +11,12 @@ services:
         REQUIREMENTS: requirements-cloud.txt
     container_name: pedkai-backend
     env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
       kafka:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -66,35 +66,24 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Telemetry Replay Service — streams historical Parquet data into Kafka
-  # Run on-demand: docker compose -f docker-compose.cloud.yml run --rm replay
-  # Or start with the stack: docker compose -f docker-compose.cloud.yml up replay
-  pedkai-replay:
+# ollama for inference is being installed inside docker too.
+  ollama:
     build:
       context: .
-      dockerfile: Dockerfile
-      args:
-        REQUIREMENTS: requirements-cloud.txt
-    container_name: pedkai-replay
-    env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      dockerfile: Dockerfile.ollama
+    container_name: pedkai-ollama
     volumes:
-      - ${TELEMETRY_DATA_PATH:-/home/ubuntu/Pedkai-data/output}:/data:ro
-    environment:
-      TELEMETRY_DATA_PATH: /data
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-    command: ["python", "-m", "backend.app.telemetry.cli"]
-    depends_on:
-      kafka:
-        condition: service_healthy
-    restart: "no"
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: "2"
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 volumes:
   kafka_data:
   frontend_static:
+  ollama_data:

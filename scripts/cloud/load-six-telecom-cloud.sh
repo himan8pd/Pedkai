@@ -22,7 +22,7 @@
 #                   (e.g. ~/Sleeping-Cell-KPI-Data/tmp_pedkai_data/output)
 #
 # Options:
-#   --tenant-id     Tenant slug               (default: six-telecom-01)
+#   --tenant-id     Tenant slug               (default: six_telecom)
 #   --tenant-name   Tenant display name       (default: "Six Telecom")
 #   --kpi-hours     Hours of KPI data to load into TimescaleDB (default: 0 = skip)
 #   --clean         Delete existing tenant data before loading (DANGER)
@@ -32,21 +32,21 @@
 # Examples:
 #   # Standard full load (no KPI time-series)
 #   bash scripts/cloud/load-six-telecom-cloud.sh \
-#       ~/Sleeping-Cell-KPI-Data/tmp_pedkai_data/output
+#       /home/ubuntu/Pedkai-data/output
 #
 #   # Load with 24h KPI sample into TimescaleDB
 #   bash scripts/cloud/load-six-telecom-cloud.sh \
-#       ~/Sleeping-Cell-KPI-Data/tmp_pedkai_data/output \
+#       /home/ubuntu/Pedkai-data/output \
 #       --kpi-hours 24
 #
 #   # Dry run first (always recommended before first load)
 #   bash scripts/cloud/load-six-telecom-cloud.sh \
-#       ~/Sleeping-Cell-KPI-Data/tmp_pedkai_data/output \
+#       /home/ubuntu/Pedkai-data/output \
 #       --dry-run
 #
 #   # Re-load after clean (danger — deletes all existing tenant data)
 #   bash scripts/cloud/load-six-telecom-cloud.sh \
-#       ~/Sleeping-Cell-KPI-Data/tmp_pedkai_data/output \
+#       /home/ubuntu/Pedkai-data/output \
 #       --clean
 # ============================================================================
 
@@ -58,7 +58,7 @@ set -euo pipefail
 OUTPUT_DIR="${1:?Usage: $0 <output_dir> [--tenant-id <id>] [--tenant-name <name>] [--kpi-hours <n>] [--clean] [--dry-run]}"
 shift
 
-TENANT_ID="six-telecom-01"
+TENANT_ID="six_telecom"
 TENANT_NAME="Six Telecom"
 KPI_HOURS=0
 CLEAN_FLAG=""

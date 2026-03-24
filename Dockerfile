@@ -11,10 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-
 # Default: full requirements.txt (local). Cloud compose overrides with requirements-cloud.txt.
 ARG REQUIREMENTS=requirements.txt
 COPY ${REQUIREMENTS} requirements.txt
+#RUN pip install --upgrade pip && \
+#    pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
 
 # Install everything needed for a high-performance ARM build
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -37,9 +38,8 @@ ENV CMAKE_GENERATOR=Ninja
 
 # 3. Use --no-build-isolation to force pip to see the installed g++
 RUN pip install --upgrade pip setuptools wheel && \
-    pip wheel --no-cache-dir --no-deps --no-build-isolation \
+    pip wheel --no-cache-dir --no-deps \
     --wheel-dir /app/wheels -r requirements.txt
-
 
 # Final Stage
 FROM python:3.10-slim
