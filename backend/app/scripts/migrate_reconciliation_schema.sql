@@ -50,6 +50,7 @@ CREATE TABLE reconciliation_results (
     observed_value TEXT,
     confidence FLOAT DEFAULT 1.0,
     extra JSONB,
+    ai_analysis JSONB,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

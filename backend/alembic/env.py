@@ -18,9 +18,9 @@ if config.config_file_name is not None:
 
 from backend.app.core.config import get_settings
 from backend.app.core.database import Base
-# Import all models to register them with Base.metadata
-from backend.app.models.decision_trace_orm import DecisionTraceORM, DecisionFeedbackORM
-from backend.app.models.kpi_orm import KPIMetricORM
+# Import ALL models so Alembic autogenerate sees every table.
+# The models/__init__.py registers every ORM class with Base.metadata.
+from backend.app.models import *  # noqa: F401,F403
 
 settings = get_settings()
 target_metadata = Base.metadata
