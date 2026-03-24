@@ -11,6 +11,8 @@ services:
         REQUIREMENTS: requirements-cloud.txt
     container_name: pedkai-backend
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
@@ -66,7 +68,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-# ollama for inference is being installed inside docker too.
+  # Ollama for inference
   ollama:
     build:
       context: .
@@ -82,6 +84,35 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+
+  # Telemetry Replay Service — streams historical Parquet data into Kafka
+  # Run on-demand: docker compose -f docker-compose.cloud.yml run --rm pedkai-replay
+  # Or start with the stack: docker compose -f docker-compose.cloud.yml up pedkai-replay
+  pedkai-replay:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REQUIREMENTS: requirements-cloud.txt
+    container_name: pedkai-replay
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${TELEMETRY_DATA_PATH:-/home/ubuntu/Pedkai-data/output}:/data:ro
+    environment:
+      TELEMETRY_DATA_PATH: /data
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    command: ["python", "-m", "backend.app.telemetry.cli"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2"
 
 volumes:
   kafka_data:
