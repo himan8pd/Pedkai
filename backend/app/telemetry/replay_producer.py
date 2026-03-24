@@ -31,6 +31,64 @@ from typing import Any
 import pandas as pd
 import pyarrow.parquet as pq
 
+# ---------------------------------------------------------------------------
+# Replay Checkpoint — enables idempotent replay
+# ---------------------------------------------------------------------------
+_DEFAULT_CHECKPOINT_FILENAME = ".replay_checkpoint.json"
+
+
+class ReplayCheckpoint:
+    """
+    Persists the last successfully completed row-group index to disk.
+
+    On restart the producer resumes from the next unprocessed row group,
+    preventing duplicate Kafka messages and wasted consumer/DB work.
+
+    Checkpoint file is a single JSON object:
+        {"last_completed_rg": 42, "messages_produced": 5234000, "updated_at": "..."}
+    """
+
+    def __init__(self, data_path: Path, filename: str = _DEFAULT_CHECKPOINT_FILENAME):
+        self.path = data_path / filename
+
+    def load(self) -> int | None:
+        """Return last completed row-group index, or None if no checkpoint."""
+        if not self.path.exists():
+            return None
+        try:
+            data = json.loads(self.path.read_text())
+            rg = data.get("last_completed_rg")
+            logger.info(
+                "Checkpoint loaded: last_completed_rg=%s (from %s)",
+                rg,
+                self.path,
+            )
+            return rg
+        except Exception as e:
+            logger.warning("Failed to read checkpoint %s: %s", self.path, e)
+            return None
+
+    def save(self, rg_index: int, messages_produced: int) -> None:
+        """Persist checkpoint after a row group is fully produced and flushed."""
+        data = {
+            "last_completed_rg": rg_index,
+            "messages_produced": messages_produced,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            self.path.write_text(json.dumps(data))
+        except Exception as e:
+            logger.error("Failed to write checkpoint: %s", e)
+
+    def clear(self) -> None:
+        """Remove checkpoint file (called on successful full replay completion)."""
+        try:
+            if self.path.exists():
+                self.path.unlink()
+                logger.info("Checkpoint cleared: %s", self.path)
+        except Exception as e:
+            logger.warning("Failed to clear checkpoint: %s", e)
+
 from backend.app.telemetry.schemas import make_kafka_key, row_to_message
 from backend.app.telemetry.topics import (
     PARQUET_TO_TOPIC,
@@ -121,6 +179,7 @@ class ReplayProducer:
         self._sources: list[ParquetSource] = []
         self._stop_event = asyncio.Event()
         self.stats = ReplayStats()
+        self._checkpoint = ReplayCheckpoint(self.data_path)
 
     async def start(self) -> None:
         """Initialize Kafka producer and open Parquet sources."""
@@ -131,7 +190,7 @@ class ReplayProducer:
             # Batch settings for throughput
             linger_ms=50,
             max_batch_size=1_048_576,  # 1 MB batches
-            compression_type="lz4",
+            compression_type="gzip",
             # Buffer limits
             max_request_size=10_485_760,  # 10 MB
         )
@@ -201,6 +260,20 @@ class ReplayProducer:
         # Determine the row group range (all files have 720 row groups = 720 hours)
         max_row_groups = max(s.num_row_groups for s in self._sources)
         start_rg = self.skip_hours
+
+        # Resume from checkpoint if available (idempotent replay)
+        last_completed = self._checkpoint.load()
+        if last_completed is not None and last_completed >= start_rg:
+            start_rg = last_completed + 1
+            logger.info(
+                "Resuming from checkpoint: row group %d (skipping %d already-produced hours)",
+                start_rg,
+                start_rg - self.skip_hours,
+            )
+
+        if start_rg >= max_row_groups:
+            logger.info("Replay already complete (checkpoint=%d, max=%d). Nothing to do.", last_completed, max_row_groups)
+            return
 
         logger.info(
             "Beginning replay: row groups %d-%d (%d hours of data)",
@@ -368,11 +441,20 @@ class ReplayProducer:
             self.stats.current_replay_timestamp = str(ts) if hour_records else ""
             self.stats.log_progress()
 
+            # Checkpoint: this row group is fully produced and flushed
+            self._checkpoint.save(rg_idx, self.stats.messages_produced)
+
         # Final flush
         if self._producer:
             await self._producer.flush()
 
-        logger.info("Replay complete. %s", self._format_final_stats())
+        # If replay completed fully (not stopped early), clear the checkpoint
+        # so next run starts fresh if the data changes.
+        if not self._stop_event.is_set():
+            self._checkpoint.clear()
+            logger.info("Replay complete (checkpoint cleared). %s", self._format_final_stats())
+        else:
+            logger.info("Replay stopped early (checkpoint preserved). %s", self._format_final_stats())
 
     def _format_final_stats(self) -> str:
         s = self.stats

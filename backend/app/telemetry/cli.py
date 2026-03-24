@@ -65,6 +65,11 @@ def _parse_args() -> argparse.Namespace:
         help="Validate sources and count records without producing to Kafka",
     )
     parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Clear replay checkpoint and start from the beginning",
+    )
+    parser.add_argument(
         "--log-level",
         type=str,
         default="INFO",
@@ -190,7 +195,15 @@ def main() -> None:
     print(f"  Skip hours:    {skip_hours}")
     print(f"  Batch size:    {batch_size}")
     print(f"  Mode:          {'DRY RUN' if args.dry_run else 'LIVE'}")
+    print(f"  Reset:         {'YES' if args.reset else 'no (resume from checkpoint)'}")
     print("=" * 70)
+
+    # Handle --reset: clear checkpoint before starting
+    if args.reset:
+        from backend.app.telemetry.replay_producer import ReplayCheckpoint
+        cp = ReplayCheckpoint(Path(data_path))
+        cp.clear()
+        print("  Checkpoint cleared — replay will start from the beginning.")
 
     if args.dry_run:
         asyncio.run(_run_dry(data_path, skip_hours))
