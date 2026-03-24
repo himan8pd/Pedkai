@@ -1,6 +1,10 @@
 """
 OpenTelemetry Observability Module.
 Provides distributed tracing for Pedkai services.
+
+NOTE: ConsoleSpanExporter was removed — it flooded stdout with JSON for
+every span including /health healthchecks, drowning out application logs.
+When a real collector (Jaeger / OTLP) is available, add its exporter here.
 """
 import logging
 from typing import Optional
@@ -8,13 +12,16 @@ from typing import Optional
 try:
     from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
     OPENTELEMETRY_AVAILABLE = True
 except ImportError:
     OPENTELEMETRY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+# Endpoints to exclude from tracing (healthchecks, readiness probes, etc.)
+_EXCLUDED_URLS = "health,healthz,ready,readyz"
+
 
 def setup_tracing(app=None):
     """Initializes OpenTelemetry tracing."""
@@ -23,17 +30,19 @@ def setup_tracing(app=None):
         return
 
     from opentelemetry.sdk.resources import Resource
-    
-    # Initialize spans to console for now (standard production uses Jaeger/OTLP)
+
     resource = Resource.create({"service.name": "pedkai-backend"})
     provider = TracerProvider(resource=resource)
-    processor = BatchSpanProcessor(ConsoleSpanExporter())
-    provider.add_span_processor(processor)
+    # No exporter — spans are created for context propagation only.
+    # Add BatchSpanProcessor(OTLPSpanExporter(...)) when a collector is available.
     trace.set_tracer_provider(provider)
 
     if app:
-        FastAPIInstrumentor.instrument_app(app)
-        logger.info("OpenTelemetry FastAPI instrumentation enabled.")
+        FastAPIInstrumentor.instrument_app(
+            app,
+            excluded_urls=_EXCLUDED_URLS,
+        )
+        logger.info("OpenTelemetry FastAPI instrumentation enabled (console export disabled).")
 
 def get_tracer(name: str):
     """Returns a tracer instance."""
