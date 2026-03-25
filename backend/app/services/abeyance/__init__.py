@@ -1,17 +1,18 @@
 """
 Abeyance Memory Subsystem — service layer.
 
-v3.0: Adds DiscoveryLoop, TVecService, TSLAMService, EnrichmentChainV3,
-SnapEngineV3, and 14 discovery mechanisms on top of the v2 foundation.
+v3.0: Canonical implementation. All enrichment and snap evaluation uses v3.
+DiscoveryLoop orchestrates 14 discovery mechanisms through the five-layer
+cognitive architecture.
 
 Public API:
-    v2 (retained):
-        - EnrichmentChain, SnapEngine, AccumulationGraph, DecayEngine
+    Shared infrastructure:
+        - AccumulationGraph, DecayEngine
         - ShadowTopologyService, ValueAttributionService
         - IncidentReconstructionService, MaintenanceService
         - ProvenanceLogger, RedisNotifier
 
-    v3 (new):
+    v3 (canonical):
         - TVecService, TSLAMService
         - EnrichmentChainV3, SnapEngineV3
         - DiscoveryLoop (6-stage orchestrator)
@@ -22,8 +23,6 @@ from backend.app.services.abeyance.events import (
     ProvenanceLogger,
     RedisNotifier,
 )
-from backend.app.services.abeyance.enrichment_chain import EnrichmentChain
-from backend.app.services.abeyance.snap_engine import SnapEngine
 from backend.app.services.abeyance.accumulation_graph import AccumulationGraph
 from backend.app.services.abeyance.decay_engine import DecayEngine
 from backend.app.services.abeyance.shadow_topology import ShadowTopologyService
@@ -61,28 +60,23 @@ def create_abeyance_services(
 ) -> dict:
     """Factory function to create all abeyance services with shared dependencies.
 
-    Returns both v2 and v3 services. The v3 discovery loop orchestrates
-    all 14 discovery mechanisms through the five-layer cognitive architecture.
+    Abeyance Memory 3.0 is the canonical implementation. All enrichment and
+    snap evaluation is routed through v3 services.
 
     Usage:
         services = create_abeyance_services(redis_client=redis, llm_service=llm)
-        enrichment = services["enrichment"]        # v2
-        discovery_loop = services["discovery_loop"] # v3
+        enrichment = services["enrichment_v3"]
+        snap_engine = services["snap_engine_v3"]
+        discovery_loop = services["discovery_loop"]
     """
     # Shared infrastructure
     provenance = ProvenanceLogger()
     notifier = RedisNotifier(redis_client=redis_client)
     shadow_topology = ShadowTopologyService()
 
-    # v2 services (retained for backward compat)
+    # Shared services (used by v3 and maintenance)
     decay_engine = DecayEngine(provenance=provenance, notifier=notifier)
-    snap_engine = SnapEngine(provenance=provenance, notifier=notifier)
     accumulation_graph = AccumulationGraph(provenance=provenance, notifier=notifier)
-    enrichment = EnrichmentChain(
-        provenance=provenance,
-        llm_service=llm_service,
-        shadow_topology=shadow_topology,
-    )
     value_attribution = ValueAttributionService()
     incident_reconstruction = IncidentReconstructionService()
     maintenance = MaintenanceService(
@@ -151,18 +145,16 @@ def create_abeyance_services(
     )
 
     return {
-        # v2 (backward compat)
+        # Shared infrastructure
         "provenance": provenance,
         "notifier": notifier,
-        "enrichment": enrichment,
-        "snap_engine": snap_engine,
         "accumulation_graph": accumulation_graph,
         "decay_engine": decay_engine,
         "shadow_topology": shadow_topology,
         "value_attribution": value_attribution,
         "incident_reconstruction": incident_reconstruction,
         "maintenance": maintenance,
-        # v3
+        # v3 (canonical)
         "tvec": tvec,
         "tslam": tslam,
         "enrichment_v3": enrichment_v3,
@@ -187,18 +179,16 @@ def create_abeyance_services(
 
 
 __all__ = [
-    # v2
+    # Shared infrastructure
     "ProvenanceLogger",
     "RedisNotifier",
-    "EnrichmentChain",
-    "SnapEngine",
     "AccumulationGraph",
     "DecayEngine",
     "ShadowTopologyService",
     "ValueAttributionService",
     "IncidentReconstructionService",
     "MaintenanceService",
-    # v3
+    # v3 (canonical)
     "TVecService",
     "TSLAMService",
     "EnrichmentChainV3",

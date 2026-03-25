@@ -49,24 +49,6 @@ class FragmentStateChange:
 
 
 @dataclass(frozen=True)
-class SnapDecision:
-    """Full scoring breakdown for a snap evaluation."""
-    tenant_id: str
-    new_fragment_id: UUID
-    candidate_fragment_id: UUID
-    failure_mode_profile: str
-    component_scores: dict[str, float]
-    weights_used: dict[str, float]
-    raw_composite: float
-    temporal_modifier: float
-    final_score: float
-    threshold_applied: float
-    decision: str  # SNAP, NEAR_MISS, AFFINITY, NONE
-    multiple_comparisons_k: int = 1
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-@dataclass(frozen=True)
 class ClusterEvaluation:
     """Cluster membership and scoring at evaluation time."""
     tenant_id: str
@@ -106,30 +88,6 @@ class ProvenanceLogger:
             old_state=event.old_state,
             new_state=event.new_state,
             event_detail=event.event_detail,
-        )
-        session.add(record)
-        return record_id
-
-    async def log_snap_decision(
-        self, session: AsyncSession, decision: SnapDecision
-    ) -> UUID:
-        """Persist a snap evaluation record."""
-        record_id = uuid4()
-        record = SnapDecisionRecordORM(
-            id=record_id,
-            tenant_id=decision.tenant_id,
-            new_fragment_id=decision.new_fragment_id,
-            candidate_fragment_id=decision.candidate_fragment_id,
-            evaluated_at=decision.timestamp,
-            failure_mode_profile=decision.failure_mode_profile,
-            component_scores=decision.component_scores,
-            weights_used=decision.weights_used,
-            raw_composite=decision.raw_composite,
-            temporal_modifier=decision.temporal_modifier,
-            final_score=decision.final_score,
-            threshold_applied=decision.threshold_applied,
-            decision=decision.decision,
-            multiple_comparisons_k=decision.multiple_comparisons_k,
         )
         session.add(record)
         return record_id

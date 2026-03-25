@@ -101,8 +101,8 @@ async def ingest_evidence(
     """
     tenant_id = _resolve_tenant(current_user, getattr(payload, "tenant_id", None))
     services = _get_services()
-    enrichment = services["enrichment"]
-    snap_engine = services["snap_engine"]
+    enrichment = services["enrichment_v3"]
+    snap_engine = services["snap_engine_v3"]
     accumulation = services["accumulation_graph"]
 
     # Enrich the raw evidence into a fragment

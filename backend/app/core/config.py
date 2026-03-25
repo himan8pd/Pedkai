@@ -106,10 +106,6 @@ class Settings(BaseSettings):
     sleeping_cell_scan_interval_seconds: int = 300  # 5 minutes
     sleeping_cell_interval_minutes: int = 15  # Alias for interval in minutes (converts to seconds)
 
-    # Abeyance Memory Decay (TASK-102)
-    abeyance_decay_interval_hours: int = 6  # How often the decay pass runs
-    abeyance_decay_lambda: float = 0.05     # λ in exp(-λ × days); override via ABEYANCE_DECAY_LAMBDA
-
     # Abeyance Memory Snap Engine (LLD §9)
     abeyance_snap_threshold: float = 0.75        # Score ≥ this → SNAP
     abeyance_near_miss_threshold: float = 0.55   # Score ≥ this → NEAR_MISS (boost relevance)

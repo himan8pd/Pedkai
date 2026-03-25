@@ -18,7 +18,7 @@ Design:
     - Alarms: every alarm is evidence (queued immediately)
     - KPI anomalies: lightweight z-score detection, only outliers become fragments
     - Background worker processes queue through the enrichment chain
-    - Works with v2 enrichment (regex + hash stubs) and v3 (T-VEC + TSLAM)
+    - Works with v3 (T-VEC + TSLAM)
 """
 
 from __future__ import annotations
@@ -292,8 +292,8 @@ class TelemetryFragmentBridge:
         """Process a batch of events through the enrichment chain."""
         from backend.app.core.database import get_db_context
 
-        enrichment = self._services["enrichment"]
-        snap_engine = self._services["snap_engine"]
+        enrichment = self._services["enrichment_v3"]
+        snap_engine = self._services["snap_engine_v3"]
         accumulation = self._services["accumulation_graph"]
 
         for source_type, event in batch:
