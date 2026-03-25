@@ -116,12 +116,15 @@ async def lifespan(app: FastAPI):
 
     # Start telemetry Kafka consumers (if enabled)
     telemetry_consumer_task = None
+    fragment_bridge_task = None
     if settings.telemetry_consumers_enabled:
         try:
             from backend.app.telemetry.kafka_consumers import start_telemetry_consumer
 
-            telemetry_consumer_task = await start_telemetry_consumer()
+            telemetry_consumer_task, fragment_bridge_task = await start_telemetry_consumer()
             logger.info("Telemetry Kafka consumers started")
+            if fragment_bridge_task:
+                logger.info("Abeyance Memory fragment bridge started")
         except Exception as e:
             logger.error(f"Failed to start telemetry consumers: {e}", exc_info=True)
 
@@ -134,6 +137,14 @@ async def lifespan(app: FastAPI):
         telemetry_consumer_task.cancel()
         try:
             await telemetry_consumer_task
+        except Exception:
+            pass
+
+    # Cancel fragment bridge
+    if fragment_bridge_task and not fragment_bridge_task.done():
+        fragment_bridge_task.cancel()
+        try:
+            await fragment_bridge_task
         except Exception:
             pass
 

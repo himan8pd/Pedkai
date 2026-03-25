@@ -103,7 +103,10 @@ services:
     environment:
       TELEMETRY_DATA_PATH: /data
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REPLAY_CHECKPOINT_DIR: /tmp
     command: ["python", "-m", "backend.app.telemetry.cli"]
+    healthcheck:
+      disable: true
     depends_on:
       kafka:
         condition: service_healthy

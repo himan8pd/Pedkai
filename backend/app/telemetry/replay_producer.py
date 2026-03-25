@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -179,7 +180,9 @@ class ReplayProducer:
         self._sources: list[ParquetSource] = []
         self._stop_event = asyncio.Event()
         self.stats = ReplayStats()
-        self._checkpoint = ReplayCheckpoint(self.data_path)
+        # Write checkpoint to a writable location (data_path may be read-only mount)
+        checkpoint_dir = Path(os.environ.get("REPLAY_CHECKPOINT_DIR", str(self.data_path)))
+        self._checkpoint = ReplayCheckpoint(checkpoint_dir)
 
     async def start(self) -> None:
         """Initialize Kafka producer and open Parquet sources."""

@@ -138,6 +138,9 @@ class Settings(BaseSettings):
     telemetry_consumers_enabled: bool = False
     # Kafka consumer group for telemetry ingestion
     telemetry_consumer_group: str = "pedkai-telemetry"
+    # Abeyance Memory: enable fragment bridge (alarms + KPI anomalies → fragments)
+    abeyance_fragment_bridge_enabled: bool = False
+    abeyance_fragment_queue_size: int = 10_000
     # TimescaleDB retention: auto-drop chunks older than this (days, 0 = disabled)
     timescale_retention_days: int = 0
 
