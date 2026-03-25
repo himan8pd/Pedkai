@@ -5,10 +5,11 @@ COPY package*.json ./
 RUN npm ci
 COPY . .
 ENV NEXT_OUTPUT_EXPORT=true
-# Force relative API paths: Caddy proxies /api/* to the backend.
-# An empty string here ensures any value in .env on the host is NOT
-# baked into the static bundle (which would cause a Mixed Content error
-# when pedk.ai is served over HTTPS but the .env has http://... URL).
+# Absorb any NEXT_PUBLIC_API_BASE_URL passed from the host/compose env,
+# then immediately override it to empty string. This ensures Caddy's
+# /api/* proxy is always used (relative paths), preventing Mixed Content
+# errors when the cloud .env has an http:// URL baked in.
+ARG NEXT_PUBLIC_API_BASE_URL=""
 ENV NEXT_PUBLIC_API_BASE_URL=""
 RUN npm run build
 
