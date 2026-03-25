@@ -36,9 +36,9 @@ ENV CMAKE_CXX_COMPILER=/usr/bin/g++
 ENV CMAKE_C_COMPILER=/usr/bin/gcc
 ENV CMAKE_GENERATOR=Ninja 
 
-# 3. Use --no-build-isolation to force pip to see the installed g++
+# 3. Build all transitive dependencies into the wheels directory
 RUN pip install --upgrade pip setuptools wheel && \
-    pip wheel --no-cache-dir --no-deps \
+    pip wheel --no-cache-dir \
     --wheel-dir /app/wheels -r requirements.txt
 
 # Final Stage
