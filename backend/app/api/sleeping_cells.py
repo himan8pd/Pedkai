@@ -103,7 +103,7 @@ async def _resolve_reference_time(tenant_id: str) -> Optional[datetime]:
         return None
 
 
-@router.get("/", response_model=SleepingCellsListResponse)
+@router.get("", response_model=SleepingCellsListResponse)
 async def get_sleeping_cells(
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
