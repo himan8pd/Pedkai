@@ -19,9 +19,12 @@ jobs:
             git pull origin main
 
             # Rebuild and restart containers
-            docker compose -f docker-compose.cloud.yml down
-            docker compose -f docker-compose.cloud.yml up -d --build
+            #  docker compose -f docker-compose.cloud.yml down
+            #  docker compose -f docker-compose.cloud.yml up -d --build
 
+            docker compose -f docker-compose.prod.yml down
+            docker compose -f docker-compose.prod.yml up -d --build
+            
             # Copy frontend static files to Caddy serve directory
             docker cp pedkai-frontend:/srv/frontend/. /srv/frontend/
 
