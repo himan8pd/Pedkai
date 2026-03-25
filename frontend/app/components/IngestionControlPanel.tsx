@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, FileText, CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 
-const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 interface IngestionControlPanelProps {
     onIngestionComplete?: () => void;

@@ -5,7 +5,7 @@ import { Database, AlertTriangle, Users, Activity, GitCompare, Loader2, Play, Ne
 import { useAuth } from '@/app/context/AuthContext';
 import Link from 'next/link';
 
-const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 interface DataHealth {
     tenant_id: string;

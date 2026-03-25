@@ -139,33 +139,38 @@ export default function IncidentsPage() {
   const [summaryOpen, setSummaryOpen] = useState(0);
   const [summaryClosed, setSummaryClosed] = useState(0);
 
-  // Fetch summary counts (all incidents, no pagination/filter)
+  // Fetch summary counts (total, open, closed) and priority breakdown
   const fetchSummary = useCallback(async () => {
     if (!token || !tenantId) return;
     try {
-      // Fetch a large page to get counts -- use page_size=1 just for total, then fetch by severity
-      const countRes = await authFetch("/api/v1/incidents/?page=1&page_size=1");
+      // Total and closed counts (always unfiltered for the header line)
+      const [countRes, closedRes] = await Promise.all([
+        authFetch("/api/v1/incidents/?page=1&page_size=1"),
+        authFetch("/api/v1/incidents/?page=1&page_size=1&status=closed"),
+      ]);
       if (countRes.ok) {
         const countData = await countRes.json();
         setSummaryTotal(countData.total);
       }
-
-      // Fetch closed count
-      const closedRes = await authFetch("/api/v1/incidents/?page=1&page_size=1&status=closed");
-
       if (closedRes.ok) {
         const closedData = await closedRes.json();
         setSummaryClosed(closedData.total);
       }
 
-      // Fetch priority counts: P1-P5
+      // Priority counts — respect the selected tab filter
+      let statusParam = "";
+      if (filterStatus === "open") {
+        statusParam = "&exclude_status=closed";
+      } else if (filterStatus === "closed") {
+        statusParam = "&status=closed";
+      }
+
       const priResults = await Promise.all(
         ["critical", "major", "minor", "warning", "info"].map((sev) =>
-          authFetch(`/api/v1/incidents/?page=1&page_size=1&severity=${sev}`)
+          authFetch(`/api/v1/incidents/?page=1&page_size=1&severity=${sev}${statusParam}`)
             .then((r) => r.json()),
         ),
       );
-      // Map severity to priority counts
       const sevToPri: Record<string, string> = {
         critical: "P1",
         major: "P2",
@@ -181,7 +186,7 @@ export default function IncidentsPage() {
     } catch {
       // Silently fail -- summary is non-critical
     }
-  }, [token, tenantId]);
+  }, [token, tenantId, filterStatus]);
 
   // Fetch paginated incidents
   const fetchIncidents = useCallback(async () => {
@@ -196,12 +201,7 @@ export default function IncidentsPage() {
         sort_dir: sortDir,
       });
       if (filterStatus === "open") {
-        // "open" means not closed -- the backend doesn't have a "not closed" filter,
-        // so we don't pass status and filter client-side... but that breaks pagination.
-        // Instead, let's NOT pass status for "open" and handle it differently.
-        // Actually the backend status filter is exact match. For "open" we need != closed.
-        // We'll leave status unset and do all/open/closed on the summary tabs.
-        // For "closed", pass status=closed.
+        params.set("exclude_status", "closed");
       } else if (filterStatus === "closed") {
         params.set("status", "closed");
       }

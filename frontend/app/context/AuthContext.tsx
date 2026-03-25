@@ -2,8 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useRef, useCallback } from "react";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 /** How often to silently refresh the token (in ms). Default: 20 minutes. */
 const REFRESH_INTERVAL_MS = 20 * 60 * 1000;

@@ -347,12 +347,263 @@ class TelemetryFragmentBridge:
                     except Exception as e:
                         logger.debug("Cluster detection error: %s", e)
 
+                    # Stage 4: Create incident from newly-snapped clusters
+                    try:
+                        await self._create_incident_from_snaps(
+                            session, tenant_id
+                        )
+                    except Exception as e:
+                        logger.debug("Incident creation error: %s", e)
+
                     await session.commit()
                     self._processed += 1
 
             except Exception as e:
                 logger.error("Fragment bridge error (%s): %s", source_type, e)
                 self._errors += 1
+
+    # -- Stage 4: Incident creation from snapped clusters -------------------
+
+    async def _create_incident_from_snaps(
+        self, session: Any, tenant_id: str
+    ) -> None:
+        """
+        Check for newly-snapped fragments and create incidents.
+
+        When the accumulation graph detects a cluster snap (score >= 0.70),
+        fragments are marked SNAPPED with a shared snapped_hypothesis_id.
+        This method finds hypothesis groups that don't yet have an incident
+        and creates one in ANOMALY status (the proto-incident).
+
+        Then attempts to auto-generate a SITREP via Ollama for human review.
+        """
+        from sqlalchemy import func, select
+
+        from backend.app.models.abeyance_orm import AbeyanceFragmentORM
+        from backend.app.models.incident_orm import IncidentORM
+
+        # Find hypothesis IDs with SNAPPED fragments
+        hyp_query = (
+            select(AbeyanceFragmentORM.snapped_hypothesis_id)
+            .where(
+                AbeyanceFragmentORM.tenant_id == tenant_id,
+                AbeyanceFragmentORM.snap_status == "SNAPPED",
+                AbeyanceFragmentORM.snapped_hypothesis_id.isnot(None),
+            )
+            .group_by(AbeyanceFragmentORM.snapped_hypothesis_id)
+        )
+        result = await session.execute(hyp_query)
+        hypothesis_ids = [row[0] for row in result.fetchall()]
+
+        if not hypothesis_ids:
+            return
+
+        for hyp_id in hypothesis_ids:
+            # Check if an incident already exists for this hypothesis
+            existing = await session.execute(
+                select(func.count()).select_from(IncidentORM).where(
+                    IncidentORM.tenant_id == tenant_id,
+                    IncidentORM.title.contains(str(hyp_id)[:8]),
+                )
+            )
+            if (existing.scalar() or 0) > 0:
+                continue  # Already created
+
+            # Gather all fragments in this hypothesis cluster
+            frags = await session.execute(
+                select(AbeyanceFragmentORM).where(
+                    AbeyanceFragmentORM.snapped_hypothesis_id == hyp_id,
+                    AbeyanceFragmentORM.tenant_id == tenant_id,
+                )
+            )
+            fragments = frags.scalars().all()
+            if not fragments:
+                continue
+
+            # Build incident from fragment evidence
+            title, severity, entity_id, reasoning_chain = (
+                self._synthesize_incident_from_fragments(fragments, hyp_id)
+            )
+
+            # Create incident via service
+            try:
+                from backend.app.schemas.incidents import IncidentCreate
+                from backend.app.services.incident_service import (
+                    create_incident_from_cluster,
+                )
+
+                payload = IncidentCreate(
+                    tenant_id=tenant_id,
+                    title=title,
+                    severity=severity,
+                    entity_id=entity_id,
+                )
+                incident = await create_incident_from_cluster(
+                    payload, session, tenant_id
+                )
+                # Store reasoning chain
+                incident.reasoning_chain = reasoning_chain
+
+                logger.info(
+                    "Incident created from AM cluster snap: id=%s hyp=%s "
+                    "fragments=%d severity=%s",
+                    incident.id, str(hyp_id)[:8],
+                    len(fragments), severity,
+                )
+
+                # Attempt SITREP generation via LLM (best-effort)
+                await self._generate_sitrep_for_incident(
+                    session, incident, fragments, tenant_id
+                )
+
+            except Exception as e:
+                logger.error(
+                    "Failed to create incident from hypothesis %s: %s",
+                    str(hyp_id)[:8], e,
+                )
+
+    @staticmethod
+    def _synthesize_incident_from_fragments(
+        fragments: list, hyp_id: Any
+    ) -> tuple[str, str, str | None, list[dict]]:
+        """
+        Synthesize incident title, severity, entity, and reasoning chain
+        from a cluster of snapped fragments.
+        """
+        # Collect entity refs and failure modes across all fragments
+        all_entities: list[str] = []
+        all_failure_modes: list[str] = []
+        severities: list[str] = []
+        reasoning_chain: list[dict] = []
+
+        for frag in fragments:
+            # Gather entity references
+            if frag.extracted_entities:
+                for ent in frag.extracted_entities:
+                    if isinstance(ent, dict):
+                        all_entities.append(ent.get("identifier", "unknown"))
+                    elif isinstance(ent, str):
+                        all_entities.append(ent)
+
+            # Gather failure modes
+            if frag.failure_mode_tags:
+                for tag in frag.failure_mode_tags:
+                    if isinstance(tag, str):
+                        all_failure_modes.append(tag)
+
+            # Parse severity from raw_content
+            raw = (frag.raw_content or "").lower()
+            if "critical" in raw:
+                severities.append("critical")
+            elif "major" in raw:
+                severities.append("major")
+            elif "minor" in raw:
+                severities.append("minor")
+
+            # Build reasoning step per fragment
+            reasoning_chain.append({
+                "step": f"Fragment {frag.source_type}",
+                "fragment_id": str(frag.id),
+                "timestamp": frag.event_timestamp.isoformat() if frag.event_timestamp else None,
+                "detail": (frag.raw_content or "")[:200],
+                "entities": all_entities[-3:] if all_entities else [],
+            })
+
+        # Determine primary entity (most frequently referenced)
+        entity_id = None
+        if all_entities:
+            from collections import Counter
+            entity_counts = Counter(all_entities)
+            entity_id = entity_counts.most_common(1)[0][0]
+
+        # Determine severity (highest in cluster)
+        severity_order = {"critical": 0, "major": 1, "minor": 2}
+        if severities:
+            severities.sort(key=lambda s: severity_order.get(s, 99))
+            severity = severities[0]
+        else:
+            severity = "major"
+
+        # Determine dominant failure modes
+        unique_modes = list(dict.fromkeys(all_failure_modes))[:3]
+        mode_text = ", ".join(unique_modes) if unique_modes else "correlated anomalies"
+
+        # Unique entities for title
+        unique_entities = list(dict.fromkeys(all_entities))[:3]
+        entity_text = ", ".join(unique_entities) if unique_entities else "multiple entities"
+
+        title = (
+            f"[AM] {mode_text} affecting {entity_text} "
+            f"({len(fragments)} fragments, hyp:{str(hyp_id)[:8]})"
+        )
+
+        # Add cluster-level reasoning step
+        reasoning_chain.append({
+            "step": "Cluster snap",
+            "hypothesis_id": str(hyp_id),
+            "fragment_count": len(fragments),
+            "failure_modes": unique_modes,
+            "entities": unique_entities,
+        })
+
+        return title, severity, entity_id, reasoning_chain
+
+    @staticmethod
+    async def _generate_sitrep_for_incident(
+        session: Any, incident: Any, fragments: list, tenant_id: str
+    ) -> None:
+        """
+        Auto-generate SITREP via LLM (Ollama) and advance to SITREP_DRAFT.
+        Best-effort — if LLM is unavailable, incident stays in ANOMALY status.
+        """
+        try:
+            from backend.app.services.llm_service import generate_sitrep
+
+            # Build incident context for SITREP generation
+            entity_refs = []
+            for frag in fragments:
+                if frag.extracted_entities:
+                    for ent in frag.extracted_entities:
+                        if isinstance(ent, dict):
+                            entity_refs.append(ent.get("identifier", ""))
+                        elif isinstance(ent, str):
+                            entity_refs.append(ent)
+
+            incident_context = {
+                "entity_id": incident.entity_id or "unknown",
+                "entity_name": incident.entity_id or "unknown",
+                "severity": incident.severity,
+                "title": incident.title,
+                "fragment_count": len(fragments),
+                "failure_modes": [
+                    tag for frag in fragments
+                    if frag.failure_mode_tags
+                    for tag in frag.failure_mode_tags
+                    if isinstance(tag, str)
+                ][:5],
+                "affected_entities": list(dict.fromkeys(entity_refs))[:10],
+            }
+
+            sitrep = await generate_sitrep(
+                incident_context=incident_context,
+                similar_decisions=[],
+                session=session,
+            )
+
+            if sitrep and sitrep.get("text"):
+                incident.resolution_summary = sitrep["text"]
+                incident.llm_model_version = sitrep.get("model_version")
+                incident.llm_prompt_hash = sitrep.get("prompt_hash")
+                incident.status = "sitrep_draft"
+                logger.info(
+                    "SITREP generated for incident %s (confidence=%.2f)",
+                    incident.id,
+                    sitrep.get("confidence", 0),
+                )
+
+        except Exception as e:
+            # LLM unavailable — incident stays in ANOMALY status
+            logger.debug("SITREP generation skipped for %s: %s", incident.id, e)
 
     # -- Event → evidence converters --------------------------------------
 

@@ -83,32 +83,50 @@ async def alarm_event_generator(
                 await asyncio.sleep(0.1)
                 continue
 
-            # Poll for alarms — union security_events (CasinoLimit demo)
-            # with telco_events_alarms (Telco2 live dataset)
+            # Poll for alarms — query each source independently so a
+            # missing table (e.g. security_events not yet deployed) does
+            # not break the entire SSE stream.
             try:
-                query = text("""
-                    SELECT id, specific_problem, perceived_severity,
-                           alarmed_object_id, event_time
-                    FROM (
-                        SELECT id, technique_name AS specific_problem,
-                               severity AS perceived_severity,
-                               machine_name AS alarmed_object_id,
-                               detected_at AS event_time
-                        FROM security_events
-                        WHERE tenant_id = :tid
-                        UNION ALL
+                rows = []
+
+                # Telco alarms (primary stream)
+                try:
+                    telco_q = text("""
                         SELECT alarm_id AS id, alarm_type AS specific_problem,
                                severity AS perceived_severity,
                                entity_id AS alarmed_object_id,
                                raised_at AS event_time
                         FROM telco_events_alarms
                         WHERE tenant_id = :tid
-                    ) combined
-                    ORDER BY event_time DESC
-                    LIMIT 20
-                """)
-                result = await db.execute(query, {"tid": tenant_id})
-                rows = result.fetchall()
+                        ORDER BY raised_at DESC
+                        LIMIT 20
+                    """)
+                    result = await db.execute(telco_q, {"tid": tenant_id})
+                    rows.extend(result.fetchall())
+                except Exception:
+                    pass  # Table may not exist yet
+
+                # Security events (optional stream)
+                try:
+                    sec_q = text("""
+                        SELECT id, technique_name AS specific_problem,
+                               severity AS perceived_severity,
+                               machine_name AS alarmed_object_id,
+                               detected_at AS event_time
+                        FROM security_events
+                        WHERE tenant_id = :tid
+                        ORDER BY detected_at DESC
+                        LIMIT 20
+                    """)
+                    result = await db.execute(sec_q, {"tid": tenant_id})
+                    rows.extend(result.fetchall())
+                except Exception:
+                    pass  # Table may not exist yet
+
+                # Merge and sort by event_time DESC, take top 20
+                _min_dt = datetime.min.replace(tzinfo=timezone.utc)
+                rows.sort(key=lambda r: r[4] or _min_dt, reverse=True)
+                rows = rows[:20]
 
                 if rows:
                     newest_id = str(rows[0][0])

@@ -1,0 +1,346 @@
+Controlled Telemetry Replay & Streaming Intelligence Pipeline
+
+Objective
+
+Build a controlled telemetry replay pipeline that simulates real-time production traffic by streaming historical Parquet telemetry data into Apache Kafka, allowing backend services to process the data into PostgreSQL and TimescaleDB while dashboards visualize system learning and memory evolution.
+
+The system must behave like a live production environment while operating within constrained infrastructure.
+
+⸻
+
+Live-Stream Compatibility Requirement (Architectural Constraint)
+
+The telemetry replay mechanism must be engineered as a drop-in stand-in for real production telemetry ingestion.
+
+Core Principle
+
+Downstream systems must remain completely unaware that telemetry originates from historical Parquet data rather than a live network.
+
+Future Transition Requirement
+
+At any time, the replay source must be replaceable with:
+
+Live telemetry streams from a client production network
+
+with zero required changes to:
+	•	Kafka infrastructure
+	•	Topic design
+	•	Backend consumers
+	•	Database schemas
+	•	Inference systems
+	•	Dashboards
+	•	Abeyance Memory systems
+	•	Intelligence and analytics layers
+
+Design Requirements
+
+The replay service must therefore:
+	•	Emit messages identical to live production telemetry
+	•	Preserve production-grade event cadence and sequencing
+	•	Use identical Kafka topic structures
+	•	Use identical message schemas
+	•	Match delivery semantics of real streaming sources
+
+Abstraction Model
+
+Telemetry Source (Replaceable Layer)
+    ├── Historical Parquet Replay (current mode)
+    └── Live Client Network Stream (future mode)
+            ↓
+        Kafka Ingestion Layer (permanent)
+            ↓
+        Processing & Intelligence Platform
+
+Strict Constraint
+
+Parquet-based replay is only a temporary telemetry source, not a platform dependency.
+No downstream component may contain replay-specific logic.
+
+The platform must treat replayed telemetry as production-equivalent data.
+
+⸻
+
+Data Sources
+
+Telemetry Parquet datasets are located at:
+
+Cloud environment
+
+/home/ubuntu/Pedkai-data/output/
+
+Local development environment
+
+/Volumes/Projects/Pedkai Data Store/six_telecom/output
+
+Data Selection Rules
+
+The replay service must:
+	1.	Use only Parquet sources containing time-series telemetry
+	2.	Ignore datasets already ingested into the main database
+	3.	Skip the first 24 hours of time-series data (already loaded)
+	4.	Begin replay strictly from T+24h onward
+
+⸻
+
+System Architecture
+
+Application Server
+	•	Apache Kafka broker
+	•	Telemetry Replay Service (new component)
+	•	Backend consumer services
+	•	Frontend dashboards
+	•	Ollama inference engine
+
+Database Server
+	•	PostgreSQL
+	•	TimescaleDB
+	•	pgvector extension
+
+⸻
+
+Components to Build
+
+1️⃣ Telemetry Replay Service (Parquet → Kafka Producer)
+
+A streaming simulator that mimics live telemetry ingestion.
+
+Core Responsibilities
+	1.	Sequentially read Parquet telemetry
+	2.	Sort records by original event timestamp
+	3.	Replay events with controllable time acceleration
+	4.	Publish messages to properly designed Kafka topics
+
+Replay Behavior Requirements
+	•	Preserve original event order
+	•	Maintain authentic inter-event timing gaps
+	•	Support configurable acceleration factors
+	•	Produce production-equivalent telemetry streams
+
+⸻
+
+2️⃣ Kafka Topic Design (Domain-Oriented)
+
+Telemetry streams must be organized by network domain so higher-level intelligence can emerge naturally.
+
+Primary Domains
+	•	Mobile RAN
+	•	Transport
+	•	Fixed Access
+	•	Radio
+	•	Core
+	•	Fixed Broadband
+
+Topic Design Requirements
+
+Topics must:
+	•	Be domain-segmented
+	•	Support further logical subdivision by metric type where beneficial
+	•	Be finalized after inspection of Parquet schemas
+
+Illustrative examples (not prescriptive):
+
+telemetry.mobile_ran.cpu
+telemetry.mobile_ran.kpi
+telemetry.transport.network
+telemetry.core.alerts
+telemetry.fixed_access.system
+
+Kafka Behavior
+
+Rely on Kafka’s native automatic partition management.
+
+⸻
+
+3️⃣ Replay Modes
+
+Primary Mode: Accelerated Time (Required)
+
+Replay historical data faster than real-time while preserving relative temporal behavior.
+
+Example Compression Targets
+
+Real Duration	Replay Duration
+1 month	6 hours
+1 day	~12 minutes
+
+Timing Formula
+
+sleep_time = original_time_delta / acceleration_factor
+
+Acceleration Constraints
+
+Replay speed must respect infrastructure limits.
+
+Application Server Constraints
+	•	24 GB RAM
+	•	100 GB disk
+	•	Already hosting frontend, backend, Kafka, and Ollama
+
+Database Server Constraints
+	•	Similar specs
+	•	Disk expandable to 100 GB
+
+Environment Rule
+
+Replay runs in cloud, but the codebase must remain identical across cloud and local environments.
+
+⸻
+
+Processing Flow
+
+Parquet Files
+    ↓
+Telemetry Replay Service
+    ↓
+Kafka Topics
+    ↓
+Backend Consumers
+    ↓
+TimescaleDB hypertables + PostgreSQL tables
+    ↓
+Inference Layer (Ollama, optional)
+    ↓
+Dashboards visualize learning & memory evolution
+
+
+⸻
+
+Implementation Blueprint
+
+Step 1 — Parquet → Kafka Streaming
+
+Python Skeleton
+
+import pyarrow.parquet as pq
+import time
+from confluent_kafka import Producer
+import json
+
+table = pq.read_table("telemetry.parquet")
+df = table.to_pandas().sort_values("timestamp")
+
+producer = Producer({'bootstrap.servers': 'localhost:9092'})
+
+ACCELERATION = 120
+
+prev_ts = None
+
+for _, row in df.iterrows():
+    if prev_ts:
+        delta = (row.timestamp - prev_ts).total_seconds()
+        time.sleep(delta / ACCELERATION)
+
+    topic = f"telemetry.{row.domain}.{row.metric_type}"
+
+    producer.produce(topic, json.dumps(row.to_dict()).encode())
+    producer.poll(0)
+
+    prev_ts = row.timestamp
+
+
+⸻
+
+Step 2 — Backend Kafka Consumers
+
+Backend services must:
+	•	Run dedicated consumers per topic group
+	•	Batch messages for efficient DB writes
+
+Database Responsibilities
+
+PostgreSQL
+	•	Metadata
+	•	System states
+	•	Events
+
+TimescaleDB
+	•	KPI time-series
+	•	High-volume telemetry metrics
+
+⸻
+
+Step 3 — TimescaleDB Optimization
+
+Convert KPI tables into hypertables:
+
+SELECT create_hypertable('kpi_metrics', 'timestamp');
+
+Enable compression and continuous aggregates for dashboard performance.
+
+⸻
+
+Infrastructure-Constrained Optimization
+
+Because replay, Kafka, and services share the same host:
+
+Required Optimizations
+	•	Low partition counts (1–3 per topic)
+	•	Asynchronous Kafka producers
+	•	Batched message publishing
+	•	Replay throttling to prevent CPU spikes
+
+Kafka overhead remains lightweight at this scale.
+
+⸻
+
+Deployment Pattern
+
+OCI Cost-Efficient Deployment
+
+Deploy replay pipeline using Docker Compose on the application server.
+
+⸻
+
+Advanced Simulation Modes (Scenario Testing)
+
+Add configurable Scenario Modes to stress-test intelligence systems:
+
+Simulated Conditions
+	•	Incident spikes
+	•	Device failures
+	•	Traffic surges
+	•	Anomaly bursts
+
+These scenarios validate:
+	•	Pedkai functional logic
+	•	Abeyance Memory effectiveness
+	•	Adaptive automated responses
+
+⸻
+
+Expected System Outcomes
+
+Data Layer
+	•	TimescaleDB fills with realistic streaming telemetry
+	•	Time-series storage uses a bounded buffer:
+	•	Storage-constrained
+	•	Oldest records evicted automatically
+	•	Continuous ingestion preserved
+
+Intelligence Layer
+	•	Backend aggregates evolve dynamically
+	•	Abeyance Memory vector database evolves:
+	•	Fragmentation
+	•	Surprise detection
+	•	Causal pair formation
+	•	Disconfirmation handling
+	•	Memory snaps
+	•	Memory-driven functional responses trigger automatically
+
+Inference Layer
+	•	AI models detect patterns and anomalies
+	•	Intelligence improves progressively
+
+Visualization Layer
+
+Dashboards must clearly demonstrate:
+
+System Learning Over Time
+
+Especially:
+
+Abeyance Memory Evolution (core Pedkai differentiator)
+
+Operational Behavior
+
+The platform must behave indistinguishably from a live production deployment.

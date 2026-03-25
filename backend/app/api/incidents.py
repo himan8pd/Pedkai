@@ -200,6 +200,7 @@ async def create_incident(
 @router.get("/")
 async def list_incidents(
     status: Optional[str] = Query(None),
+    exclude_status: Optional[str] = Query(None, description="Exclude incidents with this status (e.g. 'closed' for open incidents)"),
     severity: Optional[str] = Query(None),
     tenant_id: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -228,6 +229,8 @@ async def list_incidents(
         conditions.append(IncidentORM.tenant_id == tid)
     if status:
         conditions.append(IncidentORM.status == status)
+    if exclude_status:
+        conditions.append(IncidentORM.status != exclude_status)
     if severity:
         conditions.append(IncidentORM.severity == severity)
     if search:
@@ -243,6 +246,9 @@ async def list_incidents(
     if status:
         count_parts.append("AND status = :status")
         count_params["status"] = status
+    if exclude_status:
+        count_parts.append("AND status != :exclude_status")
+        count_params["exclude_status"] = exclude_status
     if severity:
         count_parts.append("AND severity = :severity")
         count_params["severity"] = severity

@@ -4,8 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Dashboard from "@/app/components/Dashboard";
 import { useAuth } from "@/app/context/AuthContext";
 
-const SSE_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export default function DashboardPage() {
   const { tenantId, token, authFetch, getToken } = useAuth();
