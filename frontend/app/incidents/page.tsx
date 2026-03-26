@@ -145,8 +145,8 @@ export default function IncidentsPage() {
     try {
       // Total and closed counts (always unfiltered for the header line)
       const [countRes, closedRes] = await Promise.all([
-        authFetch("/api/v1/incidents/?page=1&page_size=1"),
-        authFetch("/api/v1/incidents/?page=1&page_size=1&status=closed"),
+        authFetch("/api/v1/incidents?page=1&page_size=1"),
+        authFetch("/api/v1/incidents?page=1&page_size=1&status=closed"),
       ]);
       if (countRes.ok) {
         const countData = await countRes.json();
@@ -167,7 +167,7 @@ export default function IncidentsPage() {
 
       const priResults = await Promise.all(
         ["critical", "major", "minor", "warning", "info"].map((sev) =>
-          authFetch(`/api/v1/incidents/?page=1&page_size=1&severity=${sev}${statusParam}`)
+          authFetch(`/api/v1/incidents?page=1&page_size=1&severity=${sev}${statusParam}`)
             .then((r) => r.json()),
         ),
       );
@@ -224,7 +224,7 @@ export default function IncidentsPage() {
         params.set("search", searchText);
       }
 
-      const res = await authFetch(`/api/v1/incidents/?${params.toString()}`);
+      const res = await authFetch(`/api/v1/incidents?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setIncidents(data.incidents);

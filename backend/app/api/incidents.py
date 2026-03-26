@@ -112,7 +112,7 @@ async def _log_audit_event(
     await db.flush()
 
 
-@router.post("/", response_model=IncidentResponse, status_code=201)
+@router.post("", response_model=IncidentResponse, status_code=201)
 async def create_incident(
     payload: IncidentCreate,
     db: AsyncSession = Depends(get_db),
@@ -197,7 +197,7 @@ async def create_incident(
     return _to_response(incident)
 
 
-@router.get("/")
+@router.get("")
 async def list_incidents(
     status: Optional[str] = Query(None),
     exclude_status: Optional[str] = Query(None, description="Exclude incidents with this status (e.g. 'closed' for open incidents)"),

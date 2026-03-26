@@ -34,7 +34,7 @@ _decision_store: dict[UUID, DecisionTrace] = {}
 USE_DATABASE = "localhost" not in settings.database_url or True  # Set to False for in-memory mode
 
 
-@router.post("/", response_model=DecisionTrace, status_code=201)
+@router.post("", response_model=DecisionTrace, status_code=201)
 async def create_decision_trace(
     decision: DecisionTraceCreate,
     db=Depends(get_db) if USE_DATABASE else None,
@@ -105,7 +105,7 @@ async def create_decision_trace(
         return trace
 
 
-@router.get("/", response_model=list[DecisionTrace])
+@router.get("", response_model=list[DecisionTrace])
 async def list_decision_traces(
     tenant_id: str,
     domain: Optional[str] = None,

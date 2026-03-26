@@ -78,7 +78,7 @@ async def create_densification_request(
     return db_request
 
 
-@router.get("/", response_model=List[DensificationSchema])
+@router.get("", response_model=List[DensificationSchema])
 async def list_densification_requests(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
