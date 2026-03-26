@@ -57,6 +57,8 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_LOG_RETENTION_MS: 14400000
+      KAFKA_LOG_SEGMENT_BYTES: 104857600
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
