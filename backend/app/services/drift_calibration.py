@@ -45,28 +45,20 @@ class DriftCalibrationService:
 
         try:
             async with self._get_session(session) as s:
-                # Count total drift detections (decision traces) in window
-                total_result = await s.execute(
+                # Single query: total and dismissed counts via conditional aggregation
+                result = await s.execute(
                     text("""
-                        SELECT COUNT(*) FROM decision_traces
+                        SELECT COUNT(*) AS total,
+                               COUNT(*) FILTER (WHERE status = 'dismissed') AS dismissed
+                        FROM decision_traces
                         WHERE tenant_id = :tid
                         AND created_at >= :since
                     """),
                     {"tid": tenant_id, "since": window_start},
                 )
-                total = total_result.scalar() or 0
-
-                # Count false positives (dismissed recommendations)
-                fp_result = await s.execute(
-                    text("""
-                        SELECT COUNT(*) FROM decision_traces
-                        WHERE tenant_id = :tid
-                        AND created_at >= :since
-                        AND status = 'dismissed'
-                    """),
-                    {"tid": tenant_id, "since": window_start},
-                )
-                false_positives = fp_result.scalar() or 0
+                row = result.fetchone()
+                total = row[0] if row else 0
+                false_positives = row[1] if row else 0
 
             true_positives = total - false_positives
             fp_rate = round(false_positives / total, 4) if total > 0 else 0.0

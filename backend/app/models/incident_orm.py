@@ -6,7 +6,7 @@ SQLite-compatible: UUIDs stored as String, no FK constraints.
 """
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, DateTime, JSON
+from sqlalchemy import Column, Index, String, Text, DateTime, JSON
 
 from backend.app.core.database import Base
 
@@ -59,3 +59,8 @@ class IncidentORM(Base):
     # Standard timestamps
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_incidents_tenant_created", "tenant_id", "created_at"),
+        Index("ix_incidents_tenant_closed", "tenant_id", "closed_at", "created_at"),
+    )

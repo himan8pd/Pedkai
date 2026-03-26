@@ -528,13 +528,8 @@ export default function DivergencePage() {
 
   useEffect(() => {
     fetchSummary();
-  }, [fetchSummary]);
-
-  useEffect(() => {
-    if (summary) {
-      fetchAggregations();
-    }
-  }, [summary, fetchAggregations]);
+    fetchAggregations();
+  }, [fetchSummary, fetchAggregations]);
 
   useEffect(() => {
     if (summary && view === "table") fetchRecords();
@@ -581,7 +576,7 @@ export default function DivergencePage() {
             setShowEval(false);
             setAggregations(null);
             setView("summary");
-            await fetchSummary();
+            await Promise.all([fetchSummary(), fetchAggregations()]);
           } else if (job.status === "failed") {
             clearInterval(pollRef.current!);
             pollRef.current = null;

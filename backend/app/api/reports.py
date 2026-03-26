@@ -311,67 +311,59 @@ async def get_divergence_aggregations(
     """
     tenant_id = _tenant_from_jwt(current_user)
 
-    # -- By type x domain (heatmap data) --
-    type_domain_rows = await db.execute(
-        text(
-            """
-            SELECT divergence_type, domain, COUNT(*) AS cnt
-            FROM reconciliation_results
-            WHERE tenant_id = :tid AND domain IS NOT NULL
-            GROUP BY divergence_type, domain
-            ORDER BY cnt DESC
-            """
-        ),
-        {"tid": tenant_id},
-    )
-    type_domain = [
-        {"type": r[0], "domain": r[1], "count": r[2]}
-        for r in type_domain_rows.fetchall()
-    ]
+    # -- Ensure functional index exists for the CAST JOIN --
+    await db.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_ne_id_text ON network_entities ((CAST(id AS TEXT)), tenant_id)"
+    ))
 
-    # -- By type x target_type (top entity types per divergence) --
-    type_target_rows = await db.execute(
+    # -- Combined aggregation: type×domain, type×target_type, confidence buckets
+    #    in a single table scan using conditional aggregation --
+    combined_rows = await db.execute(
         text(
             """
-            SELECT divergence_type, target_type, COUNT(*) AS cnt
-            FROM reconciliation_results
-            WHERE tenant_id = :tid AND target_type IS NOT NULL
-            GROUP BY divergence_type, target_type
-            ORDER BY cnt DESC
-            """
-        ),
-        {"tid": tenant_id},
-    )
-    type_target = [
-        {"type": r[0], "target_type": r[1], "count": r[2]}
-        for r in type_target_rows.fetchall()
-    ]
-
-    # -- Confidence distribution (buckets) --
-    confidence_rows = await db.execute(
-        text(
-            """
-            SELECT
-              divergence_type,
-              CASE
-                WHEN confidence >= 0.9 THEN 'critical'
-                WHEN confidence >= 0.7 THEN 'high'
-                WHEN confidence >= 0.5 THEN 'medium'
-                ELSE 'low'
-              END AS bucket,
-              COUNT(*) AS cnt
+            SELECT divergence_type, domain, target_type, confidence,
+                   entity_or_relationship
             FROM reconciliation_results
             WHERE tenant_id = :tid
-            GROUP BY divergence_type, bucket
-            ORDER BY divergence_type, bucket
             """
         ),
         {"tid": tenant_id},
     )
-    confidence_buckets = [
-        {"type": r[0], "bucket": r[1], "count": r[2]}
-        for r in confidence_rows.fetchall()
-    ]
+    rows = combined_rows.fetchall()
+
+    # Build all three aggregations from the single result set in Python
+    from collections import defaultdict
+    td_counts: dict = defaultdict(int)
+    tt_counts: dict = defaultdict(int)
+    cb_counts: dict = defaultdict(int)
+
+    for div_type, domain, target_type, confidence, entity_or_rel in rows:
+        if domain is not None:
+            td_counts[(div_type, domain)] += 1
+        if target_type is not None:
+            tt_counts[(div_type, target_type)] += 1
+        if confidence >= 0.9:
+            bucket = "critical"
+        elif confidence >= 0.7:
+            bucket = "high"
+        elif confidence >= 0.5:
+            bucket = "medium"
+        else:
+            bucket = "low"
+        cb_counts[(div_type, bucket)] += 1
+
+    type_domain = sorted(
+        [{"type": k[0], "domain": k[1], "count": v} for k, v in td_counts.items()],
+        key=lambda x: x["count"], reverse=True,
+    )
+    type_target = sorted(
+        [{"type": k[0], "target_type": k[1], "count": v} for k, v in tt_counts.items()],
+        key=lambda x: x["count"], reverse=True,
+    )
+    confidence_buckets = sorted(
+        [{"type": k[0], "bucket": k[1], "count": v} for k, v in cb_counts.items()],
+        key=lambda x: (x["type"], x["bucket"]),
+    )
 
     # -- Top affected entities (most divergences per entity) --
     top_entities_rows = await db.execute(

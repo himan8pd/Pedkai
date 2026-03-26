@@ -8,7 +8,7 @@ when comparing CMDB declared state against operational signals
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, String, Text
+from sqlalchemy import Column, DateTime, Float, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.app.core.database import Base
@@ -49,6 +49,11 @@ class ReconciliationResultORM(Base):
     ai_analysis = Column(JSONB)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_rr_tenant_type_domain", "tenant_id", "divergence_type", "domain"),
+        Index("ix_rr_tenant_confidence", "tenant_id", "confidence"),
+    )
 
 
 class ReconciliationRunORM(Base):

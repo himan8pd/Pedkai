@@ -101,26 +101,20 @@ async def get_scorecard(
         )
     ).scalar() or 0
 
-    # ── MTTR from closed incidents ────────────────────────────────────
-    mttr_query = await db.execute(
-        select(IncidentORM.created_at, IncidentORM.closed_at).where(
+    # ── MTTR from closed incidents (SQL aggregate) ───────────────────
+    mttr_result = await db.execute(
+        select(
+            func.avg(
+                func.extract("epoch", IncidentORM.closed_at - IncidentORM.created_at) / 60.0
+            )
+        ).where(
             IncidentORM.tenant_id == tenant_id,
             IncidentORM.closed_at.isnot(None),
             IncidentORM.created_at >= period_start,
             IncidentORM.created_at <= period_end,
         )
     )
-    rows = mttr_query.fetchall()
-
-    total_minutes = 0.0
-    closed_count = 0
-    for created, closed in rows:
-        if created and closed:
-            diff = (closed - created).total_seconds() / 60
-            total_minutes += diff
-            closed_count += 1
-
-    avg_mttr = (total_minutes / closed_count) if closed_count > 0 else None
+    avg_mttr = mttr_result.scalar()
 
     # B-4 FIX: No fabricated baselines. Shadow-mode data collection required first.
     non_pedkai_zone_mttr = None

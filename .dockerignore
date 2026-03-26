@@ -14,3 +14,8 @@ tests/
 .claude/
 .venv/
 venv/
+abeyance_orchestrator_run/
+decision_memory/
+.DS_Store
+*.log
+*.md

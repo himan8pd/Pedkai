@@ -1389,4 +1389,14 @@ class ReconciliationEngine:
                 "CREATE INDEX IF NOT EXISTS ix_rr_domain ON reconciliation_results(domain)"
             )
         )
+        await self.session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_rr_tenant_type_domain ON reconciliation_results(tenant_id, divergence_type, domain)"
+            )
+        )
+        await self.session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_rr_tenant_confidence ON reconciliation_results(tenant_id, confidence DESC)"
+            )
+        )
         await self.session.commit()

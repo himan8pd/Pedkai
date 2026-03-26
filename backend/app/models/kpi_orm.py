@@ -47,7 +47,10 @@ class KPIMetricORM(Base):
     tags = Column("metadata", JSONB, nullable=False, default=dict, key="tags")
 
     # Indexes are implicitly created for Primary Key, but we keep time-based ones for performance
-    __table_args__ = (Index("ix_kpi_metrics_timestamp", "timestamp"),)
+    __table_args__ = (
+        Index("ix_kpi_metrics_timestamp", "timestamp"),
+        Index("ix_kpi_metrics_tenant_timestamp", "tenant_id", "timestamp"),
+    )
 
     def __repr__(self) -> str:
         return f"<KPIMetric(entity={self.entity_id}, metric={self.metric_name}, value={self.value})>"
