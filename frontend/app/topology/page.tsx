@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { ZoomIn, ZoomOut, Maximize2, Search, ArrowRight, Layers, Network } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Search, ArrowRight, Layers, Network, Map as MapIcon, GitGraph } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext";
 
@@ -14,8 +15,13 @@ interface TopologyEntity {
   external_id?: string;
   vendor?: string;
   zone?: string;
+  geo_lat?: number | null;
+  geo_lon?: number | null;
   properties?: Record<string, any>;
 }
+
+/* Lazy-load the map view (Leaflet requires window/document) */
+const TopologyMapView = dynamic(() => import("@/app/components/TopologyMapView"), { ssr: false });
 
 interface TopologyRelationship {
   id: string;
@@ -380,6 +386,9 @@ export default function TopologyPage() {
   const [loadingGraph, setLoadingGraph] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // View mode: "graph" (force-directed canvas) or "map" (Leaflet geo view)
+  const [viewMode, setViewMode] = useState<"graph" | "map">("graph");
+
   // Layer filter state
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [showInferred, setShowInferred] = useState(true);
@@ -957,7 +966,7 @@ export default function TopologyPage() {
         )}
       </div>
 
-      {/* ── Canvas area ── */}
+      {/* ── Main visualization area ── */}
       <div className="flex-1 relative bg-[#020d18]">
         {!seedId ? (
           <div className="absolute inset-0 flex items-center justify-center flex-col text-white">
@@ -971,42 +980,88 @@ export default function TopologyPage() {
           </div>
         ) : (
           <>
-            <canvas
-              ref={canvasRef}
-              className="w-full h-full cursor-grab active:cursor-grabbing"
-              onClick={handleCanvasClick}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onWheel={handleWheel}
-            />
+            {/* ── Force-directed graph view ── */}
+            {viewMode === "graph" && (
+              <canvas
+                ref={canvasRef}
+                className="w-full h-full cursor-grab active:cursor-grabbing"
+                onClick={handleCanvasClick}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onWheel={handleWheel}
+              />
+            )}
 
-            {/* Zoom controls */}
-            <div className="absolute top-4 right-4 flex flex-col gap-1 z-10">
-              <button
-                onClick={() => setZoom((z) => Math.min(4, z * 1.3))}
-                className="p-2 rounded-lg bg-[#0a2d4a] border border-cyan-900/40 text-slate-200 hover:text-white hover:bg-[#0d3b5e] shadow-lg"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setZoom((z) => Math.max(0.15, z / 1.3))}
-                className="p-2 rounded-lg bg-[#0a2d4a] border border-cyan-900/40 text-slate-200 hover:text-white hover:bg-[#0d3b5e] shadow-lg"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-                className="p-2 rounded-lg bg-[#0a2d4a] border border-cyan-900/40 text-slate-200 hover:text-white hover:bg-[#0d3b5e] shadow-lg"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
+            {/* ── Geographic map view ── */}
+            {viewMode === "map" && (
+              <TopologyMapView
+                entities={entities}
+                relationships={relationships}
+                seedId={seedId}
+                selectedEntity={selectedEntity}
+                onSelectEntity={setSelectedEntity}
+                getColor={getColor}
+              />
+            )}
+
+            {/* View toggle + Zoom controls */}
+            <div className="absolute top-4 right-4 flex flex-col gap-1 z-[1000]">
+              {/* View mode toggle */}
+              <div className="flex rounded-lg overflow-hidden border border-cyan-900/40 shadow-lg mb-1">
+                <button
+                  onClick={() => setViewMode("graph")}
+                  className={`p-2 text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                    viewMode === "graph"
+                      ? "bg-cyan-400 text-gray-950"
+                      : "bg-[#0a2d4a] text-slate-200 hover:text-white hover:bg-[#0d3b5e]"
+                  }`}
+                  title="Force-directed graph"
+                >
+                  <GitGraph className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("map")}
+                  className={`p-2 text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                    viewMode === "map"
+                      ? "bg-cyan-400 text-gray-950"
+                      : "bg-[#0a2d4a] text-slate-200 hover:text-white hover:bg-[#0d3b5e]"
+                  }`}
+                  title="Geographic map"
+                >
+                  <MapIcon className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Zoom controls (graph view only) */}
+              {viewMode === "graph" && (
+                <>
+                  <button
+                    onClick={() => setZoom((z) => Math.min(4, z * 1.3))}
+                    className="p-2 rounded-lg bg-[#0a2d4a] border border-cyan-900/40 text-slate-200 hover:text-white hover:bg-[#0d3b5e] shadow-lg"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setZoom((z) => Math.max(0.15, z / 1.3))}
+                    className="p-2 rounded-lg bg-[#0a2d4a] border border-cyan-900/40 text-slate-200 hover:text-white hover:bg-[#0d3b5e] shadow-lg"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+                    className="p-2 rounded-lg bg-[#0a2d4a] border border-cyan-900/40 text-slate-200 hover:text-white hover:bg-[#0d3b5e] shadow-lg"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
 
-            {/* Selection detail panel */}
+            {/* Selection detail panel (shared by both views) */}
             {selectedEntity && (
-              <div className="absolute bottom-4 left-4 right-4 max-w-md bg-[#0a2d4a] border border-cyan-900/40 rounded-xl p-4 shadow-2xl z-10">
+              <div className="absolute bottom-4 left-4 right-4 max-w-md bg-[#0a2d4a] border border-cyan-900/40 rounded-xl p-4 shadow-2xl z-[1000]">
                 <div className="flex items-center gap-3 mb-3">
                   <span
                     className="w-4 h-4 rounded-full flex-shrink-0"
@@ -1030,7 +1085,7 @@ export default function TopologyPage() {
                     {selectedEntity.status}
                   </span>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm bg-[#06203b] rounded-lg p-3 border border-cyan-900/30">
                   <span className="text-white/60">Type</span>
                   <span className="text-white font-mono text-xs py-0.5">{selectedEntity.entity_type}</span>
@@ -1044,12 +1099,21 @@ export default function TopologyPage() {
                     </>
                   )}
 
+                  {selectedEntity.geo_lat != null && selectedEntity.geo_lon != null && (
+                    <>
+                      <span className="text-white/60">Coordinates</span>
+                      <span className="text-white font-mono text-[10px]">
+                        {selectedEntity.geo_lat.toFixed(4)}, {selectedEntity.geo_lon.toFixed(4)}
+                      </span>
+                    </>
+                  )}
+
                   <span className="text-white/60">Edges in view</span>
                   <span className="text-white">
                     {relationships.filter((r) => r.source_entity_id === selectedEntity.id || r.target_entity_id === selectedEntity.id).length}
                   </span>
                 </div>
-                
+
                 {selectedEntity.id !== seedId && (
                   <button
                     onClick={() => { setSeedId(selectedEntity.id); setHops(2); }}

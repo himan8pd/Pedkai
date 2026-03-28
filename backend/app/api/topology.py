@@ -565,7 +565,8 @@ async def get_neighborhood(
             from sqlalchemy import bindparam
             name_result = await db.execute(
                 text("""
-                    SELECT id, name, entity_type, external_id, operational_status
+                    SELECT id, name, entity_type, external_id, operational_status,
+                           latitude, longitude
                     FROM network_entities
                     WHERE tenant_id = :tid AND id IN :ids
                 """).bindparams(bindparam("ids", expanding=True)),
@@ -582,6 +583,8 @@ async def get_neighborhood(
                     "entity_type": r[2],
                     "external_id": r[3] or eid,
                     "status": r[4] or "unknown",
+                    "geo_lat": float(r[5]) if r[5] is not None else None,
+                    "geo_lon": float(r[6]) if r[6] is not None else None,
                     "properties": {"status": r[4] or "unknown"}
                 })
                 
@@ -594,6 +597,8 @@ async def get_neighborhood(
                     "entity_type": "UNKNOWN",
                     "external_id": missing_id,
                     "status": "unknown",
+                    "geo_lat": None,
+                    "geo_lon": None,
                     "properties": {"status": "unknown"}
                 })
                 

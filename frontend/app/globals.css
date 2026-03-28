@@ -412,3 +412,28 @@ body, nav, main, header, section, div, table, thead, tbody {
 [data-theme="light"] *:focus-visible {
   outline-color: #0891b2;
 }
+
+/* ── Leaflet dark theme overrides (Topology Map View) ─────────── */
+.leaflet-container {
+  background: #020d18;
+  font-family: inherit;
+}
+.topology-map-tooltip {
+  background: #0a2d4a !important;
+  border: 1px solid rgba(0, 212, 255, 0.3) !important;
+  color: #f8fafc !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+.topology-map-tooltip::before {
+  border-top-color: #0a2d4a !important;
+}
+.leaflet-control-attribution {
+  background: rgba(6, 32, 59, 0.7) !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  font-size: 9px !important;
+}
+.leaflet-control-attribution a {
+  color: rgba(0, 212, 255, 0.5) !important;
+}
