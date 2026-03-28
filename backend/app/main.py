@@ -183,7 +183,6 @@ app = FastAPI(
     ),
     version=settings.app_version,
     lifespan=lifespan,
-    redirect_slashes=False,
     swagger_ui_parameters={
         "persistAuthorization": True,
         "tryItOutEnabled": True,

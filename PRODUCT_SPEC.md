@@ -132,39 +132,39 @@ Pedk.ai is a 5-layer intelligence architecture:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                       PEDKAI CONTROL PLANE                          │
+│                       PEDKAI CONTROL PLANE                           │
 ├──────────────────────────────────────────────────────────────────────┤
 │  Layer 5: Automation & Actuation                                     │
-│  • Zero-touch ITSM ticket creation & routing                        │
-│  • Granular config changes via Vendor APIs (Ansible/NetConf)        │
-│  • Gated autonomous actions with 7 safety gates                     │
-│  • Rule: No autonomous action without explainability                │
-│  • OPERATOR ALWAYS IN CONTROL (see §7)                              │
+│  • Zero-touch ITSM ticket creation & routing                         │
+│  • Granular config changes via Vendor APIs (Ansible/NetConf)         │
+│  • Gated autonomous actions with 7 safety gates                      │
+│  • Rule: No autonomous action without explainability                 │
+│  • OPERATOR ALWAYS IN CONTROL (see §7)                               │
 ├──────────────────────────────────────────────────────────────────────┤
 │  Layer 4: Decision & Policy Engine ("The Constitution")              │
-│  • YAML-based declarative business rules                            │
-│  • Risk-aware decision making bound by SLA constraints              │
-│  • Decision Trace capture, pattern matching, outcome learning       │
+│  • YAML-based declarative business rules                             │
+│  • Risk-aware decision making bound by SLA constraints               │
+│  • Decision Trace capture, pattern matching, outcome learning        │
 ├──────────────────────────────────────────────────────────────────────┤
 │  Layer 3: Intelligence Engines                                       │
-│  • Anomaly Detection (Z-score, statistical)                         │
-│  • Root Cause Analysis (graph-based causal inference — see §8)      │
-│  • LLM Reasoning (vendor-neutral — see §15)                        │
-│  • Decision Similarity Search (vector embeddings)                   │
-│  • Evidence Fusion (pluggable methodology — see §5)                 │
+│  • Anomaly Detection (Z-score, statistical)                          │
+│  • Root Cause Analysis (graph-based causal inference — see §8)       │
+│  • LLM Reasoning (vendor-neutral — see §15)                          │
+│  • Decision Similarity Search (vector embeddings)                    │
+│  • Evidence Fusion (pluggable methodology — see §5)                  │
 ├──────────────────────────────────────────────────────────────────────┤
 │  Layer 2: Living Context Graph (Decision Memory)                     │
-│  • Decision Traces (why decisions were made, not just what)         │
-│  • Evidence Snapshots & Constraint History                          │
-│  • ABEYANCE MEMORY — Pedk.ai's core differentiator (see §4)         │
-│  • Topological Ghost Masks (suppress alarms during maintenance)     │
+│  • Decision Traces (why decisions were made, not just what)          │
+│  • Evidence Snapshots & Constraint History                           │
+│  • ABEYANCE MEMORY — Pedk.ai's core differentiator (see §4)          │
+│  • Topological Ghost Masks (suppress alarms during maintenance)      │
 ├──────────────────────────────────────────────────────────────────────┤
 │  Layer 1: Omniscient Data Fabric                                     │
-│  • Physical Reality: Streaming telemetry (Kafka), PM counters, logs │
-│  • Bureaucratic Intent: ITSM tickets, CMDB exports, change records  │
-│  • Multi-vendor ingestion: Ericsson (XML), Nokia (JSON)             │
+│  • Physical Reality: Streaming telemetry (Kafka), PM counters, logs  │
+│  • Bureaucratic Intent: ITSM tickets, CMDB exports, change records   │
+│  • Multi-vendor ingestion: Ericsson (XML), Nokia (JSON)              │
 │  NOTE: Pedk.ai OBSERVES element manager output.                      │
-│  It does not replace or bypass element managers.                    │
+│  It does not replace or bypass element managers.                     │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
