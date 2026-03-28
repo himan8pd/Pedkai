@@ -11,6 +11,7 @@
  */
 
 import React, { useMemo, useEffect, useRef } from "react";
+import { useTheme } from "@/app/context/ThemeContext";
 import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap } from "react-leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -74,10 +75,12 @@ function FitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   return null;
 }
 
-/* ── Dark-themed map tile URL (CartoDB dark_all) ─────────────── */
-const DARK_TILE_URL =
-  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
-const DARK_TILE_ATTR =
+/* ── Map tile URLs (CartoDB — theme-aware) ────────────────────── */
+const TILE_URLS = {
+  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+};
+const TILE_ATTR =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
 
 export default function TopologyMapView({
@@ -88,6 +91,9 @@ export default function TopologyMapView({
   onSelectEntity,
   getColor,
 }: Props) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+
   /* Split entities into geo-located vs unmapped */
   const { geoEntities, unmappedCount, entMap, bounds } = useMemo(() => {
     const geo: Entity[] = [];
@@ -173,11 +179,11 @@ export default function TopologyMapView({
         center={defaultCenter}
         zoom={6}
         className="w-full h-full"
-        style={{ background: "#020d18" }}
+        style={{ background: isLight ? "#f0f4f8" : "#020d18" }}
         zoomControl={false}
         attributionControl={true}
       >
-        <TileLayer url={DARK_TILE_URL} attribution={DARK_TILE_ATTR} />
+        <TileLayer key={theme} url={isLight ? TILE_URLS.light : TILE_URLS.dark} attribution={TILE_ATTR} />
         <FitBounds bounds={bounds} />
 
         {/* Edges as polylines */}
@@ -186,7 +192,7 @@ export default function TopologyMapView({
             key={edge.id}
             positions={edge.positions}
             pathOptions={{
-              color: "rgba(0, 212, 255, 0.35)",
+              color: isLight ? "rgba(15, 23, 42, 0.25)" : "rgba(0, 212, 255, 0.35)",
               weight: 1.5,
               dashArray: undefined,
             }}

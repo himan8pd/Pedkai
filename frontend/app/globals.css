@@ -413,11 +413,12 @@ body, nav, main, header, section, div, table, thead, tbody {
   outline-color: #0891b2;
 }
 
-/* ── Leaflet dark theme overrides (Topology Map View) ─────────── */
+/* ── Leaflet theme overrides (Topology Map View) ─────────────── */
 .leaflet-container {
-  background: #020d18;
   font-family: inherit;
 }
+
+/* Dark theme (default) */
 .topology-map-tooltip {
   background: #0a2d4a !important;
   border: 1px solid rgba(0, 212, 255, 0.3) !important;
@@ -436,4 +437,22 @@ body, nav, main, header, section, div, table, thead, tbody {
 }
 .leaflet-control-attribution a {
   color: rgba(0, 212, 255, 0.5) !important;
+}
+
+/* Light theme */
+[data-theme="light"] .topology-map-tooltip {
+  background: #fff !important;
+  border: 1px solid #d1d5db !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+}
+[data-theme="light"] .topology-map-tooltip::before {
+  border-top-color: #fff !important;
+}
+[data-theme="light"] .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.8) !important;
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+[data-theme="light"] .leaflet-control-attribution a {
+  color: rgba(0, 0, 0, 0.6) !important;
 }
