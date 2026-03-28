@@ -3,16 +3,17 @@
 /**
  * TopologyMapView — Leaflet-based geographic overlay for topology nodes.
  *
- * Renders nodes with geo coordinates as circle markers on an OpenStreetMap
+ * Renders nodes with geo coordinates as device-icon markers on a CartoDB
  * tile layer, with polyline edges between connected nodes.
- * Nodes without coordinates are listed in a small "unmapped" badge.
+ * Icons match the 11 categories used in the force-directed canvas view.
  *
  * Lazy-loaded via next/dynamic (SSR disabled) from topology/page.tsx.
  */
 
 import React, { useMemo, useEffect, useRef } from "react";
 import { useTheme } from "@/app/context/ThemeContext";
-import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Polyline, Tooltip, useMap } from "react-leaflet";
+import L from "leaflet";
 import type { LatLngBoundsExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -55,6 +56,128 @@ const STATUS_COLORS: Record<string, string> = {
   unknown: "#64748b",
 };
 
+/* ── Icon shape mapping (mirrors topology/page.tsx) ──────────── */
+type IconShape = "tower" | "router" | "switch" | "server" | "cloud" | "antenna" | "optical" | "firewall" | "database" | "link" | "default";
+
+const TYPE_ICON: Record<string, IconShape> = {
+  site: "tower", gnodeb: "tower", enodeb: "tower", bsc: "tower", rnc: "tower",
+  cell: "antenna", sector: "antenna",
+  router: "router", core_router: "router",
+  switch: "switch", aggregation_switch: "switch",
+  olt: "optical", onu: "optical",
+  mme: "cloud", sgw: "cloud", pgw: "cloud", msc: "cloud", hlr: "cloud",
+  pcrf: "cloud", upf: "cloud", smf: "cloud", amf: "cloud", nrf: "cloud",
+  microwave_link: "link", fiber_link: "link", transmission: "link",
+  server: "server", web_server: "server", dns_server: "server", mail_server: "server",
+  workstation: "server",
+  firewall: "firewall",
+  ids: "firewall",
+  database: "database",
+  emergency_service: "server",
+};
+
+function getIconShape(entityType: string): IconShape {
+  const key = entityType.toLowerCase().replace(/[\s-]/g, "_");
+  return TYPE_ICON[key] ?? "default";
+}
+
+/** SVG path content for each icon shape (drawn inside a 24x24 viewBox) */
+function svgIconPath(shape: IconShape, color: string): string {
+  const s = `stroke="${color}" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"`;
+  const sf = `stroke="${color}" fill="${color}" stroke-width="0"`;
+
+  switch (shape) {
+    case "tower":
+      return `<path d="M12 3 L7 21 M12 3 L17 21 M9 12 L15 12 M8 17 L16 17" ${s}/>
+              <circle cx="12" cy="2" r="1.5" ${sf}/>
+              <path d="M8.5 1 A4.5 4.5 0 0 1 12 0" ${s} fill="none" stroke-width="1"/>
+              <path d="M15.5 1 A4.5 4.5 0 0 0 12 0" ${s} fill="none" stroke-width="1"/>`;
+    case "antenna":
+      return `<line x1="12" y1="20" x2="12" y2="8" ${s}/>
+              <polygon points="12,4 9,10 15,10" ${sf}/>
+              <line x1="8" y1="20" x2="16" y2="20" ${s}/>
+              <path d="M7 3 A6 6 0 0 1 12 1" ${s} fill="none" stroke-width="1"/>
+              <path d="M17 3 A6 6 0 0 0 12 1" ${s} fill="none" stroke-width="1"/>`;
+    case "router":
+      return `<ellipse cx="12" cy="8" rx="8" ry="3" ${s}/>
+              <path d="M4 8 L4 16" ${s}/><path d="M20 8 L20 16" ${s}/>
+              <ellipse cx="12" cy="16" rx="8" ry="3" ${s}/>
+              <line x1="8" y1="12" x2="16" y2="12" ${s}/>
+              <polyline points="14.5,10.5 16,12 14.5,13.5" ${s}/>
+              <polyline points="9.5,10.5 8,12 9.5,13.5" ${s}/>`;
+    case "switch":
+      return `<rect x="3" y="7" width="18" height="10" rx="2" ${s}/>
+              <circle cx="7" cy="14" r="1.2" ${sf}/>
+              <circle cx="10.5" cy="14" r="1.2" ${sf}/>
+              <circle cx="14" cy="14" r="1.2" ${sf}/>
+              <circle cx="17.5" cy="14" r="1.2" ${sf}/>`;
+    case "server":
+      return `<rect x="5" y="3" width="14" height="7" rx="1.5" ${s}/>
+              <rect x="5" y="13" width="14" height="7" rx="1.5" ${s}/>
+              <circle cx="16" cy="6.5" r="1" ${sf}/>
+              <circle cx="16" cy="16.5" r="1" ${sf}/>`;
+    case "cloud":
+      return `<path d="M6 18 Q2 18 2 14 Q2 10 6 10 Q6 6 10 6 Q14 4 17 7 Q22 7 22 12 Q22 18 17 18 Z" ${s}/>`;
+    case "optical":
+      return `<polygon points="12,3 21,12 12,21 3,12" ${s}/>
+              <line x1="8" y1="12" x2="16" y2="12" ${s} stroke-width="1"/>
+              <line x1="12" y1="8" x2="12" y2="16" ${s} stroke-width="1"/>`;
+    case "firewall":
+      return `<rect x="3" y="4" width="18" height="16" rx="1" ${s}/>
+              <line x1="3" y1="12" x2="21" y2="12" ${s}/>
+              <line x1="12" y1="4" x2="12" y2="12" ${s}/>
+              <line x1="7.5" y1="12" x2="7.5" y2="20" ${s}/>
+              <line x1="16.5" y1="12" x2="16.5" y2="20" ${s}/>`;
+    case "database":
+      return `<ellipse cx="12" cy="6" rx="8" ry="3" ${s}/>
+              <path d="M4 6 L4 18" ${s}/><path d="M20 6 L20 18" ${s}/>
+              <ellipse cx="12" cy="18" rx="8" ry="3" ${s}/>
+              <ellipse cx="12" cy="12" rx="8" ry="2.5" ${s} stroke-width="1"/>`;
+    case "link":
+      return `<polyline points="4,12 9,6 15,18 20,12" ${s}/>
+              <circle cx="4" cy="12" r="2" ${sf}/>
+              <circle cx="20" cy="12" r="2" ${sf}/>`;
+    default: // hexagon
+      return `<polygon points="12,2 20,7 20,17 12,22 4,17 4,7" ${s}/>`;
+  }
+}
+
+/** Build a Leaflet DivIcon with the device SVG */
+function buildDivIcon(
+  shape: IconShape,
+  fillColor: string,
+  borderColor: string,
+  isSeed: boolean,
+  isSelected: boolean,
+): L.DivIcon {
+  const size = isSeed ? 36 : isSelected ? 30 : 24;
+  const ring = isSeed ? 3 : isSelected ? 2 : 0;
+  const ringColor = isSeed ? "#fbbf24" : borderColor;
+  const outerSize = size + ring * 2 + 4;
+
+  const html = `
+    <div style="
+      width:${outerSize}px; height:${outerSize}px;
+      display:flex; align-items:center; justify-content:center;
+      border-radius:50%;
+      background: radial-gradient(circle, ${borderColor}33 0%, transparent 70%);
+      ${ring > 0 ? `box-shadow: 0 0 0 ${ring}px ${ringColor};` : ""}
+    ">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+           width="${size}" height="${size}" style="filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));">
+        ${svgIconPath(shape, fillColor)}
+      </svg>
+    </div>`;
+
+  return L.divIcon({
+    html,
+    className: "",  // suppress default leaflet-div-icon styling
+    iconSize: [outerSize, outerSize],
+    iconAnchor: [outerSize / 2, outerSize / 2],
+    tooltipAnchor: [0, -(outerSize / 2)],
+  });
+}
+
 /* ── Helper: auto-fit bounds when data changes ───────────────── */
 function FitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   const map = useMap();
@@ -67,7 +190,6 @@ function FitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
     }
   }, [bounds, map]);
 
-  // Reset when bounds reference changes (new seed)
   useEffect(() => {
     fitted.current = false;
   }, [bounds]);
@@ -109,7 +231,6 @@ export default function TopologyMapView({
       }
     });
 
-    // Compute bounds from geo entities
     let b: [[number, number], [number, number]] | null = null;
     if (geo.length > 0) {
       let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
@@ -121,7 +242,6 @@ export default function TopologyMapView({
         if (lon < minLon) minLon = lon;
         if (lon > maxLon) maxLon = lon;
       });
-      // Add small padding for single-point case
       const latPad = maxLat === minLat ? 0.01 : 0;
       const lonPad = maxLon === minLon ? 0.01 : 0;
       b = [
@@ -156,7 +276,6 @@ export default function TopologyMapView({
       .filter(Boolean) as { id: string; positions: [number, number][] }[];
   }, [relationships, entMap]);
 
-  /* Default center (world center if no geo data) */
   const defaultCenter: [number, number] = geoEntities.length > 0
     ? [geoEntities[0].geo_lat!, geoEntities[0].geo_lon!]
     : [20, 0];
@@ -194,38 +313,31 @@ export default function TopologyMapView({
             pathOptions={{
               color: isLight ? "rgba(15, 23, 42, 0.25)" : "rgba(0, 212, 255, 0.35)",
               weight: 1.5,
-              dashArray: undefined,
             }}
           />
         ))}
 
-        {/* Nodes as circle markers */}
+        {/* Nodes as device-icon markers */}
         {geoEntities.map((ent) => {
           const isSeed = ent.id === seedId;
           const isSelected = selectedEntity?.id === ent.id;
           const fillColor = getColor(ent.entity_type);
           const borderColor = STATUS_COLORS[ent.status] ?? STATUS_COLORS.unknown;
-          const radius = isSeed ? 10 : isSelected ? 8 : 6;
+          const shape = getIconShape(ent.entity_type);
+          const icon = buildDivIcon(shape, fillColor, borderColor, isSeed, isSelected);
 
           return (
-            <CircleMarker
+            <Marker
               key={ent.id}
-              center={[ent.geo_lat!, ent.geo_lon!]}
-              radius={radius}
-              pathOptions={{
-                fillColor,
-                fillOpacity: isSelected || isSeed ? 1 : 0.8,
-                color: isSeed ? "#fbbf24" : borderColor,
-                weight: isSeed ? 3 : isSelected ? 2.5 : 1.5,
-                opacity: 1,
-              }}
+              position={[ent.geo_lat!, ent.geo_lon!]}
+              icon={icon}
               eventHandlers={{
                 click: () => onSelectEntity(ent),
               }}
             >
               <Tooltip
                 direction="top"
-                offset={[0, -8]}
+                offset={[0, -4]}
                 className="topology-map-tooltip"
               >
                 <div style={{ fontSize: 11, lineHeight: 1.4 }}>
@@ -235,7 +347,7 @@ export default function TopologyMapView({
                   {isSeed && <span style={{ color: "#fbbf24", marginLeft: 4 }}>SEED</span>}
                 </div>
               </Tooltip>
-            </CircleMarker>
+            </Marker>
           );
         })}
       </MapContainer>
