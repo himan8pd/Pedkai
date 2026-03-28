@@ -999,10 +999,14 @@ export default function TopologyPage() {
               <TopologyMapView
                 entities={entities}
                 relationships={relationships}
+                shadowEntities={shadowEntities}
+                shadowRelationships={shadowRelationships}
                 seedId={seedId}
                 selectedEntity={selectedEntity}
                 onSelectEntity={setSelectedEntity}
                 getColor={getColor}
+                hiddenTypes={hiddenTypes}
+                showInferred={showInferred}
               />
             )}
 

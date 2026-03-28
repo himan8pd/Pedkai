@@ -38,10 +38,14 @@ interface Relationship {
 interface Props {
   entities: Entity[];
   relationships: Relationship[];
+  shadowEntities: Entity[];
+  shadowRelationships: Relationship[];
   seedId: string | null;
   selectedEntity: Entity | null;
   onSelectEntity: (e: Entity) => void;
   getColor: (entityType: string) => string;
+  hiddenTypes: Set<string>;
+  showInferred: boolean;
 }
 
 /* ── Status colors (kept in sync with the canvas view) ───────── */
@@ -208,22 +212,29 @@ const TILE_ATTR =
 export default function TopologyMapView({
   entities,
   relationships,
+  shadowEntities,
+  shadowRelationships,
   seedId,
   selectedEntity,
   onSelectEntity,
   getColor,
+  hiddenTypes,
+  showInferred,
 }: Props) {
   const { theme } = useTheme();
   const isLight = theme === "light";
 
-  /* Split entities into geo-located vs unmapped */
-  const { geoEntities, unmappedCount, entMap, bounds } = useMemo(() => {
+  /* Apply hiddenTypes filter, then split into geo-located vs unmapped */
+  const { geoEntities, unmappedCount, visibleNodeIds, entMap, bounds } = useMemo(() => {
+    const visible = entities.filter((e) => !hiddenTypes.has(e.entity_type));
     const geo: Entity[] = [];
     const map = new Map<string, Entity>();
+    const nodeIds = new Set<string>();
     let unmapped = 0;
 
-    entities.forEach((e) => {
+    visible.forEach((e) => {
       map.set(e.id, e);
+      nodeIds.add(e.id);
       if (e.geo_lat != null && e.geo_lon != null) {
         geo.push(e);
       } else {
@@ -250,12 +261,13 @@ export default function TopologyMapView({
       ];
     }
 
-    return { geoEntities: geo, unmappedCount: unmapped, entMap: map, bounds: b };
-  }, [entities]);
+    return { geoEntities: geo, unmappedCount: unmapped, visibleNodeIds: nodeIds, entMap: map, bounds: b };
+  }, [entities, hiddenTypes]);
 
-  /* Edges between geo-located nodes */
+  /* Edges between visible geo-located nodes */
   const geoEdges = useMemo(() => {
     return relationships
+      .filter((rel) => visibleNodeIds.has(rel.source_entity_id) && visibleNodeIds.has(rel.target_entity_id))
       .map((rel) => {
         const src = entMap.get(rel.source_entity_id);
         const tgt = entMap.get(rel.target_entity_id);
@@ -274,7 +286,32 @@ export default function TopologyMapView({
         return null;
       })
       .filter(Boolean) as { id: string; positions: [number, number][] }[];
-  }, [relationships, entMap]);
+  }, [relationships, visibleNodeIds, entMap]);
+
+  /* Shadow (inferred) edges between visible geo-located nodes */
+  const geoShadowEdges = useMemo(() => {
+    if (!showInferred) return [];
+    return shadowRelationships
+      .map((rel) => {
+        // Shadow edges can reference either regular or shadow entities
+        const src = entMap.get(rel.source_entity_id);
+        const tgt = entMap.get(rel.target_entity_id);
+        if (
+          src?.geo_lat != null && src?.geo_lon != null &&
+          tgt?.geo_lat != null && tgt?.geo_lon != null
+        ) {
+          return {
+            id: rel.id,
+            positions: [
+              [src.geo_lat, src.geo_lon] as [number, number],
+              [tgt.geo_lat, tgt.geo_lon] as [number, number],
+            ],
+          };
+        }
+        return null;
+      })
+      .filter(Boolean) as { id: string; positions: [number, number][] }[];
+  }, [shadowRelationships, showInferred, entMap]);
 
   const defaultCenter: [number, number] = geoEntities.length > 0
     ? [geoEntities[0].geo_lat!, geoEntities[0].geo_lon!]
@@ -304,6 +341,19 @@ export default function TopologyMapView({
       >
         <TileLayer key={theme} url={isLight ? TILE_URLS.light : TILE_URLS.dark} attribution={TILE_ATTR} />
         <FitBounds bounds={bounds} />
+
+        {/* Shadow (inferred) edges — dashed purple */}
+        {geoShadowEdges.map((edge) => (
+          <Polyline
+            key={`shadow-${edge.id}`}
+            positions={edge.positions}
+            pathOptions={{
+              color: isLight ? "rgba(139, 92, 246, 0.4)" : "rgba(139, 92, 246, 0.55)",
+              weight: 1.5,
+              dashArray: "6 4",
+            }}
+          />
+        ))}
 
         {/* Edges as polylines */}
         {geoEdges.map((edge) => (
