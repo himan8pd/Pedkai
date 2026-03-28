@@ -3,7 +3,7 @@
 ## Pending
 
 - [ ] **Light/Dark Mode — Inference & Polish**
-  - AI inference button on divergence page fails in light mode (styling + error handling)
+  - AI inference button on divergence page fails in light mode (styling + error handling) 
   - Test all pages end-to-end in light mode — check for missed hardcoded colors
   - Topology canvas: review node colors for contrast on light background
   - Login/tenant-select pages: currently always dark (brand decision?) — verify intentional

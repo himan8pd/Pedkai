@@ -54,6 +54,313 @@ const STATUS_RING: Record<string, string> = {
   operational: "#22c55e", in_service: "#22c55e", maintenance: "#f59e0b", unknown: "#64748b",
 };
 
+/* ── Device icon category mapping ─────────────────────────────── */
+type IconShape = "tower" | "router" | "switch" | "server" | "cloud" | "antenna" | "optical" | "firewall" | "database" | "link" | "default";
+
+const TYPE_ICON: Record<string, IconShape> = {
+  // Cellular RAN — tower / antenna
+  site: "tower", gnodeb: "tower", enodeb: "tower", bsc: "tower", rnc: "tower",
+  cell: "antenna", sector: "antenna",
+  // IP / Transport
+  router: "router", core_router: "router",
+  switch: "switch", aggregation_switch: "switch",
+  // Optical
+  olt: "optical", onu: "optical",
+  // Mobile Core
+  mme: "cloud", sgw: "cloud", pgw: "cloud", msc: "cloud", hlr: "cloud",
+  // 5G Core
+  pcrf: "cloud", upf: "cloud", smf: "cloud", amf: "cloud", nrf: "cloud",
+  // Links
+  microwave_link: "link", fiber_link: "link", transmission: "link",
+  // IT Infrastructure
+  server: "server", web_server: "server", dns_server: "server", mail_server: "server",
+  workstation: "server",
+  firewall: "firewall",
+  ids: "firewall",
+  database: "database",
+  emergency_service: "server",
+};
+
+function getIconShape(entityType: string): IconShape {
+  const key = entityType.toLowerCase().replace(/[\s-]/g, "_");
+  return TYPE_ICON[key] ?? "default";
+}
+
+/** Draw a best-practice network device icon centered at (x, y) with size s. */
+function drawDeviceIcon(ctx: CanvasRenderingContext2D, shape: IconShape, x: number, y: number, s: number, fillColor: string) {
+  ctx.fillStyle = fillColor;
+  ctx.strokeStyle = fillColor;
+  ctx.lineWidth = 1.4;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  switch (shape) {
+
+    /* Cell tower — triangle lattice with antenna top */
+    case "tower": {
+      const h = s * 1.1;
+      const w = s * 0.7;
+      // Tower legs (triangle)
+      ctx.beginPath();
+      ctx.moveTo(x, y - h * 0.5);           // top
+      ctx.lineTo(x - w * 0.5, y + h * 0.5); // bottom-left
+      ctx.lineTo(x + w * 0.5, y + h * 0.5); // bottom-right
+      ctx.closePath();
+      ctx.stroke();
+      // Cross struts
+      const y1 = y - h * 0.1;
+      const y2 = y + h * 0.25;
+      const lx1 = w * 0.18, lx2 = w * 0.34;
+      ctx.beginPath();
+      ctx.moveTo(x - lx1, y1); ctx.lineTo(x + lx1, y1);
+      ctx.moveTo(x - lx2, y2); ctx.lineTo(x + lx2, y2);
+      ctx.stroke();
+      // Antenna dot
+      ctx.beginPath();
+      ctx.arc(x, y - h * 0.5 - 2.5, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Signal arcs
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.arc(x, y - h * 0.5 - 2.5, 3 + i * 3.5, -Math.PI * 0.75, -Math.PI * 0.25);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 1.4;
+      break;
+    }
+
+    /* Router — cylinder (classic Cisco-style) */
+    case "router": {
+      const w = s * 1.0;
+      const h = s * 0.55;
+      const ey = h * 0.35; // ellipse height
+      // Body rectangle
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, y - h / 2 + ey / 2);
+      ctx.lineTo(x - w / 2, y + h / 2 - ey / 2);
+      // Bottom ellipse
+      ctx.ellipse(x, y + h / 2 - ey / 2, w / 2, ey / 2, 0, Math.PI, 0, true);
+      ctx.lineTo(x + w / 2, y - h / 2 + ey / 2);
+      ctx.stroke();
+      // Top ellipse (filled)
+      ctx.beginPath();
+      ctx.ellipse(x, y - h / 2 + ey / 2, w / 2, ey / 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = fillColor;
+      ctx.globalAlpha = 0.25;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+      // Arrows inside (bidirectional)
+      const aw = w * 0.22;
+      const ay = y + h * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(x - aw, ay); ctx.lineTo(x + aw, ay);
+      ctx.moveTo(x + aw - 3, ay - 2.5); ctx.lineTo(x + aw, ay); ctx.lineTo(x + aw - 3, ay + 2.5);
+      ctx.moveTo(x - aw + 3, ay - 2.5); ctx.lineTo(x - aw, ay); ctx.lineTo(x - aw + 3, ay + 2.5);
+      ctx.stroke();
+      break;
+    }
+
+    /* Switch — rectangle with port dots */
+    case "switch": {
+      const w = s * 1.1;
+      const h = s * 0.5;
+      const r = 2;
+      // Rounded rect body
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2 + r, y - h / 2);
+      ctx.lineTo(x + w / 2 - r, y - h / 2);
+      ctx.arcTo(x + w / 2, y - h / 2, x + w / 2, y - h / 2 + r, r);
+      ctx.lineTo(x + w / 2, y + h / 2 - r);
+      ctx.arcTo(x + w / 2, y + h / 2, x + w / 2 - r, y + h / 2, r);
+      ctx.lineTo(x - w / 2 + r, y + h / 2);
+      ctx.arcTo(x - w / 2, y + h / 2, x - w / 2, y + h / 2 - r, r);
+      ctx.lineTo(x - w / 2, y - h / 2 + r);
+      ctx.arcTo(x - w / 2, y - h / 2, x - w / 2 + r, y - h / 2, r);
+      ctx.closePath();
+      ctx.stroke();
+      // Port dots (4 on bottom edge)
+      const portY = y + h * 0.12;
+      for (let i = 0; i < 4; i++) {
+        const px = x - w * 0.3 + i * (w * 0.6 / 3);
+        ctx.beginPath();
+        ctx.arc(px, portY, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+
+    /* Server — stacked rectangles */
+    case "server": {
+      const w = s * 0.7;
+      const h = s * 0.35;
+      for (let i = 0; i < 2; i++) {
+        const sy = y - s * 0.25 + i * (h + 2);
+        ctx.strokeRect(x - w / 2, sy, w, h);
+        // LED dot
+        ctx.beginPath();
+        ctx.arc(x + w / 2 - 4, sy + h / 2, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+
+    /* Cloud — NF / core function */
+    case "cloud": {
+      ctx.beginPath();
+      ctx.arc(x - s * 0.2, y + s * 0.05, s * 0.3, Math.PI * 0.6, Math.PI * 1.9);
+      ctx.arc(x + s * 0.05, y - s * 0.2, s * 0.32, Math.PI * 1.0, Math.PI * 1.85);
+      ctx.arc(x + s * 0.3, y - s * 0.05, s * 0.25, Math.PI * 1.3, Math.PI * 0.4);
+      ctx.arc(x + s * 0.15, y + s * 0.2, s * 0.25, Math.PI * 1.8, Math.PI * 0.5);
+      ctx.arc(x - s * 0.15, y + s * 0.22, s * 0.22, 0, Math.PI * 0.4);
+      ctx.closePath();
+      ctx.globalAlpha = 0.15;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+      break;
+    }
+
+    /* Antenna — vertical with signal arcs (cell / sector) */
+    case "antenna": {
+      const ah = s * 0.9;
+      // Vertical mast
+      ctx.beginPath();
+      ctx.moveTo(x, y + ah * 0.5);
+      ctx.lineTo(x, y - ah * 0.3);
+      ctx.stroke();
+      // Antenna head (small triangle)
+      ctx.beginPath();
+      ctx.moveTo(x, y - ah * 0.5);
+      ctx.lineTo(x - 3.5, y - ah * 0.2);
+      ctx.lineTo(x + 3.5, y - ah * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      // Base
+      ctx.beginPath();
+      ctx.moveTo(x - s * 0.3, y + ah * 0.5);
+      ctx.lineTo(x + s * 0.3, y + ah * 0.5);
+      ctx.stroke();
+      // Signal arcs
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.arc(x, y - ah * 0.5, 2 + i * 3.5, -Math.PI * 0.8, -Math.PI * 0.2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(x, y - ah * 0.5, 2 + i * 3.5, Math.PI * 0.2, Math.PI * 0.8);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 1.4;
+      break;
+    }
+
+    /* Optical — diamond (OLT / ONU) */
+    case "optical": {
+      const d = s * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y - d);
+      ctx.lineTo(x + d, y);
+      ctx.lineTo(x, y + d);
+      ctx.lineTo(x - d, y);
+      ctx.closePath();
+      ctx.globalAlpha = 0.2;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+      // Light beam lines
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x - d * 0.4, y); ctx.lineTo(x + d * 0.4, y);
+      ctx.moveTo(x, y - d * 0.4); ctx.lineTo(x, y + d * 0.4);
+      ctx.stroke();
+      ctx.lineWidth = 1.4;
+      break;
+    }
+
+    /* Firewall — brick wall with flame hint */
+    case "firewall": {
+      const w = s * 0.9;
+      const h = s * 0.7;
+      // Outer wall
+      ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+      // Brick lines
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, y); ctx.lineTo(x + w / 2, y);
+      ctx.moveTo(x, y - h / 2); ctx.lineTo(x, y);
+      ctx.moveTo(x - w / 4, y); ctx.lineTo(x - w / 4, y + h / 2);
+      ctx.moveTo(x + w / 4, y); ctx.lineTo(x + w / 4, y + h / 2);
+      ctx.stroke();
+      break;
+    }
+
+    /* Database — cylinder */
+    case "database": {
+      const w = s * 0.6;
+      const h = s * 0.8;
+      const ey = h * 0.25;
+      // Body
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, y - h / 2 + ey / 2);
+      ctx.lineTo(x - w / 2, y + h / 2 - ey / 2);
+      ctx.ellipse(x, y + h / 2 - ey / 2, w / 2, ey / 2, 0, Math.PI, 0, true);
+      ctx.lineTo(x + w / 2, y - h / 2 + ey / 2);
+      ctx.stroke();
+      // Top ellipse
+      ctx.beginPath();
+      ctx.ellipse(x, y - h / 2 + ey / 2, w / 2, ey / 2, 0, 0, Math.PI * 2);
+      ctx.globalAlpha = 0.2;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+      // Middle line
+      ctx.beginPath();
+      ctx.ellipse(x, y - h * 0.08, w / 2, ey * 0.35, 0, 0, Math.PI);
+      ctx.stroke();
+      break;
+    }
+
+    /* Link — zigzag line */
+    case "link": {
+      const w = s * 0.5;
+      const h = s * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(x - w, y);
+      ctx.lineTo(x - w * 0.3, y - h);
+      ctx.lineTo(x + w * 0.3, y + h);
+      ctx.lineTo(x + w, y);
+      ctx.stroke();
+      // Dots at endpoints
+      ctx.beginPath();
+      ctx.arc(x - w, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x + w, y, 2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+
+    /* Default — hexagon */
+    default: {
+      const r = s * 0.45;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 2;
+        const px = x + r * Math.cos(a);
+        const py = y + r * Math.sin(a);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.globalAlpha = 0.2;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.stroke();
+      break;
+    }
+  }
+}
+
 export default function TopologyPage() {
   const { tenantId, token, authFetch } = useAuth();
   const { theme } = useTheme();
@@ -354,35 +661,41 @@ export default function TopologyPage() {
       }
     });
 
-    // Draw nodes (only visible types)
+    // Draw nodes — device icons with status ring (only visible types)
     Object.entries(positions).forEach(([id, pos]) => {
       const ent = entMap.get(id);
       if (!ent || !visibleNodes.has(id)) return;
-      
+
       const isSeed = id === seedId;
       const isSelected = selectedEntity?.id === id;
-      const r = isSeed ? 14 : 10; // Seed is bigger
+      const iconSize = isSeed ? 22 : 16; // icon drawing size
+      const hitR = isSeed ? 14 : 10;     // collision radius (kept for click detection)
 
-      // Status ring
+      // Status ring — colored glow behind the icon
       const ringColor = STATUS_RING[ent.status] ?? STATUS_RING.unknown;
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r + 3, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, hitR + 4, 0, Math.PI * 2);
       ctx.fillStyle = ringColor;
-      ctx.globalAlpha = isSelected || isSeed ? 1 : 0.5;
+      ctx.globalAlpha = isSelected || isSeed ? 0.45 : 0.2;
       ctx.fill();
       ctx.globalAlpha = 1;
 
-      // Node fill
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = getColor(ent.entity_type);
-      ctx.fill();
-
+      // Selection / seed highlight ring
       if (isSelected || isSeed) {
-        ctx.strokeStyle = isSeed ? "#fbbf24" : (isLight ? "#0f172a" : "#fff"); // Amber outline for seed
-        ctx.lineWidth = isSeed ? 3 : 2;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, hitR + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = isSeed ? "#fbbf24" : (isLight ? "#0f172a" : "#fff");
+        ctx.lineWidth = isSeed ? 2.5 : 1.5;
         ctx.stroke();
       }
+
+      // Draw the device icon
+      ctx.save();
+      const color = getColor(ent.entity_type);
+      const shape = getIconShape(ent.entity_type);
+      ctx.globalAlpha = isSelected || isSeed ? 1 : 0.85;
+      drawDeviceIcon(ctx, shape, pos.x, pos.y, iconSize, color);
+      ctx.restore();
 
       // Label (only at sufficient zoom or if seed/selected)
       if (zoom >= 0.5 || isSelected || isSeed) {
@@ -391,7 +704,7 @@ export default function TopologyPage() {
         ctx.font = `${isSeed || isSelected ? 'bold ' : ''}${fontSize}px sans-serif`;
         ctx.textAlign = "center";
         const label = ent.name.length > 20 ? ent.name.slice(0, 18) + "…" : ent.name;
-        ctx.fillText(label, pos.x, pos.y + r + 14);
+        ctx.fillText(label, pos.x, pos.y + hitR + 14);
       }
     });
 
