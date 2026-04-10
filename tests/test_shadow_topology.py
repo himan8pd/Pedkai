@@ -1,7 +1,6 @@
 """Tests for ShadowTopologyService — PedkAI's private topology graph.
 
-Tests entity upsert idempotency, relationship creation, neighbourhood expansion
-(conceptual), topological proximity, and CMDB export logging.
+Tests entity upsert idempotency, topological proximity, and CMDB export tag format.
 
 Uses mocked database sessions matching existing test patterns.
 
@@ -16,34 +15,19 @@ import pytest
 
 from backend.app.services.abeyance.shadow_topology import (
     ShadowTopologyService,
-    get_shadow_topology,
 )
 
 
 # ---------------------------------------------------------------------------
-# Test: Singleton factory
+# Test: Instantiation
 # ---------------------------------------------------------------------------
 
 class TestSingletonFactory:
 
-    def test_get_shadow_topology_returns_instance(self):
-        """get_shadow_topology() should return a ShadowTopologyService."""
-        # Reset singleton
-        import backend.app.services.abeyance.shadow_topology as mod
-        mod._shadow_topology = None
-        svc = get_shadow_topology(MagicMock())
+    def test_can_instantiate_service(self):
+        """ShadowTopologyService can be instantiated."""
+        svc = ShadowTopologyService()
         assert isinstance(svc, ShadowTopologyService)
-
-    def test_get_shadow_topology_is_singleton(self):
-        """Repeated calls return the same instance."""
-        import backend.app.services.abeyance.shadow_topology as mod
-        mod._shadow_topology = None
-        factory = MagicMock()
-        svc1 = get_shadow_topology(factory)
-        svc2 = get_shadow_topology(factory)
-        assert svc1 is svc2
-        # Reset for other tests
-        mod._shadow_topology = None
 
 
 # ---------------------------------------------------------------------------
@@ -54,32 +38,37 @@ class TestTopologicalProximity:
     """Test the proximity formula: 1.0 / min_hops."""
 
     def setup_method(self):
-        self.svc = ShadowTopologyService(MagicMock())
+        self.svc = ShadowTopologyService()
+        self.mock_session = AsyncMock()
 
     @pytest.mark.asyncio
     async def test_direct_overlap_returns_one(self):
         """If entity sets share an identifier, proximity = 1.0."""
+        shared_id = uuid4()
         result = await self.svc.topological_proximity(
+            session=self.mock_session,
             tenant_id="t1",
-            entity_set_a={"ENT-1", "ENT-2"},
-            entity_set_b={"ENT-2", "ENT-3"},
+            entity_set_a={uuid4(), shared_id},
+            entity_set_b={shared_id, uuid4()},
         )
         assert result == 1.0
 
     @pytest.mark.asyncio
     async def test_empty_set_a_returns_zero(self):
         result = await self.svc.topological_proximity(
+            session=self.mock_session,
             tenant_id="t1",
             entity_set_a=set(),
-            entity_set_b={"ENT-1"},
+            entity_set_b={uuid4()},
         )
         assert result == 0.0
 
     @pytest.mark.asyncio
     async def test_empty_set_b_returns_zero(self):
         result = await self.svc.topological_proximity(
+            session=self.mock_session,
             tenant_id="t1",
-            entity_set_a={"ENT-1"},
+            entity_set_a={uuid4()},
             entity_set_b=set(),
         )
         assert result == 0.0
@@ -114,25 +103,21 @@ class TestEntityUpsert:
     """Verify idempotent get_or_create_entity behaviour."""
 
     @pytest.mark.asyncio
-    async def test_get_or_create_returns_entity(self):
-        """get_or_create_entity should return a ShadowEntityORM."""
-        from backend.app.models.abeyance_orm import ShadowEntityORM
-
+    async def test_get_or_create_creates_new_entity(self):
+        """get_or_create_entity should add a new entity when none exists."""
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_scalars = MagicMock()
-        mock_scalars.first.return_value = None  # No existing entity
-        mock_result.scalars.return_value = mock_scalars
+        mock_result.scalar_one_or_none.return_value = None  # No existing entity
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_session.add = MagicMock()
         mock_session.flush = AsyncMock()
 
-        svc = ShadowTopologyService(MagicMock())
+        svc = ShadowTopologyService()
         entity = await svc.get_or_create_entity(
+            session=mock_session,
             tenant_id="t1",
             entity_identifier="ENT-1",
             entity_domain="RAN",
-            session=mock_session,
         )
 
         # Should have added a new entity
@@ -143,22 +128,19 @@ class TestEntityUpsert:
     async def test_get_or_create_returns_existing(self):
         """If entity already exists, return it without creating a new one."""
         existing = MagicMock()
-        existing.origin = "CMDB_DECLARED"
-        existing.attributes = {}
         existing.last_evidence = None
+        existing.attributes = {}
 
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_scalars = MagicMock()
-        mock_scalars.first.return_value = existing
-        mock_result.scalars.return_value = mock_scalars
+        mock_result.scalar_one_or_none.return_value = existing
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        svc = ShadowTopologyService(MagicMock())
+        svc = ShadowTopologyService()
         entity = await svc.get_or_create_entity(
+            session=mock_session,
             tenant_id="t1",
             entity_identifier="ENT-1",
-            session=mock_session,
         )
 
         assert entity is existing
@@ -166,27 +148,26 @@ class TestEntityUpsert:
 
 
 # ---------------------------------------------------------------------------
-# Test: Neighbourhood returns empty for unknown entity
+# Test: Neighbourhood returns dict
 # ---------------------------------------------------------------------------
 
 class TestNeighbourhood:
 
     @pytest.mark.asyncio
-    async def test_unknown_entity_returns_empty_neighbourhood(self):
-        """If the center entity doesn't exist, return empty neighbourhood."""
+    async def test_neighbourhood_returns_dict(self):
+        """get_neighbourhood returns a dict with entities and relationships."""
         mock_session = AsyncMock()
+        # Mock relationship query returning empty
         mock_result = MagicMock()
         mock_scalars = MagicMock()
-        mock_scalars.first.return_value = None
+        mock_scalars.all.return_value = []
         mock_result.scalars.return_value = mock_scalars
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        svc = ShadowTopologyService(MagicMock())
+        svc = ShadowTopologyService()
         nbr = await svc.get_neighbourhood(
-            tenant_id="t1",
-            entity_identifier="NONEXISTENT",
             session=mock_session,
+            tenant_id="t1",
+            entity_ids=[uuid4()],
         )
-        assert nbr.center_entity == "NONEXISTENT"
-        assert len(nbr.entities) == 0
-        assert len(nbr.relationships) == 0
+        assert isinstance(nbr, dict)

@@ -141,7 +141,52 @@ class Settings(BaseSettings):
     timescale_retention_days: int = 0
 
 
+    def validate_production_safety(self) -> list[str]:
+        """
+        Validate settings for production safety. Returns list of warnings.
+        Raises SystemExit if critical issues found in non-debug mode.
+
+        Best practice: secret_key >= 32 characters for HS256 JWT signing.
+        This provides 256 bits of entropy, matching the HMAC-SHA256 key size.
+        """
+        warnings: list[str] = []
+        if len(self.secret_key) < 32:
+            msg = (
+                f"SECRET_KEY is only {len(self.secret_key)} characters. "
+                "For HS256 JWT signing, use at least 32 characters (256 bits). "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+            if not self.debug:
+                raise SystemExit(f"FATAL: {msg}")
+            warnings.append(f"WARNING: {msg}")
+
+        # Block weak default passwords in production
+        weak_defaults = {"admin", "operator", "password", "changeme", "CHANGE_ME", ""}
+        if not self.debug:
+            if self.admin_password in weak_defaults:
+                raise SystemExit(
+                    "FATAL: admin_password is a weak default. "
+                    "Set ADMIN_PASSWORD in .env to a strong value before running in production."
+                )
+            if self.operator_password in weak_defaults:
+                raise SystemExit(
+                    "FATAL: operator_password is a weak default. "
+                    "Set OPERATOR_PASSWORD in .env to a strong value before running in production."
+                )
+        else:
+            if self.admin_password in weak_defaults:
+                warnings.append("WARNING: admin_password is a weak default — override in .env for production")
+            if self.operator_password in weak_defaults:
+                warnings.append("WARNING: operator_password is a weak default — override in .env for production")
+
+        return warnings
+
+
 @lru_cache
 def get_settings() -> Settings:
     """Get cached settings instance."""
-    return Settings()
+    s = Settings()
+    for w in s.validate_production_safety():
+        import logging
+        logging.getLogger("pedkai.config").warning(w)
+    return s

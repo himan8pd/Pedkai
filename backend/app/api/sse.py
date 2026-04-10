@@ -21,8 +21,9 @@ from backend.app.core.security import User, decode_token_string, get_current_use
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Track active SSE connections
+# Track active SSE connections (protected by _connections_lock)
 _active_connections: Set[str] = set()
+_connections_lock = asyncio.Lock()
 settings = get_settings()
 
 
@@ -37,16 +38,16 @@ async def alarm_event_generator(
     """
     connection_id = f"{user_id}:{tenant_id}:{id(request)}"
 
-    # Check if max connections exceeded
-    if len(_active_connections) >= settings.sse_max_connections:
-        logger.warning(f"SSE max connections ({settings.sse_max_connections}) reached")
-        yield f": max_connections_exceeded\n\n"
-        return
+    # Check if max connections exceeded (lock protects set operations)
+    async with _connections_lock:
+        if len(_active_connections) >= settings.sse_max_connections:
+            logger.warning(f"SSE max connections ({settings.sse_max_connections}) reached")
+            yield f": max_connections_exceeded\n\n"
+            return
+        _active_connections.add(connection_id)
+        total = len(_active_connections)
 
-    _active_connections.add(connection_id)
-    logger.info(
-        f"SSE connection opened: {connection_id} (total: {len(_active_connections)})"
-    )
+    logger.info(f"SSE connection opened: {connection_id} (total: {total})")
 
     last_seen_id = None
     last_data_time = datetime.now(
@@ -161,9 +162,11 @@ async def alarm_event_generator(
             await asyncio.sleep(poll_interval)
     finally:
         # Cleanup on disconnect (whether client or timeout)
-        _active_connections.discard(connection_id)
+        async with _connections_lock:
+            _active_connections.discard(connection_id)
+            remaining = len(_active_connections)
         logger.info(
-            f"SSE connection closed: {connection_id} (remaining: {len(_active_connections)})"
+            f"SSE connection closed: {connection_id} (remaining: {remaining})"
         )
         try:
             await db.close()
@@ -181,37 +184,27 @@ async def stream_alarms(
     """
     SSE endpoint: streams alarm update notifications to connected clients.
     EventSource API cannot send Authorization headers, so the JWT token
-    is passed as a query parameter: ?token=<jwt>&tenant_id=<tenant>.
+    is passed as a query parameter: ?token=<jwt>.
 
     Authentication:
-    - If `token` is provided, it is decoded to extract tenant_id and user identity.
-    - If only `tenant_id` is provided (legacy), a deprecation warning is logged
-      and the stream proceeds without authentication.
-    - If neither is provided, returns 401.
+    - `token` is required. It is decoded to extract tenant_id and user identity.
+    - Returns 401 if token is missing or invalid.
 
     Features:
     - Sends heartbeat every 30s to keep connection alive
     - Closes connection after 5 minutes of inactivity
     - Returns HTTP 503 if max concurrent connections exceeded
     """
-    # Resolve user identity and tenant from token or legacy query param
-    user_id = "anonymous"
-    resolved_tenant_id = tenant_id
-
-    if token:
-        user = decode_token_string(token)
-        resolved_tenant_id = user.tenant_id or tenant_id
-        user_id = user.username
-    elif tenant_id:
-        logger.warning(
-            "SSE /stream/alarms called with tenant_id only (no token). "
-            "This is deprecated — pass ?token=<jwt> for authenticated streams."
-        )
-    else:
+    # Resolve user identity and tenant from token (required)
+    if not token:
         raise HTTPException(
             status_code=401,
             detail="Missing authentication token. Pass ?token=<jwt> query parameter.",
         )
+
+    user = decode_token_string(token)
+    resolved_tenant_id = user.tenant_id or tenant_id
+    user_id = user.username
 
     if not resolved_tenant_id:
         raise HTTPException(
@@ -219,12 +212,8 @@ async def stream_alarms(
             detail="Could not determine tenant_id from token or query parameter.",
         )
 
-    # Check connection limit before setting up the stream
-    if len(_active_connections) >= settings.sse_max_connections:
-        raise HTTPException(
-            status_code=503,
-            detail=f"SSE service at capacity (max {settings.sse_max_connections} connections)",
-        )
+    # Connection limit enforced under lock inside the generator (alarm_event_generator).
+    # No unlocked pre-check — avoids TOCTOU race on _active_connections.
 
     return StreamingResponse(
         alarm_event_generator(request, db, resolved_tenant_id, user_id),

@@ -14,6 +14,7 @@ class UserORM(Base):
     role = Column(String(50), nullable=False)
     tenant_id = Column(String(100), nullable=False, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    must_change_password = Column(Boolean, default=True, nullable=False, server_default="1")
     created_at = Column(DateTime, default=lambda: datetime.utcnow())
 
     __table_args__ = (

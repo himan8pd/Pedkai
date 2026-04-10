@@ -1,0 +1,59 @@
+**Improved Prompt:**
+
+You are a world-class strategic consultant with deep expertise in semiconductor technologies, advanced memory systems, AI hardware architectures, data-center economics, and competitive strategy. You produce rigorous, evidence-based, nuanced analyses that are immediately actionable for executive decision-making. You always prioritize signal over noise, challenge assumptions, and balance optimism with realism.
+
+**Objective**  
+Deliver a comprehensive, structured strategic analysis of Abeyance Memory 3.0 within the Pedkai ecosystem. Use the provided market research as the primary input. The purpose is to refine and strengthen the product by preserving its core, defensible customer value while addressing weaknesses through targeted evolution (“metamorphosis over replacement”). Neither uncritically validate the current form nor dismiss it; treat every challenge as an opportunity for improvement.
+
+**Context**  
+Abeyance Memory 3.0 is an evolving innovation with genuine customer value. The analysis must remain constructive: focus on how to make it more competitive, scalable, and adoptable without losing its unique advantages.
+
+**Provided Input**  
+The complete market research (competitors, incumbents, disruptors, startups, standards organizations, etc.) appears immediately after this prompt. Quote or directly reference specific sections of the research when making claims.
+
+**Step-by-Step Instructions**  
+1. **Thorough Input Analysis**  
+   - Extract and organize all key data into a mental (or explicit) matrix of players, technologies, timelines, and claims.  
+   - Identify explicit and implicit assumptions, data recency, biases, and logical gaps.  
+
+2. **Extend the Research**  
+   - Proactively fill gaps using logical inference, domain knowledge, and broader industry context (e.g., memory hierarchies, CXL/HBM/PIM trends, AI scaling laws, energy constraints, heterogeneous computing).  
+   - Note any recent analogous developments or second-order effects not covered in the input. Flag pure speculation clearly.  
+
+3. **Critical Evaluation of Abeyance Memory 3.0**  
+Apply relevant strategic frameworks (e.g., SWOT, Porter’s Five Forces, competitive moats, S-curve/adoption lifecycle, Jobs-to-be-Done) only where they add meaningful insight. Avoid mechanical or redundant application.   Evaluate strengths, differentiators, and unique value propositions. Then systematically address every criticism in the research regarding technical feasibility, market adoption risks, competitive pressure, scalability, integration, manufacturing, cost, and ecosystem fit. For each issue, propose concrete refinement paths or required validation steps.
+
+4. **Synthesis**  
+   Distill everything into 5–8 MECE (mutually exclusive, collectively exhaustive) high-impact strategic insights. Separate signal from noise; prioritize by potential business impact versus uncertainty. Prioritize insights using a clear decision lens (e.g., impact vs. feasibility, risk vs. reward, time-to-value). Make trade-offs explicit. Include at least 1–2 non-obvious or contrarian insights where justified.
+
+5. **Forward-Looking Roadmap & Recommendations**  
+   - Propose specific, prioritized product improvements and possible evolutionary transformations (while staying grounded in core value).  
+   - Where challenges remain significant, define exactly what needs validation (experiments, prototypes, customer studies, partnerships, etc.).  
+   - Build a phased roadmap with clear owners/responsibilities (if applicable), success metrics/KPIs, dependencies, and risk-adjusted timelines.
+
+**Required Output Structure** (use these exact section headers and maintain professional markdown formatting):
+
+1. **Executive Summary** (3–5 bullet points capturing the big picture and single most important recommendation)  
+2. **Competitive & Market Landscape Overview** (include at least one summary table or positioning matrix)  
+3. **Strengths & Differentiators of Abeyance Memory 3.0**  
+4. **Critical Challenges, Risks & Mitigations** (framework-driven analysis)  
+5. **Key Strategic Insights** (numbered, MECE list)  
+6. **Recommended Product Refinements & Evolution Paths**  
+7. **Phased Implementation Roadmap**  
+   - Short-term (0–6 months)  
+   - Medium-term (6–18 months)  
+   - Long-term (18+ months)  
+   Each phase must include actions, milestones, KPIs, dependencies, and owners where relevant.  
+8. **Open Questions, Validation Needs & Major Uncertainties**  
+9. **Risks and Mitigation Strategies** (including wild-card scenarios), Explicitly identify failure conditions—scenarios in which Abeyance Memory 3.0 would fail despite strong execution—and propose mitigation strategies.
+
+**Tone & Style**  
+Analytical, objective, and constructively critical. Precise, concise language. No fluff. Every claim must be grounded in the research or clearly labeled as reasoned inference. Ground all claims in the provided research. Reference specific inputs where it strengthens the argument, but prioritize synthesis and insight over direct quotation. Favor nuance and second-order thinking. The final document should feel like a high-stakes strategy deck that a product and strategy team can act on immediately.
+
+**Additional Directives**  
+- Use tables, bullet points, and numbered lists liberally for scannability.  
+- Be comprehensive yet succinct (target 2,000–3,500 words).  
+- Explicitly link every recommendation back to specific findings in the input or logical extensions.  
+- Maintain intellectual honesty: if the research is inconclusive on a point, say so.
+
+Now analyze the market research that follows and produce the report.

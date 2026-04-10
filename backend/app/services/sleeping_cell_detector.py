@@ -82,7 +82,7 @@ class SleepingCellDetector:
                 ).where(
                     (KPIMetricORM.tenant_id == tenant_id)
                     & (KPIMetricORM.entity_id == entity_id)
-                    & (KPIMetricORM.metric_name == "traffic_volume")
+                    & (KPIMetricORM.metric_name == "traffic_volume_gb")
                     & (KPIMetricORM.timestamp >= cutoff)
                 )
 
@@ -97,7 +97,7 @@ class SleepingCellDetector:
                     .where(
                         (KPIMetricORM.tenant_id == tenant_id)
                         & (KPIMetricORM.entity_id == entity_id)
-                        & (KPIMetricORM.metric_name == "traffic_volume")
+                        & (KPIMetricORM.metric_name == "traffic_volume_gb")
                     )
                     .order_by(KPIMetricORM.timestamp.desc())
                     .limit(1)
@@ -114,7 +114,7 @@ class SleepingCellDetector:
                         z_score=float("nan"),
                         baseline_mean=0.0,
                         current_value=None,
-                        metric_name="traffic_volume",
+                        metric_name="traffic_volume_gb",
                     )
                     events.append(evt)
                     await publish_event(evt)
@@ -128,7 +128,7 @@ class SleepingCellDetector:
                         z_score=float("nan"),
                         baseline_mean=float(mean) if mean is not None else 0.0,
                         current_value=None,
-                        metric_name="traffic_volume",
+                        metric_name="traffic_volume_gb",
                     )
                     events.append(evt)
                     await publish_event(evt)
@@ -144,7 +144,7 @@ class SleepingCellDetector:
                             z_score=z,
                             baseline_mean=float(mean),
                             current_value=float(latest.value),
-                            metric_name="traffic_volume",
+                            metric_name="traffic_volume_gb",
                         )
                         events.append(evt)
                         await publish_event(evt)

@@ -48,6 +48,21 @@
   - Options: (a) GPU instance, (b) larger cloud provider, (c) external API (Gemini/Claude), (d) batch pre-computation during reconciliation run
   - Evaluate cost/performance tradeoff for each option
 
+- [ ] **ServiceNow Integration — Activation & ITSM Abstraction**
+  - Module exists (`backend/app/services/servicenow_observer.py`, 308 lines) but is **not wired into `main.py` lifespan** — dead code at runtime
+  - Full audit report: `.claude/plans/dapper-noodling-sonnet.md`
+  - **To activate:**
+    - Instantiate `ServiceNowObserver` in `main.py` lifespan and schedule periodic `run_observation_cycle()` calls
+    - Add `SERVICENOW_URL` and `SERVICENOW_API_TOKEN` to Pydantic `Settings` model in `core/config.py`
+    - Create Alembic migration for `BehaviouralFeedbackORM` table (currently only logs + updates `feedback_score`)
+  - **To generalize for other ITSM tools (BMC Remedy, HP OpenView, Helix, Jira SM):**
+    - Create `ITSMObserver` ABC (like existing `BSSAdapter` / `LLMAdapter` patterns)
+    - Make `ServiceNowObserver` a concrete implementation; add `RemedyObserver`, etc.
+    - Factory selects observer via config (e.g., `ITSM_PROVIDER=servicenow`)
+    - Correlation + feedback layer is already vendor-neutral — only polling layer is ServiceNow-specific
+  - **Current ServiceNow-specific hardcoding:** API path `/api/now/table/incident`, `sysparm_query` params, field names (`sys_id`, `cmdb_ci`, `state`), state integer mapping
+  - Estimated effort: ~1-2 days for activation, ~1-2 days additional for ITSM abstraction layer
+
 ## Completed (2026-03-23)
 
 - [x] ThemeContext with localStorage persistence

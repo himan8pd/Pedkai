@@ -15,8 +15,8 @@ from uuid import uuid4
 import pytest
 
 from backend.app.services.abeyance.accumulation_graph import (
-    AccumulationGraphService,
-    CLUSTER_MIN_MEMBERS,
+    AccumulationGraph,
+    MIN_CLUSTER_SIZE as CLUSTER_MIN_MEMBERS,
     CLUSTER_SNAP_THRESHOLD,
 )
 
@@ -97,7 +97,8 @@ class TestEdgeNormalisation:
         b = uuid4()
         sorted_pair = sorted([a, b], key=str)
 
-        svc = AccumulationGraphService(MagicMock())
+        from backend.app.services.abeyance.events import ProvenanceLogger
+        svc = AccumulationGraph(provenance=ProvenanceLogger())
 
         # Verify the normalisation logic by checking sorted order
         a_id, b_id = sorted([a, b], key=str)

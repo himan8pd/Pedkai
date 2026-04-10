@@ -18,7 +18,12 @@ from backend.app.core.logging import get_logger
 logger = get_logger(__name__)
 
 # Regex patterns for PII detection
+# NOTE: Order matters — IMSI (15-digit) must be matched before phone patterns
+# to prevent partial matches (e.g. phone_uk's 0[1-9]... matching inside an IMSI).
 _PATTERNS = {
+    "imsi": re.compile(
+        r"\b(\d{15})\b",  # 15-digit IMSI
+    ),
     "phone_uk": re.compile(
         r"(\+44\s?[\d\s\-]{9,13}|0[1-9][\d\s\-]{8,12})",
         re.IGNORECASE,
@@ -26,9 +31,6 @@ _PATTERNS = {
     "phone_us": re.compile(
         r"(\+1[\s\-]?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{4})",
         re.IGNORECASE,
-    ),
-    "imsi": re.compile(
-        r"\b(\d{15})\b",  # 15-digit IMSI
     ),
     "subscriber_name": re.compile(
         r"((?:Customer|Subscriber):\s*)([A-Z][a-z]+ [A-Z][a-z]+)",

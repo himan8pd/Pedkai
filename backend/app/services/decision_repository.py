@@ -218,6 +218,15 @@ class DecisionTraceRepository:
         from sqlalchemy import func
         
         async with self._get_session(session) as s:
+            # Resolve tenant_id from the parent decision trace
+            trace_stmt = select(DecisionTraceORM.tenant_id).where(
+                DecisionTraceORM.id == decision_id
+            )
+            trace_result = await s.execute(trace_stmt)
+            tenant_id = trace_result.scalar_one_or_none()
+            if tenant_id is None:
+                return 0  # Decision not found
+
             # 1. Create or update feedback
             stmt = select(DecisionFeedbackORM).where(
                 and_(
@@ -227,13 +236,14 @@ class DecisionTraceRepository:
             )
             result = await s.execute(stmt)
             feedback = result.scalar_one_or_none()
-            
+
             if feedback:
                 feedback.score = score
                 feedback.comment = comment
             else:
                 feedback = DecisionFeedbackORM(
                     decision_id=decision_id,
+                    tenant_id=tenant_id,
                     operator_id=operator_id,
                     score=score,
                     comment=comment

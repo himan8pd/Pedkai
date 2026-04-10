@@ -27,7 +27,7 @@ async def test_alarm_ingest_returns_202(client: AsyncClient):
     assert resp.status_code == 202, f"Expected 202, got {resp.status_code}: {resp.text}"
     data = resp.json()
     assert "event_id" in data
-    assert data["tenant_id"] == "t1"
+    assert data["tenant_id"] == "test-tenant"
     assert data["status"] == "accepted"
 
 
@@ -94,5 +94,5 @@ async def test_alarm_ingest_event_published_to_bus(client: AsyncClient):
     # Dequeue and verify
     event = await bus.get()
     assert event.event_type == "alarm_ingested"
-    assert event.tenant_id == "t2"
+    assert event.tenant_id == "test-tenant"
     assert event.alarm_type == "DEGRADATION"

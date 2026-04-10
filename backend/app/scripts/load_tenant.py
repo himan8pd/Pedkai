@@ -1459,6 +1459,99 @@ def step_12_load_kpi_sample(
     )
 
 
+def step_13_apply_scenario_overrides(
+    metrics_conn,
+    output_dir: Path,
+    tenant_id: str,
+    dry_run: bool = False,
+):
+    """Apply sleeping_cell overrides from scenario_kpi_overrides.parquet to kpi_metrics.
+
+    The generator stores override_value as a multiplicative factor (0.0–1.0).
+    This step materialises the overlay into kpi_metrics so the SleepingCellDetector
+    can detect degraded cells via z-score comparison against the baseline.
+
+    Effective value = baseline_kpi_value × override_factor
+
+    Only sleeping_cell scenarios and the traffic_volume_gb KPI are processed
+    because that is the only metric the SleepingCellDetector queries.
+    """
+    log.info("━━━ Step 13: Apply scenario overrides to kpi_metrics ━━━")
+    filepath = output_dir / "scenario_kpi_overrides.parquet"
+    if not _ensure_file(filepath):
+        return
+
+    pf = pq.ParquetFile(filepath)
+    total_rows = 0
+    override_rows: list[tuple] = []
+
+    for batch in pf.iter_batches(batch_size=50_000):
+        t = batch.to_pydict()
+        n = len(t["entity_id"])
+        total_rows += n
+        for i in range(n):
+            if (
+                t["scenario_type"][i] == "sleeping_cell"
+                and t["kpi_column"][i] == "traffic_volume_gb"
+                and t["tenant_id"][i] == tenant_id
+            ):
+                ts = t["timestamp"][i]
+                override_rows.append(
+                    (float(t["override_value"][i]), tenant_id, t["entity_id"][i], ts)
+                )
+
+    log.info(
+        f"  {len(override_rows):,} sleeping_cell/traffic_volume_gb override rows "
+        f"(from {total_rows:,} total override rows in file)"
+    )
+
+    if not override_rows:
+        log.warning(
+            "  No matching overrides found — check that tenant_id matches and "
+            "scenario_kpi_overrides.parquet contains sleeping_cell scenarios."
+        )
+        return
+
+    if dry_run:
+        log.info(f"  [DRY RUN] Would apply {len(override_rows):,} multiplicative overrides to kpi_metrics.")
+        return
+
+    t0 = _timer()
+    with metrics_conn.cursor() as cur:
+        # Load into a temp table then do a single join UPDATE — much faster than row-by-row
+        cur.execute(
+            """
+            CREATE TEMP TABLE _sc_overrides (
+                override_factor DOUBLE PRECISION NOT NULL,
+                tenant_id       TEXT NOT NULL,
+                entity_id       TEXT NOT NULL,
+                ts              TIMESTAMPTZ NOT NULL
+            ) ON COMMIT DROP
+            """
+        )
+        psycopg2.extras.execute_values(
+            cur,
+            "INSERT INTO _sc_overrides (override_factor, tenant_id, entity_id, ts) VALUES %s",
+            override_rows,
+            page_size=10_000,
+        )
+        cur.execute(
+            """
+            UPDATE kpi_metrics km
+            SET kpi_value = km.kpi_value * o.override_factor
+            FROM _sc_overrides o
+            WHERE km.tenant_id = o.tenant_id
+              AND km.entity_id = o.entity_id
+              AND km.timestamp  = o.ts
+              AND km.kpi_name   = 'traffic_volume_gb'
+            """
+        )
+        updated = cur.rowcount
+
+    metrics_conn.commit()
+    log.info(f"  ✓ Updated {updated:,} kpi_metrics rows with degraded values in {_elapsed(t0)}")
+
+
 def print_summary(conn, metrics_conn, tenant_id: str):
     """Print a summary of loaded data."""
     log.info("\n" + "=" * 70)
@@ -1728,6 +1821,9 @@ def main():
             metrics_conn, output_dir, tenant_id,
             dry_run=args.dry_run, sample_hours=args.kpi_sample_hours,
         ) if metrics_conn else log.warning("  Metrics DB not connected — cannot run step 12"),
+        13: lambda: step_13_apply_scenario_overrides(
+            metrics_conn, output_dir, tenant_id, dry_run=args.dry_run,
+        ) if metrics_conn else log.warning("  Metrics DB not connected — cannot run step 13"),
     }
 
     # Abeyance sub-step dispatch for --abeyance-step mode
@@ -1815,6 +1911,13 @@ def main():
                     tenant_id,
                     dry_run=args.dry_run,
                     sample_hours=args.kpi_sample_hours,
+                )
+                log.info("\nApplying scenario overrides to kpi_metrics...")
+                step_13_apply_scenario_overrides(
+                    metrics_conn,
+                    output_dir,
+                    tenant_id,
+                    dry_run=args.dry_run,
                 )
 
             if not args.dry_run:

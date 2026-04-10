@@ -45,6 +45,8 @@ from backend.app.models.customer_orm import CustomerORM
 from backend.app.models.policy_orm import PolicyORM, PolicyEvaluationORM, PolicyVersionORM
 from backend.app.models.bss_orm import BillingAccountORM, ServicePlanORM
 from backend.app.models.reconciliation_result_orm import ReconciliationRunORM, ReconciliationResultORM
+from backend.app.models.user_orm import UserORM
+from backend.app.models.user_tenant_access_orm import UserTenantAccessORM
 # Note: TMF642 and TMF628 are Pydantic only for now.
 
 # Use in-memory SQLite for testing
@@ -121,32 +123,44 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     from backend.app.core.database import get_db, get_metrics_db
     from backend.app.core.security import get_current_user, oauth2_scheme
-    
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_metrics_db] = override_get_metrics_db
-    
+
     # Auth override
     class MockUser:
         id = "test-user-id"
         username = "test-user"
         tenant_id = "test-tenant"
         role = "admin"
-        
+
     async def override_get_current_user():
         return MockUser()
-        
+
     async def override_oauth2_scheme():
         return "mock-token"
-        
+
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[oauth2_scheme] = override_oauth2_scheme
-    
-    # Create AsyncClient
-    
-    # Create AsyncClient
+
+    # Patch async_session_maker everywhere it's been imported so services that bypass
+    # get_db (e.g. DecisionTraceRepository) use the test SQLite database.
+    import backend.app.core.database as _db_mod
+    import backend.app.api.decisions as _decisions_mod
+    import backend.app.workers.handlers as _handlers_mod
+    _patches = [
+        (_db_mod, "async_session_maker", _db_mod.async_session_maker),
+        (_decisions_mod, "async_session_maker", _decisions_mod.async_session_maker),
+        (_handlers_mod, "async_session_maker", _handlers_mod.async_session_maker),
+    ]
+    for mod, attr, _ in _patches:
+        setattr(mod, attr, TestingSessionLocal)
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
-    
+
+    for mod, attr, original in _patches:
+        setattr(mod, attr, original)
     app.dependency_overrides.clear()
 
 
@@ -180,7 +194,20 @@ async def client_real_auth(db_session: AsyncSession) -> AsyncGenerator[AsyncClie
     # NOTE: get_current_user and oauth2_scheme are intentionally NOT overridden here,
     # so real JWT validation and scope checking applies.
 
+    import backend.app.core.database as _db_mod
+    import backend.app.api.decisions as _decisions_mod
+    import backend.app.workers.handlers as _handlers_mod
+    _patches = [
+        (_db_mod, "async_session_maker", _db_mod.async_session_maker),
+        (_decisions_mod, "async_session_maker", _decisions_mod.async_session_maker),
+        (_handlers_mod, "async_session_maker", _handlers_mod.async_session_maker),
+    ]
+    for mod, attr, _ in _patches:
+        setattr(mod, attr, TestingSessionLocal)
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
+    for mod, attr, original in _patches:
+        setattr(mod, attr, original)
     app.dependency_overrides.clear()

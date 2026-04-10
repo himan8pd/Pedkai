@@ -11,7 +11,7 @@ async def test_operator_cannot_approve_sitrep(client_real_auth: AsyncClient):
     headers = {"Authorization": f"Bearer {token}"}
 
     # Create incident
-    resp = await client_real_auth.post("/api/v1/incidents/", json={"tenant_id": "t1", "title": "T", "severity": "major"}, headers=headers)
+    resp = await client_real_auth.post("/api/v1/incidents", json={"tenant_id": "t1", "title": "T", "severity": "major"}, headers=headers)
     assert resp.status_code == 201
     iid = resp.json()["id"]
 
@@ -32,7 +32,7 @@ async def test_shift_lead_can_approve_sitrep(client: AsyncClient):
     headers = {"Authorization": f"Bearer {token}"}
     
     # Create incident
-    resp = await client.post("/api/v1/incidents/", json={"tenant_id": "t1", "title": "T", "severity": "major"}, headers=headers)
+    resp = await client.post("/api/v1/incidents", json={"tenant_id": "t1", "title": "T", "severity": "major"}, headers=headers)
     assert resp.status_code == 201
     iid = resp.json()["id"]
     

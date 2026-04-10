@@ -1,11 +1,11 @@
 # Pedk.ai — Product Specification Document
 
-**Version:** 2.0  
-**Date:** 2026-03-05  
-**Status:** Authoritative — Single Source of Truth  
-**Classification:** Product Confidential  
-**Methodology:** [Erdos AI Enterprise AI Deployment Methodology](/Users/himanshu/Projects/Erdos%20Research)  
-**Supersedes:** All root-level vision, roadmap, review, and strategy documents (see [§16 Document Catalogue](#16-document-catalogue))
+**Version:** 3.0
+**Date:** 2026-04-01
+**Status:** Authoritative — Single Source of Truth
+**Classification:** Product Confidential
+**Methodology:** [Erdos AI Enterprise AI Deployment Methodology](/Users/himanshu/Projects/Erdos%20Research)
+**Supersedes:** All root-level vision, roadmap, review, and strategy documents (see [§20 Document Catalogue](#20-document-catalogue))
 
 > [!NOTE]
 > This document was produced following the **Erdos AI Enterprise AI Deployment Methodology** — a structured, persona-driven approach that routes analysis through three lenses (Product, Business Case, Skills) to produce a comprehensive product specification. Superseded documents are archived in `docs/archive/`.
@@ -31,7 +31,9 @@
 15. [Technology Stack](#15-technology-stack)
 16. [Implementation Phases & Maturity Assessment](#16-implementation-phases--maturity-assessment)
 17. [Governance & Quality Standards](#17-governance--quality-standards)
-18. [Document Catalogue](#18-document-catalogue)
+18. [Competitive Landscape & Market Positioning](#18-competitive-landscape--market-positioning)
+19. [Go-to-Market Strategy](#19-go-to-market-strategy)
+20. [Document Catalogue](#20-document-catalogue)
 
 ---
 
@@ -209,11 +211,17 @@ No competing product holds unresolved evidence in persistent semantic storage wi
 
 | Aspect | Status | Gap |
 |--------|--------|-----|
-| Vector storage of fragments | ✅ Implemented (pgvector) | — |
-| Semantic similarity snapping | ✅ Implemented | Threshold tuning needed per deployment |
-| Multi-modal matching (text + telemetry) | ⚠️ Partial | Need structured telemetry-to-text alignment |
-| Long-horizon retrieval (>30 days) | ⚠️ Partial | Cold storage retrieval pipeline incomplete |
-| Abeyance decay and relevance scoring | ❌ Not implemented | Stale fragments need TTL with relevance weighting |
+| Vector storage of fragments | ✅ Implemented (pgvector, 1536-dim T-VEC) | — |
+| Semantic similarity snapping (Snap Engine) | ✅ Implemented | Multi-threshold evaluation, temporal modifier (0.5–1.0), Sidak correction |
+| Accumulation Graph | ✅ Implemented | Cluster detection, LME scoring, correlation discount |
+| Fragment lifecycle with decay | ✅ Implemented | Time-based decay, bounded near-miss boost (1.0–1.5), source-specific TTLs |
+| Shadow Topology | ✅ Implemented | BFS with cycle guard, 500-entity cap, 2-hop expansion |
+| Cold storage archival | ✅ Implemented | Archive to Parquet, lifecycle transitions (ACTIVE → WARM → COLD) |
+| Provenance logging | ✅ Implemented | Append-only fragment_history, snap_decision_record, cluster_snapshot |
+| Incident reconstruction | ✅ Implemented | Timeline assembly from fragments, snaps, and history |
+| Value attribution | ✅ Implemented | Discovery ledger, value events, Dark Graph Index |
+| Multi-modal matching (text + telemetry) | ⚠️ Improved | 4-column embedding architecture (semantic + topological + temporal + operational). Structured telemetry-to-text alignment still needs refinement |
+| Discovery mechanisms (14 total) | ⚠️ 70% complete | 10/14 fully coded (Surprise Engine, Bridge Detector, Causal Direction, Evolutionary Patterns, Pattern Compression + 5 core mechanisms). 4/14 simplified heuristics (Counterfactual, Hypothesis Generator, Meta-Memory, Negative Evidence) |
 
 ---
 
@@ -270,10 +278,12 @@ The evidence fusion methodology should be **configurable per deployment**, match
 
 | Capability | Description | Maturity |
 |------------|-------------|:--------:|
-| **Divergence Report** | Machine-generated report of all dark nodes, phantom nodes, identity mutations, dark/phantom edges discovered from historical data | 🔨 In Progress |
-| **Datagerry CMDB sync adapter** | Periodic snapshots of CMDB state into Pedk.ai's internal representation | 🔨 In Progress |
-| **CasinoLimit telemetry parser** | Three telemetry streams: network flows, syscalls, MITRE labels | 🔨 In Progress |
-| **Topological Ghost Masks** | Suppresses alarms during planned maintenance by cross-referencing change schedules | 🔨 In Progress |
+| **Divergence Report** | Machine-generated report of all dark nodes, phantom nodes, identity mutations, dark/phantom edges discovered from historical data | ⚠️ Prototype |
+| **Datagerry CMDB sync adapter** | Periodic snapshots of CMDB state into Pedk.ai's internal representation. Deduplication via external_id, incremental sync with timestamp tracking | ✅ Implemented |
+| **Telco2 telemetry pipeline** | 6-domain Kafka ingestion (RAN, Transport, Core, Fixed Broadband, Enterprise, Power) with wide→narrow unpivoting | ✅ Implemented |
+| **ServiceNow Observer** | Polls ServiceNow ITSM incidents, correlates operator actions with AI recommendations, computes behavioural feedback (aligned/partial/overridden/ignored) | ✅ Implemented |
+| **Topological Ghost Masks** | Suppresses alarms during planned maintenance by cross-referencing change schedules | ✅ Implemented |
+| **Value Attribution / ROI Dashboard** | Discovery ledger, value events, Dark Graph Index for quantifying operational savings | ✅ Implemented |
 | **Behavioural Dark Graph** | Infers operational dependencies from how engineers actually troubleshoot (CI access sequences) | 📋 Planned |
 | **Multi-party identity resolution** | Cross-lifecycle identifier clustering from unstructured deployment documents | 📋 Planned |
 
@@ -410,9 +420,10 @@ Pedk.ai captures operator feedback through **three channels**, ranked by signal 
 |--------|--------|-----|
 | Thumbs up/down binary feedback | ✅ Implemented | — |
 | Multi-operator feedback aggregation | ✅ Implemented (junction table) | Need anti-gaming safeguards |
-| Behavioural observation pipeline | ❌ Not implemented | Critical gap — highest value signal channel |
-| Structured multi-dimensional assessment | ❌ Not implemented | Need NOC dashboard integration |
-| ITSM action ingestion (ServiceNow/Remedy) | ❌ Not implemented | Depends on customer ITSM platform |
+| Behavioural observation pipeline | ✅ Implemented | ServiceNow Observer polls ITSM actions, computes aligned/partial/overridden/ignored behavioural feedback via DecisionTraceORM correlation |
+| Structured multi-dimensional assessment | ⚠️ Partial | Feedback widget in frontend; full multi-dimensional assessment needs NOC dashboard integration |
+| ITSM action ingestion (ServiceNow) | ✅ Implemented | Polls `/api/now/table/incident`, maps state transitions (acknowledge→escalate→resolve), stores feedback for RL training |
+| ITSM action ingestion (Remedy/BMC) | ❌ Not implemented | Future integration — BMC Helix ISV partnership under evaluation |
 | Decision recommendation → outcome tracking | ⚠️ Partial | RL evaluator exists but not fully wired |
 
 ---
@@ -718,7 +729,9 @@ This review cycle resulted in the formal architecture review document (`ARCHITEC
 | **Vector Search** | pgvector | Semantic similarity for decision traces and Abeyance Memory |
 | **Streaming** | Apache Kafka | Industry standard for telemetry ingestion |
 | **ML/AI** | PyTorch, scikit-learn, statsmodels | Anomaly detection, causal inference |
-| **LLM** | **Vendor-neutral** — supports cloud-hosted (Gemini, GPT, Claude) and local/on-prem models (LLaMA, Mistral) via abstraction layer | Explanation layer, SITREP generation. Local LLM option critical for data sovereignty. |
+| **Telecom Embeddings** | T-VEC 1.5B (NetoAI) via SentenceTransformers | 1536-dim telecom-specific vectors. Local CPU inference (3GB), zero cloud cost. 0.938 accuracy on internal telecom triplet test vs <0.07 for generic models |
+| **Telecom LLM (local)** | TSLAM-Mini 2B via Ollama (Q4_K_M quantised) | On-premises entity extraction, hypothesis generation, SITREP enrichment. ~3 tok/s on ARM CPU. Zero data egress |
+| **LLM (cloud fallback)** | **Vendor-neutral** — Google Gemini 2.0-Flash (primary), with abstraction layer supporting GPT, Claude, LLaMA, Mistral | Explanation layer, SITREP generation. Cloud option for higher throughput when data sovereignty permits |
 | **Frontend** | Next.js | NOC dashboard SPA |
 | **Containers** | Docker (multi-stage, non-root) | Production-hardened |
 | **Orchestration** | Kubernetes + Helm | Scalable deployment |
@@ -726,7 +739,9 @@ This review cycle resulted in the formal architecture review document (`ARCHITEC
 | **Testing** | pytest, Locust | Functional, integration, load |
 
 > [!NOTE]
-> **LLM vendor neutrality is a product requirement.** Pedk.ai's `LLMService` uses an abstraction layer that routes to the configured provider. Customers deploying on-premises with data sovereignty constraints can use local models. Cloud-hosted deployments can use any major provider. The product must never depend on a single LLM vendor.
+> **LLM vendor neutrality is a product requirement.** Pedk.ai's `LLMService` uses an abstraction layer that routes to the configured provider. Customers deploying on-premises with data sovereignty constraints can use local models (T-VEC for embeddings, TSLAM-Mini via Ollama for generation). Cloud-hosted deployments can use any major provider. The product must never depend on a single LLM vendor.
+>
+> **Telecom model dependency note**: Pedk.ai currently uses NetoAI's T-VEC and TSLAM models. Alternative telecom-specific models have been evaluated (NVIDIA Nemotron LTM 30B, TelecomGPT, Tele-LLMs, AT&T fine-tuned Gemma, Ericsson's TELECTRA/TeleRoBERTa) and a model abstraction layer is planned to ensure independence from any single model provider. See `docs/Market Research.md` §12 for full analysis.
 
 ---
 
@@ -748,17 +763,25 @@ This review cycle resulted in the formal architecture review document (`ARCHITEC
 
 ✅ Memory benchmarking, capacity planning wedge, CX intelligence wedge.
 
-### AI Control Plane (Phase 15+) ⚠️ Prototype
+### AI Control Plane (Phase 15+) ✅ Substantially Complete
 
-Policy engine, semantic context graph, RL evaluator. BSS data layer deferred to future roadmap.
+Policy engine (YAML-based declarative rules) implemented. Semantic context graph prototype operational. RL evaluator framework exists with basic reward model. BSS data layer deferred to future roadmap.
 
-### Structural Remediation (V8) 🔨 In Progress
+### Abeyance Memory v3 (Phase 16) ✅ 70% Complete
 
-46 tasks across 6 phases from formal architecture review.
+Full 4-column embedding architecture (semantic + topological + temporal + operational). Snap Engine with multi-threshold evaluation and Sidak correction. Accumulation graph with LME scoring. Fragment lifecycle with decay and cold storage. Provenance logging. 10/14 discovery mechanisms fully coded; 4 simplified heuristics suitable for pilot deployment. 44+ database tables across fragments, snaps, clusters, history, and discovery.
+
+### Cloud Deployment (Phase 17) ✅ Complete
+
+Oracle Cloud Always Free (2 ARM VMs), Docker Compose production stack (FastAPI + Next.js + Kafka + Ollama + PostgreSQL + TimescaleDB), Kubernetes manifests, GitHub Actions CI/CD.
+
+### Structural Remediation (V8) ⚠️ Partially Complete
+
+46 tasks identified; significant progress on core items. ServiceNow Observer, Datagerry adapter, frontend decomposition, and Abeyance Memory decay/cold storage completed. Regulatory documents and sleeping cell scheduler integration remain outstanding.
 
 ### Dark Graph V8 🔨 In Progress
 
-Full topology reconciliation across all divergence types, with CasinoLimit/Datagerry proving ground.
+Full topology reconciliation across all divergence types. Datagerry CMDB sync operational. Telco2 telemetry pipeline complete. Divergence Report generation in prototype.
 
 ---
 
@@ -784,7 +807,7 @@ Full topology reconciliation across all divergence types, with CasinoLimit/Datag
 | ID | Task | Priority | Project |
 |----|------|:--------:|---------|
 | **T-002** | Formalise AI behaviour specification per autonomy level (§7) | 🟡 High | Pedk.ai |
-| **T-003** | Implement behavioural observation feedback pipeline — ingest operator ITSM actions as learning signal | 🔴 Critical | Pedk.ai |
+| **T-003** | ~~Implement behavioural observation feedback pipeline — ingest operator ITSM actions as learning signal~~ | ✅ Complete | Pedk.ai (ServiceNow Observer) |
 | **T-004** | Improve synthetic data realism: temporal patterns, propagation delays, CMDB decay calibration | 🔴 Critical | Sleeping-Cell-KPI-Data |
 | **T-005** | Implement continuous evaluation pipeline with business outcome linkage | 🟡 High | Pedk.ai |
 | **T-006** | Write substantive regulatory documents: OFCOM pre-notification, ICO DPIA, Safety Whitepaper, Autonomy Status Report | 🔴 Critical | Pedk.ai |
@@ -797,7 +820,7 @@ Full topology reconciliation across all divergence types, with CasinoLimit/Datag
 | **T-013** | Design cross-team SITREP escalation workflow | 🟢 Medium | Pedk.ai |
 | **T-014** | Implement automated playbook generation from high-confidence Decision Memory patterns | 🟢 Medium | Pedk.ai |
 | **T-015** | Create operator-facing "Pedk.ai Learning Hub" knowledge base | 🟢 Medium | Pedk.ai |
-| **T-016** | Implement Abeyance Memory decay scoring and cold storage retrieval pipeline | 🔴 Critical | Pedk.ai |
+| **T-016** | ~~Implement Abeyance Memory decay scoring and cold storage retrieval pipeline~~ | ✅ Complete | Pedk.ai (v3 lifecycle + Parquet archival) |
 | **T-017** | Implement `FusionMethodologyFactory` — pluggable evidence fusion (Noisy-OR, Dempster-Shafer) | 🟡 High | Pedk.ai |
 | **T-018** | Replace UUID V4 identifiers with operator-realistic human-friendly naming conventions | 🔴 Critical | Sleeping-Cell-KPI-Data |
 | **T-019** | Validate synthetic fault scenarios against published Tier-1 post-incident reports | 🟡 High | Sleeping-Cell-KPI-Data |
@@ -806,14 +829,101 @@ Full topology reconciliation across all divergence types, with CasinoLimit/Datag
 | **T-022** | Calibrate CMDB degradation rates against published CMDB audit statistics | 🟡 High | Sleeping-Cell-KPI-Data |
 | **T-023** | Implement causal inference methodology selection: add Transfer Entropy and PCMCI alternatives | 🟡 High | Pedk.ai |
 | **T-024** | Wire sleeping cell detector into `main.py` scheduler (currently dead code) | 🔴 Critical | Pedk.ai |
-| **T-025** | Strengthen Dark Graph module: complete Divergence Report, Datagerry adapter, CasinoLimit parser | 🔴 Critical | Pedk.ai |
-| **T-026** | Implement Abeyance Memory multi-modal matching (structured telemetry ↔ unstructured text) | 🟡 High | Pedk.ai |
-| **T-027** | Frontend decomposition: split monolithic `page.tsx` into routed pages | 🟡 High | Pedk.ai |
+| **T-025** | Strengthen Dark Graph module: complete Divergence Report, Datagerry adapter, CasinoLimit parser | ⚠️ Partial | Pedk.ai (Datagerry adapter ✅, Divergence Report in prototype, CasinoLimit superseded by Telco2) |
+| **T-026** | Implement Abeyance Memory multi-modal matching (structured telemetry ↔ unstructured text) | ⚠️ Partial | Pedk.ai (4-column embedding architecture implemented; structured alignment needs refinement) |
+| **T-027** | ~~Frontend decomposition: split monolithic `page.tsx` into routed pages~~ | ✅ Complete | Pedk.ai (12 routed pages) |
 | **T-028** | Phase 5 test suite: expand from ~5 trivial tests to comprehensive safety gate coverage | 🟡 High | Pedk.ai |
 
 ---
 
-## 18. Document Catalogue
+## 18. Competitive Landscape & Market Positioning
+
+> [!NOTE]
+> Full competitive analysis available in `docs/Market Research.md` (April 2026). This section summarises key findings.
+
+### Competitive Assessment
+
+Pedk.ai operates in a market with well-resourced competitors. The analysis below covers the primary competitive set:
+
+| Competitor | Architecture | Strength | Pedk.ai Advantage |
+|------------|-------------|----------|-------------------|
+| **Nokia NMA/AgenticOps** | Dual memory (STM + LTM vector store), ontology engine, data fabric | Pre-installed at Nokia-dominant operators; 3-level model hierarchy (L0/L1/L2) | AM holds unresolved evidence with lifecycle/decay; Nokia's LTM is flat retrieval. Local model serving vs cloud-implied |
+| **ServiceNow RAMC** | Rule→Automated→Manual→CMDB correlation; 5-algorithm RCA; Knowledge Graph | Massive installed base; owns ITSM ticket data; CMDB at most Tier-1 operators | AM correlates *different* descriptions of *same* problem across domains; ServiceNow requires same CI/metric in same timeframe. 10-20% of ServiceNow cost |
+| **NetoAI TelcoCore** | DigiTwin knowledge graph; NAPI (6 protocols, 100+ devices); T-VEC/TSLAM model family | Production customer wins (UK/US); 93% fault prediction; strongest multi-vendor adapter (NAPI) | Closest architectural cousin. Shared T-VEC/TSLAM. Key divergence: NetoAI processes and moves on; AM remembers what doesn't resolve |
+| **Google MINDR** | Temporal graph on Spanner Graph; Gemini on Vertex AI; A2A agent protocol | Production proof (237K events at DT, 95% time reduction); open-source data pipeline | Local serving (zero cloud cost/dependency); telecom-specific enrichment; sovereignty advantage in emerging markets |
+| **Ericsson EIAP** | O-RAN SMO; 50+ rApps from 25+ ISVs; cognitive observation→reasoning→action loops | 60+ CSPs, 13M managed sites; DNB Level 4 autonomy validation; 98% anomaly detection accuracy | Potential platform partner (AM as rApp); local model serving; cross-domain semantic fusion |
+| **BMC Helix** | Probabilistic density RCA; eTOM/SID native; patented Best Action Recommendation | 40 years telco experience; formal ISV program; cheaper than ServiceNow | Strongest partnership candidate: BMC's 2TB storage cap + no semantic correlation = gap AM fills. BMC split creates partnership window |
+
+### Market Positioning
+
+Pedk.ai is positioned as a **cost-effective intelligence augmentation layer** for telecom operators:
+
+- **For Tier-1 operators with ServiceNow**: Pedk.ai adds cross-domain correlation, CMDB enrichment, and sleeping cell detection at 5-10% of the cost of additional ServiceNow modules
+- **For Tier-2/3 operators without AIOps**: Pedk.ai provides a complete operational intelligence platform at 50K-200K GBP/year — an order of magnitude less than ServiceNow or BMC
+- **For sovereignty-sensitive markets**: Local model serving (T-VEC on CPU, TSLAM via Ollama) with zero cloud dependency is a procurement qualifier in India, Africa, LATAM, and EU
+
+### Pricing Strategy
+
+| Tier | Target | Model | Price Point |
+|------|--------|-------|-------------|
+| **Essentials** (Layer 1-2 only) | Tier-3/regional, emerging market | SaaS monthly, per-managed-node | $2-5/node/month |
+| **Professional** (All 5 layers) | Tier-2 operators | Annual licence + SaaS option | $20K-100K/year |
+| **Enterprise** (Full platform + custom calibration) | Tier-1 operators | Enterprise licence + professional services | $100K-500K/year |
+| **Embedded** (API-only, white-label) | Partners (Jio, Airtel, BMC, Ericsson rApp) | Usage-based API pricing | Revenue share or per-fragment pricing |
+
+### Key Strategic Risks
+
+1. **NetoAI convergence**: Shared T-VEC/TSLAM model family. If NetoAI adds an abeyance buffer to DigiTwin, differentiation collapses. Mitigation: accelerate to production; build model abstraction layer for independence
+2. **ServiceNow data gravity**: ServiceNow owns the ITSM ticket data that is AM's highest-value input. Mitigation: position as ServiceNow integration partner, not replacement
+3. **Production proof gap**: Every competitor has production deployments; Pedk.ai has zero. This is the existential gap. Mitigation: consulting-led entry (see §19)
+
+---
+
+## 19. Go-to-Market Strategy
+
+> [!NOTE]
+> Full go-to-market analysis available in `docs/Market Research.md` Section 15. This section summarises the recommended approach.
+
+### Strategic Context
+
+The AIOps for Telecom market is projected to grow from $560M (2023) to $6.7B (2030) at 42.7% CAGR. ServiceNow's TCO is 3-5x licence cost; even deep-pocketed operators (e.g., Sky/Comcast) struggle to fund all desired modules. 30% of Tier-2/3 operators still operate manually. This creates a structural pricing gap between "free but hard" (open source) and "expensive but managed" (ServiceNow/BMC).
+
+### Five Strategic Paths
+
+| Path | Description | Target | Price Point | Risk |
+|------|-------------|--------|-------------|------|
+| **A: ServiceNow Intelligence Layer** | Add intelligence on top of existing ServiceNow at 5-10% of module cost | Tier-1/2 with ServiceNow | 50K-200K GBP/year | Dependent on ServiceNow API stability |
+| **B: Full-Stack AIOps for Tier-2/3** | Complete platform replacement for operators who can't afford ServiceNow | Operators with 1-50M subscribers | 50K-150K GBP/year | Smaller deals, more customers needed |
+| **C: Consulting-Led Product** | Paid audits (alarm noise, CMDB quality) as entry point; convert to subscription | Any operator with pain | 20K-50K GBP/audit, 100K-200K/year subscription | Founder bottleneck |
+| **D: TM Forum Catalyst + GSMA Foundry** | Industry programs that bypass procurement barriers | Program participants (BT, DT, Vodafone, etc.) | Free during Catalyst; 50K-200K post-conversion | Competitive to win; 6-month commitment |
+| **E: BMC Helix ISV Partner** | Channel distribution through BMC's marketplace | BMC telecom customers (Vodafone, TPG, TalkTalk) | 30K-100K GBP/year as add-on | Revenue share; dependent on partnership |
+
+### Recommended Sequence
+
+**Months 1-6**: Paths C + D in parallel (consulting revenue + ecosystem credibility)
+**Months 7-12**: Converge to Path A or B based on customer segment response
+**Year 2**: Scale to 3-5 customers; explore Path E if Tier-1 add-on path proves viable
+
+### Revenue Targets
+
+| Period | Revenue Target | Source |
+|--------|---------------|--------|
+| Year 1 | 150K-400K GBP | Consulting audits + first subscription |
+| Year 2 | 300K-1M GBP | 3-5 customers + expansion |
+| Year 3 | 560K-1.45M GBP | Platform subscriptions + consulting |
+
+### Immediate Actions
+
+1. Re-contact Sky Product Owner — explore paid audit engagement
+2. Prepare 2-page "AIOps Audit" service offering
+3. Research TM Forum startup membership and Catalyst submission deadlines
+4. Prepare live demo environment with Telco2 data on Oracle Cloud
+5. Identify 5 Tier-2/3 operators in UK/Europe with known operational pain
+6. Run latent evidence validation (Market Research §14) in parallel
+
+---
+
+## 20. Document Catalogue
 
 ### Archived (moved to `docs/archive/`)
 
@@ -838,6 +948,7 @@ All superseded root-level documents — see archive directory for full inventory
 
 | Document | Purpose |
 |----------|---------|
+| `Market Research.md` | **Competitive landscape, pricing strategy, and go-to-market analysis** (April 2026). Deep technical comparison of Nokia, ServiceNow, NetoAI, Google, Ericsson, BMC Helix, Huawei, Cisco, Juniper, Tupl. Pricing analysis. NetoAI dependency mitigation. Latent evidence validation plan. Worst-case scenario analysis with 5 market entry paths |
 | `TASKS.md` | Active task backlog |
 | `IMPLEMENTATION_ROADMAP_V8.md` | Active Dark Graph V8 blueprint |
 | `ADR-001-autonomy-positioning.md` | Architecture Decision Record |

@@ -34,18 +34,22 @@ async def test_tmf642_ingress_persistence(client: AsyncClient, db_session):
     assert resp.status_code == 201
     assert resp.json()["status"] == "persisted"
     
-    # 2. Verify it appears in the list (Tenant Isolation check included)
+    # 2. Verify it appears in the list (backend generates its own UUID, not alarm_id)
     resp = await client.get(
         "/tmf-api/alarmManagement/v4/alarm",
         headers={"Authorization": f"Bearer {admin_token}"}
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert any(a["id"] == alarm_id for a in data)
-    
-    # 3. Verify detail retrieval
+    assert len(data) >= 1
+    # Find by specificProblem since backend assigns a new UUID
+    matched = [a for a in data if a.get("specificProblem") == "Site-X backhaul saturation"]
+    assert len(matched) == 1
+
+    # 3. Verify detail retrieval using the backend-assigned ID
+    backend_id = matched[0]["id"]
     resp = await client.get(
-        f"/tmf-api/alarmManagement/v4/alarm/{alarm_id}",
+        f"/tmf-api/alarmManagement/v4/alarm/{backend_id}",
         headers={"Authorization": f"Bearer {admin_token}"}
     )
     assert resp.status_code == 200

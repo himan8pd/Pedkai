@@ -2,11 +2,11 @@
 # 1. Document Identity
 title: |
   \fontsize{30}{35}\selectfont pedk.ai - AI-native operational reconciliation engine
-subtitle: "Version 1.0"
+subtitle: "Version 2.0"
 author: |
   \fontsize{20}{22}\selectfont Himanshu Thakur
 date: |
-  \fontsize{16}{16}\selectfont 06-Mar-2026
+  \fontsize{16}{16}\selectfont 01-Apr-2026
 subject: "Product Specification"
 keywords: [Dark Graph, Abeyance Memory, pedk.ai]
 lang: "en"
@@ -33,7 +33,7 @@ header-includes: |
 
 # 3. Header & Footer
 header-left: "pedk.ai - Product Specification"
-header-right: "06-Mar-2026"
+header-right: "01-Apr-2026"
 footer-left: "Confidential"
 footer-right: "Page \\thepage"
 
@@ -75,6 +75,8 @@ pedk.ai is an intelligence fabric that sits between your existing systems — el
 
 pedk.ai **augments** your existing tools. It does not replace your element managers, your ITSM platform, or your CMDB. They do what they're designed to do. pedk.ai adds the reconciliation layer they've never had.
 
+pedk.ai already integrates with **ServiceNow** — polling incidents, correlating operator actions with AI recommendations, and computing behavioural feedback to improve over time. Your existing ServiceNow investment becomes more valuable, not redundant.
+
 
 ## How It Works — Day 1
 
@@ -115,9 +117,11 @@ pedk.ai's foundational capability. Discovers the six types of divergence between
 
 pedk.ai's unique differentiator. Traditional monitoring processes events in real-time and discards what it can't resolve. pedk.ai does not discard. It remembers.
 
-Unresolved technical fragments — a CLI output pasted into a ticket note, a transient telemetry anomaly, a reference to an unknown IP address — are held in persistent semantic storage. Days, weeks, or months later, when a new piece of evidence arrives that matches, pedk.ai **connects the dots** across time and across data types.
+Unresolved technical fragments — a CLI output pasted into a ticket note, a transient telemetry anomaly, a reference to an unknown IP address — are held in persistent semantic storage using telecom-specific 1536-dimensional embeddings. Days, weeks, or months later, when a new piece of evidence arrives that matches, pedk.ai **connects the dots** across time and across data types.
 
-No competing product does this. Active discovery scanners see only what's present when they scan. Rule-based engines need a rule for every pattern. Abeyance Memory is patient. It finds connections that no human analyst could spot across thousands of tickets and millions of events.
+The system is implemented with a **5-dimension correlation engine** (semantic similarity, topological proximity, temporal alignment, operational fingerprint, entity overlap) that can connect different descriptions of the same problem across network domains — something no text-matching system can achieve. Fragments follow a managed lifecycle with source-specific retention (alarms 90 days, change records up to 2 years), relevance decay, and cold storage archival.
+
+No competing product does this. Nokia's NMA agents discard context after task completion. ServiceNow's RAMC correlation requires the same CI/metric recurring in the same timeframe. Google's MINDR processes events and moves on. Abeyance Memory is patient. It finds connections that no human analyst could spot across thousands of tickets and millions of events.
 
 ### Sleeping Cell Detection
 
@@ -177,14 +181,34 @@ pedk.ai learns from what your operators actually do — not just button clicks, 
 
 - **TM Forum**: TMF642 Alarm Management API, TMF628 Performance Management API
 - **Multi-vendor**: Ericsson (XML), Nokia (JSON), SNMP — normalised into unified internal format
+- **Telemetry**: 6-domain ingestion — RAN, Transport, Core, Fixed Broadband, Enterprise, Power — via Apache Kafka
+- **Embeddings**: Telecom-specific T-VEC model (1536-dim) for domain-accurate semantic search — outperforms generic models by 30%+ on telecom tasks
 - **Security**: JWT authentication, hierarchical RBAC, tenant data isolation, GDPR consent enforcement, data sovereignty controls
 - **Multi-tenancy**: Full tenant isolation — every data table scoped by tenant, no cross-tenant access
 - **LLM**: Vendor-neutral — supports cloud-hosted and on-premises models for data sovereignty requirements
+- **Real-time**: Server-Sent Events (SSE) alarm streaming for live NOC dashboards
+- **ServiceNow**: Production integration — polls incidents, ingests operator actions, computes behavioural feedback
+
+
+## Cost Advantage
+
+pedk.ai's architecture delivers enterprise-grade telecom intelligence at a fraction of incumbent pricing:
+
+| Capability | Incumbent Cost | pedk.ai |
+|------------|---------------|---------|
+| **AI inference** | Cloud LLM APIs: $0.01–$0.06 per 1K tokens, scaling with volume | Local T-VEC (CPU, 3GB) + local LLM: **zero marginal cost per call** |
+| **Licensing** | ServiceNow ITSM + ITOM: $250–$360/agent/month. 100 agents = $300K–$430K/year | No per-agent model. Annual subscription based on network size |
+| **Deployment** | 6–18 month implementation. Consulting fees 1–3x annual licence | Docker single-command deployment. Operational in days, not months |
+| **Data sovereignty** | Cloud-only (ServiceNow SaaS, Google Vertex AI). Data leaves your premises | Runs entirely on-premises. Your data never leaves your network |
+
+For operators who cannot justify ServiceNow's total cost of ownership (3–5x the licence fee), pedk.ai delivers comparable operational intelligence at 10–20% of the cost.
 
 
 ## Deployment
 
 pedk.ai deploys on Kubernetes with Docker containers. Cloud-hosted SaaS or on-premises. Supports PostgreSQL with TimescaleDB for time-series analytics, Apache Kafka for telemetry streaming, and vector search for semantic intelligence.
+
+Validated on Oracle Cloud (ARM-based infrastructure) and Docker Compose for single-command deployment. Kubernetes manifests available for production scaling.
 
 No heavyweight infrastructure requirements. No rip-and-replace migration. pedk.ai operates alongside your existing stack from Day 1.
 
@@ -208,6 +232,20 @@ pedk.ai uses pluggable mathematical frameworks for evidence fusion — selecting
 Causal inference uses established statistical methods for time-series analysis, with a roadmap to incorporate more advanced techniques for non-linear and multi-variable causality as they mature.
 
 The approach is configurable per deployment. No one-size-fits-all.
+
+
+## How pedk.ai Compares
+
+| Capability | ServiceNow | Nokia | Ericsson | pedk.ai |
+|------------|-----------|-------|----------|---------|
+| **Cross-domain correlation** | Same CI/metric must recur in same timeframe | Ontology engine normalises domains | Multi-agent end-to-end | 5-dimension semantic fusion across different vocabulary and domains |
+| **Unresolved evidence** | Discards after processing | Discards after task completion | Processes in real-time | **Holds indefinitely** in Abeyance Memory |
+| **CMDB enrichment** | Active discovery (ping-based, blind behind firewalls) | Vendor-specific topology | Digital twin from telemetry | Passive discovery from telemetry + tickets + CMDB cross-correlation |
+| **Model serving** | Cloud SaaS only | Cloud-implied | Cloud (Vertex AI, AWS) | **Local-only option**: zero cloud dependency |
+| **Cost** | $300K–$8M/year (licence + implementation) | Bundled with network equipment | Managed services model | Enterprise license based on network size |
+| **Deployment time** | 6–18 months | Requires Nokia-dominant environment | Requires EIAP ecosystem | Days to weeks (Docker) |
+
+pedk.ai does not compete with these platforms. It **augments** them — adding the intelligence layer that makes existing investments work harder.
 
 
 ## The Conversation pedk.ai Enables

@@ -7,6 +7,7 @@ and staleness monitoring. All endpoints require authentication.
 WS1 — Topology & Impact Analysis.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -36,28 +37,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Simple in-memory rate limiter: {user: (count, window_start)}
+# Protected by _rate_limit_lock for atomic check-and-increment.
 _rate_limit_store: dict = {}
+_rate_limit_lock = asyncio.Lock()
 RATE_LIMIT_MAX = 10
 RATE_LIMIT_WINDOW_SECONDS = 60
 
 
-def _check_rate_limit(username: str) -> None:
-    """Simple in-memory rate limiter: 10 req/min per user for full graph."""
+async def _check_rate_limit(username: str) -> None:
+    """In-memory rate limiter: 10 req/min per user for full graph. Thread-safe."""
     now = datetime.now(timezone.utc)
-    entry = _rate_limit_store.get(username)
-    if entry:
-        count, window_start = entry
-        if (now - window_start).total_seconds() < RATE_LIMIT_WINDOW_SECONDS:
-            if count >= RATE_LIMIT_MAX:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"Rate limit exceeded: {RATE_LIMIT_MAX} requests per minute for full topology graph.",
-                )
-            _rate_limit_store[username] = (count + 1, window_start)
+    async with _rate_limit_lock:
+        entry = _rate_limit_store.get(username)
+        if entry:
+            count, window_start = entry
+            if (now - window_start).total_seconds() < RATE_LIMIT_WINDOW_SECONDS:
+                if count >= RATE_LIMIT_MAX:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Rate limit exceeded: {RATE_LIMIT_MAX} requests per minute for full topology graph.",
+                    )
+                _rate_limit_store[username] = (count + 1, window_start)
+            else:
+                _rate_limit_store[username] = (1, now)
         else:
             _rate_limit_store[username] = (1, now)
-    else:
-        _rate_limit_store[username] = (1, now)
 
 
 @router.get("/{tenant_id}", response_model=TopologyGraphResponse)
@@ -81,7 +85,7 @@ async def get_topology_graph(
     Entity names and external_ids are resolved from the ``network_entities``
     table so the frontend shows human-readable labels instead of raw UUIDs.
     """
-    _check_rate_limit(current_user.username)
+    await _check_rate_limit(current_user.username)
 
     # ── 1. Fetch topology relationships ───────────────────────────────
     try:

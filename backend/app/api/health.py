@@ -1,24 +1,35 @@
 """Health check endpoints and data-status API."""
 
+import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy import text as sa_text
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/health")
 async def health_check():
-    """Basic health check endpoint."""
+    """Basic liveness check. Returns 200 if the process is running."""
     return {"status": "healthy"}
 
 
 @router.get("/ready")
 async def readiness_check():
     """
-    Readiness check - verify dependencies are available.
-    Fails if critical dependencies (DB) are down.
+    Readiness check — verify all critical dependencies are available.
+
+    Returns 200 if all checks pass, 503 with details of failing dependencies
+    if any check fails. Intended for load balancer health probes.
+
+    Checks:
+    - Primary graph database (PostgreSQL / SQLite)
+    - Metrics database (TimescaleDB / SQLite)
+    - Kafka broker connectivity (if telemetry consumers enabled)
     """
     health_status = {
         "status": "ready",
@@ -50,16 +61,36 @@ async def readiness_check():
         health_status["checks"]["metrics_db"] = f"failed: {str(e)}"
         health_status["status"] = "not_ready"
 
-    # Check Kafka (Optional for startup, critical for processing)
-    # We skip Kafka strict check for now to avoid hard crash if broker is slow
+    # Check Kafka (only if telemetry consumers are enabled)
+    try:
+        from backend.app.core.config import get_settings
+        settings = get_settings()
+        if settings.telemetry_consumers_enabled:
+            from aiokafka import AIOKafkaProducer
+            producer = AIOKafkaProducer(
+                bootstrap_servers=settings.kafka_bootstrap_servers,
+                request_timeout_ms=5000,
+            )
+            try:
+                await producer.start()
+                health_status["checks"]["kafka"] = "ok"
+            except Exception as e:
+                health_status["checks"]["kafka"] = f"unavailable: {str(e)}"
+                # Kafka unavailability is logged but does not block readiness
+                # (AMB-01: frontend shows corrective action instead)
+                logger.warning(f"Kafka health check failed: {e}")
+            finally:
+                await producer.stop()
+    except ImportError:
+        # aiokafka not installed — skip Kafka check
+        pass
+    except Exception:
+        pass
 
     if health_status["status"] != "ready":
-        from fastapi import Response, status
-
-        return Response(
-            content=str(health_status),
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            media_type="application/json",
+        return JSONResponse(
+            content=health_status,
+            status_code=503,
         )
 
     return health_status

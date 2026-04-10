@@ -6,6 +6,7 @@ and publishes them as events for downstream processing.
 Implements REST accept pattern: receive, validate, queue, respond 202.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Optional
@@ -18,6 +19,10 @@ from backend.app.events.bus import publish_event
 from backend.app.events.schemas import AlarmIngestedEvent
 
 logger = logging.getLogger(__name__)
+
+# Idempotency cache: dedup_key -> event_id (protected by _dedup_lock)
+_dedup_cache: dict[str, str] = {}
+_dedup_lock = asyncio.Lock()
 
 router = APIRouter(
     prefix="/api/v1/alarms",
@@ -108,13 +113,12 @@ async def ingest_alarm(
         dedup_key = (
             f"{tenant_id}:{request.entity_id}:{request.alarm_type}:{request.raised_at}"
         )
-        if not hasattr(ingest_alarm, "_seen"):
-            ingest_alarm._seen = {}  # type: ignore[attr-defined]
-        if dedup_key in ingest_alarm._seen:
-            prev = ingest_alarm._seen[dedup_key]
-            return AlarmIngestionResponse(
-                event_id=prev, tenant_id=tenant_id, status="accepted (idempotent)"
-            )
+        async with _dedup_lock:
+            if dedup_key in _dedup_cache:
+                prev = _dedup_cache[dedup_key]
+                return AlarmIngestionResponse(
+                    event_id=prev, tenant_id=tenant_id, status="accepted (idempotent)"
+                )
 
         # Create event with server-assigned tracking IDs
         event = AlarmIngestedEvent(
@@ -130,8 +134,9 @@ async def ingest_alarm(
         # Publish to internal queue for async processing
         await publish_event(event)
 
-        # Cache for idempotency
-        ingest_alarm._seen[dedup_key] = event.event_id  # type: ignore[attr-defined]
+        # Cache for idempotency (under lock to prevent duplicates)
+        async with _dedup_lock:
+            _dedup_cache[dedup_key] = event.event_id
 
         logger.info(
             f"Alarm ingested: type={request.alarm_type}, "

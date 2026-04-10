@@ -60,11 +60,19 @@ export default function AuthLayout({
   // ── Auth state ──────────────────────────────────────────────────
   const [token, setToken] = useState<string | null>(null);
   const [loginTenantId, setLoginTenantId] = useState("");
-  const [username, setUsername] = useState("operator");
-  const [password, setPassword] = useState("operator");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPasswordWarning, setShowPasswordWarning] = useState(false);
+
+  // ── Password change state ─────────────────────────────────────
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [currentPasswordForChange, setCurrentPasswordForChange] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordChangeError, setPasswordChangeError] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // ── Tenant selection state ──────────────────────────────────────
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
@@ -104,9 +112,15 @@ export default function AuthLayout({
     [selectedTenantId, tenantName, role],
   );
 
-  // ── Phase: 'login' | 'tenant-select' | 'app' ───────────────────
+  // ── Phase: 'login' | 'change-password' | 'tenant-select' | 'app'
   // Derived from state rather than stored separately to avoid drift.
-  const phase = !token ? "login" : !tenantBound ? "tenant-select" : "app";
+  const phase = !token
+    ? "login"
+    : mustChangePassword
+      ? "change-password"
+      : !tenantBound
+        ? "tenant-select"
+        : "app";
 
   // ── Logout (full reset) ─────────────────────────────────────────
   const handleLogout = () => {
@@ -119,10 +133,15 @@ export default function AuthLayout({
     setTenantBound(false);
     setTenantError("");
     setLoginTenantId("");
-    setUsername("operator");
-    setPassword("operator");
+    setUsername("");
+    setPassword("");
     setAuthError("");
     setShowPasswordWarning(false);
+    setMustChangePassword(false);
+    setCurrentPasswordForChange("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordChangeError("");
   };
 
   // ── Stale page detection (Page Visibility API) ────────────────
@@ -202,7 +221,14 @@ export default function AuthLayout({
 
       const data = await res.json();
 
-      if (username === "operator") setShowPasswordWarning(true);
+      // Check if server requires a password change before proceeding
+      if (data.must_change_password) {
+        setToken(data.access_token);
+        setTenants(data.tenants ?? []);
+        setMustChangePassword(true);
+        setCurrentPasswordForChange(password); // Pre-fill current password for convenience
+        return;
+      }
 
       // The /token response now includes a tenants[] array.
       const returnedTenants: TenantInfo[] = data.tenants ?? [];
@@ -235,6 +261,55 @@ export default function AuthLayout({
       setAuthError(err.message ?? "Login failed. Check backend credentials.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ── Password change handler ────────────────────────────────────
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordChangeError("");
+
+    if (newPassword.length < 8) {
+      setPasswordChangeError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError("Passwords do not match.");
+      return;
+    }
+    if (currentPasswordForChange === newPassword) {
+      setPasswordChangeError("New password must differ from current password.");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/auth/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          current_password: currentPasswordForChange,
+          new_password: newPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail ?? `HTTP ${res.status}`);
+      }
+
+      // Password changed successfully — clear the flag and proceed
+      setMustChangePassword(false);
+      setCurrentPasswordForChange("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setPasswordChangeError(err.message ?? "Failed to change password.");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -375,11 +450,99 @@ export default function AuthLayout({
                 </button>
               </form>
 
-              {showPasswordWarning && (
-                <div className="mt-4 p-3 rounded-lg bg-yellow-900 border border-yellow-700 text-yellow-200 text-sm">
-                  Default credentials in use. Change password in production.
+              {/* Password warning removed — enforced via must_change_password flow */}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER: Password change screen (must_change_password enforcement)
+  // ═══════════════════════════════════════════════════════════════
+  if (phase === "change-password") {
+    return (
+      <div className="flex min-h-screen bg-gradient-to-br from-[#06203b] via-[#030f26] to-[#06203b]">
+        <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 items-center justify-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#030f26]/80 z-10 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#06203b]/60 via-transparent to-[#06203b]/40 z-10 pointer-events-none" />
+          <video autoPlay loop muted playsInline className="w-full h-full object-cover opacity-80">
+            <source src="/hero.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute bottom-10 left-10 z-20">
+            <h2 className="text-3xl font-bold text-white tracking-tight">Dark Graph Reconciliation</h2>
+            <p className="text-white/70 mt-2 max-w-md text-sm leading-relaxed">
+              Continuous CMDB verification against telemetry ground truth.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center w-full lg:w-1/2 xl:w-2/5 px-6">
+          <div className="w-full max-w-md animate-fade-in">
+            <div className="bg-[#0a2d4a] rounded-2xl border border-[rgba(7,242,219,0.12)] p-8 shadow-[0_16px_48px_rgba(0,0,0,0.35)]">
+              <div className="flex flex-col items-center mb-6">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo-v2.jpeg" alt="pedk.ai" className="w-16 h-16 rounded-xl mb-3 shadow-[0_0_16px_rgba(7,242,219,0.1)]" />
+                <h1 className="text-2xl font-bold text-white tracking-tight">Change Password</h1>
+                <p className="text-white/60 text-sm mt-1">
+                  You must change your password before continuing.
+                </p>
+              </div>
+
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Current Password</label>
+                  <input
+                    type="password"
+                    value={currentPasswordForChange}
+                    onChange={(e) => setCurrentPasswordForChange(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
+                    placeholder="Enter current password"
+                    required
+                  />
                 </div>
-              )}
+
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">New Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
+                    placeholder="Minimum 8 characters"
+                    minLength={8}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg bg-[#06203b] border border-[rgba(7,242,219,0.15)] text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-cyan-400/50 focus:border-cyan-400/30 transition-colors duration-200"
+                    placeholder="Re-enter new password"
+                    minLength={8}
+                    required
+                  />
+                </div>
+
+                {passwordChangeError && (
+                  <div className="p-3 rounded-lg bg-red-900 border border-red-700 text-red-200 text-sm">
+                    {passwordChangeError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isChangingPassword}
+                  className="w-full px-4 py-2.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold transition-all duration-200 hover:shadow-[0_0_16px_rgba(7,242,219,0.25)]"
+                >
+                  {isChangingPassword ? "Changing..." : "Change Password"}
+                </button>
+              </form>
             </div>
           </div>
         </div>

@@ -12,7 +12,7 @@ async def test_create_incident(client: AsyncClient):
     token = create_access_token({"sub": "admin", "role": Role.ADMIN})
     headers = {"Authorization": f"Bearer {token}"}
     response = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={"tenant_id": "tenant-a", "title": "High PRB utilization", "severity": "major"},
         headers=headers
     )
@@ -26,7 +26,7 @@ async def test_advance_lifecycle(client: AsyncClient):
     token = create_access_token({"sub": "admin", "role": Role.ADMIN})
     headers = {"Authorization": f"Bearer {token}"}
     create_resp = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={"tenant_id": "tenant-a", "title": "Test incident", "severity": "minor"},
         headers=headers
     )
@@ -43,7 +43,7 @@ async def test_human_gate_enforcement(client: AsyncClient):
     token = create_access_token({"sub": "admin", "role": Role.ADMIN})
     headers = {"Authorization": f"Bearer {token}"}
     create_resp = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={"tenant_id": "tenant-a", "title": "Gate test", "severity": "minor"},
         headers=headers
     )
@@ -62,7 +62,7 @@ async def test_approve_sitrep(client: AsyncClient, db_session: AsyncSession):
     headers = {"Authorization": f"Bearer {token}"}
 
     create_resp = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={"tenant_id": "tenant-a", "title": "Sitrep test", "severity": "major"},
         headers=headers
     )
@@ -86,7 +86,7 @@ async def test_approve_action(client: AsyncClient):
     headers = {"Authorization": f"Bearer {token}"}
 
     create_resp = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={"tenant_id": "tenant-a", "title": "Action test", "severity": "major"},
         headers=headers
     )
@@ -106,7 +106,7 @@ async def test_close_incident(client: AsyncClient):
     headers = {"Authorization": f"Bearer {token}"}
 
     create_resp = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={"tenant_id": "tenant-a", "title": "Close test", "severity": "minor"},
         headers=headers
     )
@@ -126,7 +126,7 @@ async def test_emergency_service_p1(client: AsyncClient):
     token = create_access_token({"sub": "admin", "role": Role.ADMIN})
     headers = {"Authorization": f"Bearer {token}"}
     response = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={
             "tenant_id": "tenant-a",
             "title": "999 dial-out failure",
@@ -145,7 +145,7 @@ async def test_audit_trail(client: AsyncClient):
     headers = {"Authorization": f"Bearer {token}"}
 
     create_resp = await client.post(
-        "/api/v1/incidents/",
+        "/api/v1/incidents",
         json={"tenant_id": "tenant-a", "title": "Audit test", "severity": "major"},
         headers=headers
     )

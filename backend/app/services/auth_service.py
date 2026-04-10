@@ -435,6 +435,7 @@ async def seed_default_users(db: AsyncSession) -> None:
             ),
             role=Role.ADMIN,
             tenant_id=first_tenant_id,  # Legacy NOT NULL column; user_tenant_access is authoritative
+            must_change_password=True,  # Force password change on first login
         )
         db.add(admin_user)
         await db.flush()

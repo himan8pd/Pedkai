@@ -179,12 +179,19 @@ async def test_tc070_sitrep_has_sections(db_session):
 
     with patch.object(llm_service._adapter, "generate", new_callable=AsyncMock) as mock_gen:
         from backend.app.services.llm_adapter import LLMResponse
+        from datetime import datetime, timezone
         mock_gen.return_value = LLMResponse(
-            text=mock_sitrep, model_version="mock", prompt_hash="abc"
+            text=mock_sitrep, model_version="mock", prompt_hash="abc",
+            timestamp=datetime.now(timezone.utc), provider="mock",
         )
 
         result = await llm_service.generate_sitrep(
-            incident_context={"entity_id": "CELL_TEST", "entity_name": "Test", "entity_type": "CELL", "anomalies": ["RSRP"]},
+            incident_context={
+                "entity_id": "CELL_TEST", "entity_name": "Test", "entity_type": "CELL",
+                "anomalies": [
+                    {"metric_name": "RSRP", "entity_type": "CELL", "entity_id": "CELL_TEST", "value": -110},
+                ],
+            },
             similar_decisions=[],
             causal_evidence=[
                 {"cause_metric": "RSRP", "effect_metric": "DL_BLER", "p_value": 0.01, "best_lag": 2}
@@ -203,12 +210,19 @@ async def test_tc073_sitrep_empty_similar(db_session):
 
     with patch.object(llm_service._adapter, "generate", new_callable=AsyncMock) as mock_gen:
         from backend.app.services.llm_adapter import LLMResponse
+        from datetime import datetime, timezone
         mock_gen.return_value = LLMResponse(
-            text="SITREP with no prior incidents.", model_version="mock", prompt_hash="abc"
+            text="SITREP with no prior incidents.", model_version="mock", prompt_hash="abc",
+            timestamp=datetime.now(timezone.utc), provider="mock",
         )
 
         result = await llm_service.generate_sitrep(
-            incident_context={"entity_id": "CELL_NEW", "entity_name": "New", "entity_type": "CELL", "anomalies": ["RSRP"]},
+            incident_context={
+                "entity_id": "CELL_NEW", "entity_name": "New", "entity_type": "CELL",
+                "anomalies": [
+                    {"metric_name": "RSRP", "entity_type": "CELL", "entity_id": "CELL_NEW", "value": -105},
+                ],
+            },
             similar_decisions=[],
             causal_evidence=None,
         )

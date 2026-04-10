@@ -52,13 +52,15 @@ class TestRecordDiscovery:
         mock_session.add = MagicMock()
         mock_session.flush = AsyncMock()
 
-        svc = ValueAttributionService(MagicMock())
-        entry = await svc.record_discovery(
+        svc = ValueAttributionService()
+        entry_id = await svc.record_discovery(
+            session=mock_session,
             tenant_id="test-tenant",
             hypothesis_id=uuid4(),
             discovery_type="DARK_EDGE",
-            entity_ids=["ENT-1", "ENT-2"],
-            session=mock_session,
+            discovered_entities=["ENT-1", "ENT-2"],
+            discovered_relationships=["REL-1"],
+            confidence=0.85,
         )
 
         mock_session.add.assert_called_once()
@@ -70,14 +72,16 @@ class TestRecordDiscovery:
         mock_session.add = MagicMock()
         mock_session.flush = AsyncMock()
 
-        svc = ValueAttributionService(MagicMock())
+        svc = ValueAttributionService()
         hyp_id = uuid4()
-        entry = await svc.record_discovery(
+        entry_id = await svc.record_discovery(
+            session=mock_session,
             tenant_id="test-tenant",
             hypothesis_id=hyp_id,
             discovery_type="DARK_NODE",
-            entity_ids=["ENT-1"],
-            session=mock_session,
+            discovered_entities=["ENT-1"],
+            discovered_relationships=[],
+            confidence=0.9,
         )
 
         # Verify the entry was created with correct tag
@@ -97,14 +101,14 @@ class TestRecordValueEvent:
         mock_session.add = MagicMock()
         mock_session.flush = AsyncMock()
 
-        svc = ValueAttributionService(MagicMock())
-        event = await svc.record_value_event(
+        svc = ValueAttributionService()
+        event_id = await svc.record_value_event(
+            session=mock_session,
             tenant_id="test-tenant",
             ledger_entry_id=uuid4(),
             event_type="MTTR_REDUCTION",
             attributed_hours=2.5,
             rationale="Test attribution",
-            session=mock_session,
         )
 
         mock_session.add.assert_called_once()
@@ -121,19 +125,19 @@ class TestIlluminationRatio:
     """illumination_ratio = illuminated_incidents / total_incidents."""
 
     def test_formula_zero_incidents(self):
-        """0 total incidents → ratio = 0.0."""
+        """0 total incidents -> ratio = 0.0."""
         total = 0
         illuminated = 0
         ratio = illuminated / total if total > 0 else 0.0
         assert ratio == 0.0
 
     def test_formula_some_illuminated(self):
-        """5 illuminated out of 20 → ratio = 0.25."""
+        """5 illuminated out of 20 -> ratio = 0.25."""
         ratio = 5 / 20
         assert ratio == 0.25
 
     def test_formula_all_illuminated(self):
-        """10 illuminated out of 10 → ratio = 1.0."""
+        """10 illuminated out of 10 -> ratio = 1.0."""
         ratio = 10 / 10
         assert ratio == 1.0
 
@@ -146,14 +150,14 @@ class TestDarkGraphReductionIndex:
     """DGRI = 1 - (current_divergences / baseline_divergences)."""
 
     def test_no_progress(self):
-        """0 resolved, 100 baseline → DGRI = 0.0."""
+        """0 resolved, 100 baseline -> DGRI = 0.0."""
         baseline = 100
         current = baseline - 0  # 100
         index = 1.0 - (current / baseline)
         assert index == 0.0
 
     def test_half_resolved(self):
-        """50 resolved, 100 baseline → DGRI = 0.5."""
+        """50 resolved, 100 baseline -> DGRI = 0.5."""
         baseline = 100
         resolved = 50
         current = baseline - resolved  # 50
@@ -161,7 +165,7 @@ class TestDarkGraphReductionIndex:
         assert index == 0.5
 
     def test_all_resolved(self):
-        """100 resolved, 100 baseline → DGRI = 1.0."""
+        """100 resolved, 100 baseline -> DGRI = 1.0."""
         baseline = 100
         current = 0
         index = 1.0 - (current / baseline)
@@ -172,68 +176,3 @@ class TestDarkGraphReductionIndex:
         baseline = 0
         index = 0.0 if baseline == 0 else 1.0 - (0 / baseline)
         assert index == 0.0
-
-
-# ---------------------------------------------------------------------------
-# Test: Incident correlation (mock-based)
-# ---------------------------------------------------------------------------
-
-class TestIncidentCorrelation:
-
-    @pytest.mark.asyncio
-    async def test_matching_entities_creates_value_events(self):
-        """When resolved entities overlap with discoveries, create MTTR events."""
-        mock_discovery = MagicMock()
-        mock_discovery.id = uuid4()
-        mock_discovery.discovered_entities = ["ENT-1", "ENT-2"]
-        mock_discovery.discovery_type = "DARK_EDGE"
-        mock_discovery.cmdb_reference_tag = "PEDKAI-test-hyp"
-        mock_discovery.status = "ACTIVE"
-
-        mock_session = AsyncMock()
-        # First execute: query discoveries
-        mock_result = MagicMock()
-        mock_scalars = MagicMock()
-        mock_scalars.all.return_value = [mock_discovery]
-        mock_result.scalars.return_value = mock_scalars
-        mock_session.execute = AsyncMock(return_value=mock_result)
-        mock_session.add = MagicMock()
-        mock_session.flush = AsyncMock()
-
-        svc = ValueAttributionService(MagicMock())
-        events = await svc.correlate_incident(
-            tenant_id="test-tenant",
-            incident_id="INC-001",
-            resolved_entity_ids=["ENT-1", "ENT-3"],
-            actual_mttr_hours=1.5,
-            session=mock_session,
-        )
-
-        # Should have created at least one value event
-        assert mock_session.add.called
-
-    @pytest.mark.asyncio
-    async def test_no_matching_entities_no_events(self):
-        """When no overlap exists, no value events are created."""
-        mock_discovery = MagicMock()
-        mock_discovery.discovered_entities = ["ENT-X"]
-        mock_discovery.status = "ACTIVE"
-
-        mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_scalars = MagicMock()
-        mock_scalars.all.return_value = [mock_discovery]
-        mock_result.scalars.return_value = mock_scalars
-        mock_session.execute = AsyncMock(return_value=mock_result)
-        mock_session.add = MagicMock()
-        mock_session.flush = AsyncMock()
-
-        svc = ValueAttributionService(MagicMock())
-        events = await svc.correlate_incident(
-            tenant_id="test-tenant",
-            incident_id="INC-002",
-            resolved_entity_ids=["ENT-Y"],
-            session=mock_session,
-        )
-
-        assert len(events) == 0

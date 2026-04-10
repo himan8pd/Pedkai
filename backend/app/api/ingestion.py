@@ -17,8 +17,8 @@ from backend.app.core.config import get_settings
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Global state for ingestion
-# (in a real prod environment this would be in Redis/Celery)
+# Global state for ingestion (protected by _ingestion_lock)
+# In a multi-worker deployment, migrate to Redis/Celery.
 _ingestion_running = False
 _ingestion_progress = 0
 _ingestion_logs: list[str] = []
@@ -32,13 +32,16 @@ class IngestionParams(BaseModel):
 
 async def _publish(event: str, data: dict):
     payload = {"event": event, "data": data, "timestamp": datetime.now(timezone.utc).isoformat()}
-    for q in _ingestion_subscribers:
+    async with _ingestion_lock:
+        subscribers = list(_ingestion_subscribers)
+    for q in subscribers:
         await q.put(payload)
 
 async def run_ingestion_subprocess(params: IngestionParams, tenant_id: str):
     global _ingestion_running, _ingestion_progress
-    _ingestion_progress = 0
-    _ingestion_logs.clear()
+    async with _ingestion_lock:
+        _ingestion_progress = 0
+        _ingestion_logs.clear()
 
     import os
     data_store_root = os.environ.get("PEDKAI_DATA_STORE_ROOT", "")
@@ -75,31 +78,36 @@ async def run_ingestion_subprocess(params: IngestionParams, tenant_id: str):
             if not line:
                 break
             line_str = line.decode().rstrip()
-            _ingestion_logs.append(line_str)
+            async with _ingestion_lock:
+                _ingestion_logs.append(line_str)
 
-            # Naive progress estimation based on "Step X" log lines
-            if "Step 0" in line_str: _ingestion_progress = 5
-            elif "Step 1" in line_str: _ingestion_progress = 15
-            elif "Step 2" in line_str: _ingestion_progress = 30
-            elif "Step 3" in line_str: _ingestion_progress = 45
-            elif "Step 4" in line_str: _ingestion_progress = 60
-            elif "Step 12" in line_str: _ingestion_progress = 85
-            elif "Loaded" in line_str and "entities" in line_str:
-                _ingestion_progress = min(95, _ingestion_progress + 2)
+                # Naive progress estimation based on "Step X" log lines
+                if "Step 0" in line_str: _ingestion_progress = 5
+                elif "Step 1" in line_str: _ingestion_progress = 15
+                elif "Step 2" in line_str: _ingestion_progress = 30
+                elif "Step 3" in line_str: _ingestion_progress = 45
+                elif "Step 4" in line_str: _ingestion_progress = 60
+                elif "Step 12" in line_str: _ingestion_progress = 85
+                elif "Loaded" in line_str and "entities" in line_str:
+                    _ingestion_progress = min(95, _ingestion_progress + 2)
+                current_progress = _ingestion_progress
 
-            await _publish("ingestion_log", {"line": line_str, "progress": _ingestion_progress})
+            await _publish("ingestion_log", {"line": line_str, "progress": current_progress})
 
         await process.wait()
-        _ingestion_progress = 100
+        async with _ingestion_lock:
+            _ingestion_progress = 100
         await _publish("ingestion_completed", {"code": process.returncode, "progress": 100})
     except Exception as e:
         logger.error(f"Ingestion subprocess error: {e}")
         await _publish("ingestion_error", {"error": str(e), "progress": _ingestion_progress})
     finally:
-        _ingestion_running = False
+        async with _ingestion_lock:
+            _ingestion_running = False
+            final_progress = _ingestion_progress
         # One last update to ensure UI knows we're done
         await asyncio.sleep(0.5)
-        await _publish("ingestion_completed", {"status": "stopped", "progress": _ingestion_progress})
+        await _publish("ingestion_completed", {"status": "stopped", "progress": final_progress})
 
 @router.post("/start")
 async def start_ingestion(
@@ -122,33 +130,42 @@ async def start_ingestion(
 
 @router.get("/status", dependencies=[Depends(oauth2_scheme)])
 async def get_ingestion_status():
-    return {
-        "running": _ingestion_running,
-        "progress": _ingestion_progress,
-        "logs_count": len(_ingestion_logs)
-    }
+    async with _ingestion_lock:
+        return {
+            "running": _ingestion_running,
+            "progress": _ingestion_progress,
+            "logs_count": len(_ingestion_logs)
+        }
 
 @router.get("/stream")
 async def stream_ingestion(request: Request, token: Optional[str] = None):
-    """SSE endpoint for ingestion progress. Requires ?token=<jwt>."""
+    """SSE endpoint for ingestion progress. Requires ?token=<jwt> with admin scope."""
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
     settings = get_settings()
     try:
-        jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        # Validate admin scope — ingestion is an admin-only operation
+        scopes = payload.get("scopes", [])
+        if "admin:all" not in scopes:
+            raise HTTPException(status_code=403, detail="Insufficient permissions. Admin access required.")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        q = asyncio.Queue()
-        _ingestion_subscribers.add(q)
+        q: asyncio.Queue = asyncio.Queue()
+        async with _ingestion_lock:
+            _ingestion_subscribers.add(q)
+            running = _ingestion_running
+            progress = _ingestion_progress
+            recent_logs = list(_ingestion_logs[-50:])
         try:
             # Send initial state
-            yield f"data: {json.dumps({'event': 'init', 'data': {'running': _ingestion_running, 'progress': _ingestion_progress}, 'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
+            yield f"data: {json.dumps({'event': 'init', 'data': {'running': running, 'progress': progress}, 'timestamp': datetime.now(timezone.utc).isoformat()})}\n\n"
 
             # Replay recent logs for quick catch up
-            for log_line in _ingestion_logs[-50:]:
-                yield f"data: {json.dumps({'event': 'ingestion_log', 'data': {'line': log_line, 'progress': _ingestion_progress}})}\n\n"
+            for log_line in recent_logs:
+                yield f"data: {json.dumps({'event': 'ingestion_log', 'data': {'line': log_line, 'progress': progress}})}\n\n"
 
             while True:
                 if await request.is_disconnected():
@@ -161,7 +178,8 @@ async def stream_ingestion(request: Request, token: Optional[str] = None):
                     # Heartbeat
                     yield ": heartbeat\n\n"
         finally:
-            _ingestion_subscribers.discard(q)
+            async with _ingestion_lock:
+                _ingestion_subscribers.discard(q)
 
     return StreamingResponse(
         event_generator(),

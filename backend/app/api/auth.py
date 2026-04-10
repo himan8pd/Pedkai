@@ -62,6 +62,7 @@ class TokenResponse(BaseModel):
     scopes: List[str]
     tenants: List[TenantInfo]
     tenant_id: Optional[str] = None
+    must_change_password: bool = False
 
 
 class SelectTenantRequest(BaseModel):
@@ -157,12 +158,16 @@ async def login_for_access_token(
         expires_delta=access_token_expires,
     )
 
+    # Check if user must change their password on first login
+    must_change = getattr(user, "must_change_password", False)
+
     return TokenResponse(
         access_token=access_token,
         role=role,
         scopes=scopes,
         tenants=tenant_infos,
         tenant_id=auto_tenant_id,
+        must_change_password=must_change,
     )
 
 
@@ -322,3 +327,64 @@ async def select_tenant(
         role=role,
         scopes=scopes,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /change-password — self-service password change
+# ---------------------------------------------------------------------------
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class ChangePasswordResponse(BaseModel):
+    message: str
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+async def change_password(
+    body: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """
+    Change the current user's password.
+
+    Requires the current password for verification. On success, clears the
+    ``must_change_password`` flag so the user is no longer prompted.
+
+    Password requirements:
+    - Minimum 8 characters
+    - Must differ from current password
+    """
+    if len(body.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters.",
+        )
+
+    user_orm = await auth_service.get_user_by_id(db, current_user.user_id)
+    if not user_orm:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Verify current password
+    if not auth_service.verify_password(body.current_password, user_orm.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect.",
+        )
+
+    if body.current_password == body.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must differ from current password.",
+        )
+
+    # Update password and clear the forced-change flag
+    user_orm.hashed_password = auth_service.hash_password(body.new_password)
+    user_orm.must_change_password = False
+    await db.commit()
+
+    return ChangePasswordResponse(message="Password changed successfully.")

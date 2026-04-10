@@ -67,10 +67,12 @@ class TestServiceFactoryV3:
         """v2 backward compat services still present."""
         from backend.app.services.abeyance import create_abeyance_services
         services = create_abeyance_services()
+        # Note: "enrichment" and "snap_engine" were replaced by v3 variants
+        # ("enrichment_v3" and "snap_engine_v3") and "notifier" was removed.
         v2_keys = {
-            "provenance", "notifier", "enrichment", "snap_engine",
-            "accumulation_graph", "decay_engine", "shadow_topology",
-            "value_attribution", "incident_reconstruction", "maintenance",
+            "provenance", "accumulation_graph", "decay_engine",
+            "shadow_topology", "value_attribution",
+            "incident_reconstruction", "maintenance",
         }
         for key in v2_keys:
             assert key in services, f"Missing v2 service: {key}"

@@ -38,6 +38,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 _jobs: Dict[str, dict] = {}
+_jobs_lock = asyncio.Lock()
 
 
 def _make_job(tenant_id: str) -> dict:
@@ -58,9 +59,10 @@ async def _run_reconciliation_job(job_id: str, tenant_id: str) -> None:
         async with async_session_maker() as db, metrics_session_maker() as metrics_db:
             engine = ReconciliationEngine(db, metrics_db)
             result = await engine.run(tenant_id)
-        _jobs[job_id]["status"] = "complete"
-        _jobs[job_id]["result"] = result
-        _jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+        async with _jobs_lock:
+            _jobs[job_id]["status"] = "complete"
+            _jobs[job_id]["result"] = result
+            _jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(f"Reconciliation job {job_id} complete for tenant '{tenant_id}'")
 
         # Batch pre-compute AI analysis for all divergences (non-blocking)
@@ -84,9 +86,10 @@ async def _run_reconciliation_job(job_id: str, tenant_id: str) -> None:
             except Exception as ai_exc:
                 logger.warning(f"Batch AI pre-compute failed (non-fatal): {ai_exc}", exc_info=True)
     except Exception as exc:
-        _jobs[job_id]["status"] = "failed"
-        _jobs[job_id]["error"] = str(exc)
-        _jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
+        async with _jobs_lock:
+            _jobs[job_id]["status"] = "failed"
+            _jobs[job_id]["error"] = str(exc)
+            _jobs[job_id]["completed_at"] = datetime.now(timezone.utc).isoformat()
         logger.error(f"Reconciliation job {job_id} failed: {exc}", exc_info=True)
 
 
@@ -132,17 +135,19 @@ async def run_reconciliation(
     """
     tenant_id = _tenant_from_jwt(current_user)
 
-    # Prevent duplicate concurrent runs for the same tenant
-    for job in _jobs.values():
-        if job["tenant_id"] == tenant_id and job["status"] == "running":
-            return {
-                "job_id": job["job_id"],
-                "status": "running",
-                "message": "Reconciliation already in progress for this tenant.",
-            }
+    async with _jobs_lock:
+        # Prevent duplicate concurrent runs for the same tenant
+        for job in _jobs.values():
+            if job["tenant_id"] == tenant_id and job["status"] == "running":
+                return {
+                    "job_id": job["job_id"],
+                    "status": "running",
+                    "message": "Reconciliation already in progress for this tenant.",
+                }
 
-    job = _make_job(tenant_id)
-    _jobs[job["job_id"]] = job
+        job = _make_job(tenant_id)
+        _jobs[job["job_id"]] = job
+
     background_tasks.add_task(_run_reconciliation_job, job["job_id"], tenant_id)
 
     return {
@@ -159,7 +164,8 @@ async def get_reconciliation_job(
 ) -> dict:
     """Poll reconciliation job status. Returns status, and result/error when complete."""
     _tenant_from_jwt(current_user)  # Ensure tenant is selected
-    job = _jobs.get(job_id)
+    async with _jobs_lock:
+        job = _jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     return job
@@ -1443,7 +1449,7 @@ async def get_enriched_profile(
         profile["enrichment"]["ai_analysis"] = precomputed
     elif profile.get("enrichment"):
         # No pre-computed analysis — fall back to on-demand LLM (background)
-        _enqueue_ai_analysis(result_id, profile["enrichment"], div_type, target_id)
+        await _enqueue_ai_analysis(result_id, profile["enrichment"], div_type, target_id)
 
     return profile
 
@@ -1453,42 +1459,30 @@ async def get_enriched_profile(
 # ---------------------------------------------------------------------------
 
 _ai_analysis_cache: dict = {}  # result_id -> {"status": "pending"|"completed"|"failed", "data": ...}
+_ai_cache_lock = asyncio.Lock()
 
 
-def _enqueue_ai_analysis(result_id: str, enrichment: dict, div_type: str, target_id: str) -> None:
-    """Start AI analysis in background if not already running/completed."""
-    if result_id in _ai_analysis_cache:
-        return  # Already queued or completed
-    _ai_analysis_cache[result_id] = {"status": "pending", "data": None}
-    import threading
-    t = threading.Thread(
-        target=_run_ai_analysis_sync,
-        args=(result_id, enrichment, div_type, target_id),
-        daemon=True,
-    )
-    t.start()
-
-
-def _run_ai_analysis_sync(result_id: str, enrichment: dict, div_type: str, target_id: str) -> None:
-    """Run LLM inference in a background thread."""
-    import asyncio
-    loop = asyncio.new_event_loop()
-    try:
-        result = loop.run_until_complete(_run_ai_analysis(result_id, enrichment, div_type, target_id))
-    finally:
-        loop.close()
+async def _enqueue_ai_analysis(result_id: str, enrichment: dict, div_type: str, target_id: str) -> None:
+    """Start AI analysis as a background asyncio task if not already running/completed."""
+    async with _ai_cache_lock:
+        if result_id in _ai_analysis_cache:
+            return  # Already queued or completed
+        _ai_analysis_cache[result_id] = {"status": "pending", "data": None}
+    asyncio.create_task(_run_ai_analysis(result_id, enrichment, div_type, target_id))
 
 
 async def _run_ai_analysis(result_id: str, enrichment: dict, div_type: str, target_id: str) -> None:
     from backend.app.services.enrichment_llm import augment_enrichment
     try:
         ai_analysis = await augment_enrichment(enrichment, div_type, target_id)
-        if ai_analysis:
-            _ai_analysis_cache[result_id] = {"status": "completed", "data": ai_analysis}
-        else:
-            _ai_analysis_cache[result_id] = {"status": "failed", "data": None}
+        async with _ai_cache_lock:
+            if ai_analysis:
+                _ai_analysis_cache[result_id] = {"status": "completed", "data": ai_analysis}
+            else:
+                _ai_analysis_cache[result_id] = {"status": "failed", "data": None}
     except Exception:
-        _ai_analysis_cache[result_id] = {"status": "failed", "data": None}
+        async with _ai_cache_lock:
+            _ai_analysis_cache[result_id] = {"status": "failed", "data": None}
 
 
 @router.get("/divergence/ai-analysis/{result_id}")
@@ -1510,7 +1504,8 @@ async def get_ai_analysis(
         return {"status": "completed", "data": db_result}
 
     # Fall back to in-memory cache (on-demand analysis)
-    entry = _ai_analysis_cache.get(result_id)
+    async with _ai_cache_lock:
+        entry = _ai_analysis_cache.get(result_id)
     if not entry:
         return {"status": "not_started", "data": None}
     return entry
@@ -1524,6 +1519,7 @@ import os as _os
 from fastapi import UploadFile, File, BackgroundTasks
 
 _analysis_jobs: dict = {}
+_analysis_jobs_lock = asyncio.Lock()
 
 
 @router.post("/dark-graph/analyze")
@@ -1539,7 +1535,8 @@ async def analyze_divergence(
     from backend.app.services.dark_graph.divergence_reporter import DivergenceReporter
 
     job_id = str(__import__("uuid").uuid4())
-    _analysis_jobs[job_id] = {"status": "processing", "report": None}
+    async with _analysis_jobs_lock:
+        _analysis_jobs[job_id] = {"status": "processing", "report": None}
 
     # Save uploaded files to temp
     tmp_dir = tempfile.mkdtemp()
@@ -1563,11 +1560,13 @@ async def analyze_divergence(
                 telemetry_path=tel_path,
                 ticket_path=tick_path,
             )
-            _analysis_jobs[job_id]["status"] = "complete"
-            _analysis_jobs[job_id]["report"] = report.to_dict()
+            async with _analysis_jobs_lock:
+                _analysis_jobs[job_id]["status"] = "complete"
+                _analysis_jobs[job_id]["report"] = report.to_dict()
         except Exception as e:
-            _analysis_jobs[job_id]["status"] = "failed"
-            _analysis_jobs[job_id]["error"] = str(e)
+            async with _analysis_jobs_lock:
+                _analysis_jobs[job_id]["status"] = "failed"
+                _analysis_jobs[job_id]["error"] = str(e)
 
     background_tasks.add_task(_run)
     return {"job_id": job_id, "status": "processing"}
@@ -1579,7 +1578,8 @@ async def get_file_divergence_report(
     current_user: User = Security(get_current_user, scopes=["topology:read"]),
 ):
     """Get divergence report by job_id."""
-    job = _analysis_jobs.get(job_id)
+    async with _analysis_jobs_lock:
+        job = _analysis_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     return job

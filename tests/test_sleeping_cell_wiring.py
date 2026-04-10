@@ -53,7 +53,7 @@ class TestSleepingCellWiring:
         )
 
         # Mock the database session so we don't need a real DB
-        with patch("backend.app.core.database.metrics_session_maker") as mock_session_maker:
+        with patch("backend.app.services.sleeping_cell_detector.metrics_session_maker") as mock_session_maker:
             # Create mock session that returns empty result (no KPI metrics)
             mock_session = AsyncMock()
             mock_result = MagicMock()
