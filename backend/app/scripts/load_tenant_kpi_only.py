@@ -49,6 +49,7 @@ _DEFAULT_DATA_STORE_ROOT = os.environ.get(
 BATCH_WIDE = 5_000
 BATCH_KPI_LONG = 50_000
 BATCH_OVERRIDES = 50_000
+COMPRESS_EVERY_N_BATCHES = 20   # compress after every 100k wide rows (20 × 5k)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -148,6 +149,36 @@ def _baseline_kpi_columns(pf: pq.ParquetFile) -> list[str]:
     return [c for c in all_cols if c not in metadata_cols]
 
 
+def _compress_old_chunks(compress_conn, latest_ts) -> int:
+    """Compress kpi_metrics chunks that are safely behind the current write position.
+
+    Uses a 2-day buffer behind the latest timestamp seen so we never try to
+    compress a chunk that the INSERT transaction may still be writing into.
+    Returns the number of chunks compressed.
+    """
+    cutoff = latest_ts - timedelta(days=2)
+    try:
+        with compress_conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT compress_chunk(c, if_not_compressed => true)
+                FROM show_chunks('kpi_metrics', older_than => %s) AS c
+                """,
+                (cutoff,),
+            )
+            compressed = cur.fetchall()
+            n = len(compressed)
+        if n:
+            with compress_conn.cursor() as cur:
+                cur.execute("SELECT pg_size_pretty(pg_total_relation_size('kpi_metrics'))")
+                size = cur.fetchone()[0]
+            log.info("  [compress] %d chunk(s) compressed (cutoff=%s) | table=%s", n, cutoff.date(), size)
+        return n
+    except Exception as exc:
+        log.warning("  [compress] skipped: %s", exc)
+        return 0
+
+
 def load_baseline_kpi(
     metrics_conn,
     filepath: Path,
@@ -193,9 +224,15 @@ def load_baseline_kpi(
         ON CONFLICT DO NOTHING
     """
 
+    # Separate autocommit connection for compression.
+    # compress_chunk cannot run inside an open INSERT transaction.
+    compress_conn = psycopg2.connect(metrics_conn.dsn)
+    compress_conn.autocommit = True
+
     t0 = _timer()
     batch_num = 0
     committed_rows_before = None
+    latest_ts_seen = None  # tracks highest timestamp written — used for safe compression cutoff
 
     with metrics_conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM kpi_metrics WHERE tenant_id = %s", (tenant_id,))
@@ -230,6 +267,10 @@ def load_baseline_kpi(
                 stats["wide_rows_kept"] += 1
                 entity_id = cell_ids[i]
 
+                # Track the highest timestamp seen across all batches
+                if latest_ts_seen is None or ts > latest_ts_seen:
+                    latest_ts_seen = ts
+
                 meta: dict[str, Any] = {}
                 for mcol, col in meta_col_data.items():
                     if col is not None and col[i] is not None:
@@ -262,6 +303,14 @@ def load_baseline_kpi(
                     f"{stats['long_rows_attempted']:,}",
                 )
 
+            # After every COMPRESS_EVERY_N_BATCHES, commit any pending inserts then
+            # compress chunks that are safely behind the current write position.
+            # Running insert and compress in the same process (sequentially, never
+            # concurrently) avoids the deadlock seen with a separate compression loop.
+            if batch_num % COMPRESS_EVERY_N_BATCHES == 0 and latest_ts_seen is not None:
+                metrics_conn.commit()  # ensure all rows are committed before compressing
+                _compress_old_chunks(compress_conn, latest_ts_seen)
+
             del data, rows
             gc.collect()
 
@@ -270,6 +319,8 @@ def load_baseline_kpi(
         cur.execute("SELECT COUNT(*) FROM kpi_metrics WHERE tenant_id = %s", (tenant_id,))
         committed_rows_after = int(cur.fetchone()[0])
         stats["long_rows_inserted"] = max(committed_rows_after - committed_rows_before, 0)
+
+    compress_conn.close()
 
     log.info(
         "  Baseline complete in %s | inserted=%s (attempted=%s)",
