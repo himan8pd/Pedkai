@@ -201,34 +201,43 @@ def load_baseline_kpi(
         cur.execute("SELECT COUNT(*) FROM kpi_metrics WHERE tenant_id = %s", (tenant_id,))
         committed_rows_before = int(cur.fetchone()[0])
 
+        _META_COLS = ["rat_type", "band", "site_id", "vendor", "deployment_profile", "is_nsa_scg_leg"]
+
         for batch in pf.iter_batches(batch_size=wide_batch_size):
             batch_num += 1
             data = batch.to_pydict()
             n = len(data["cell_id"])
             stats["wide_rows_scanned"] += n
 
+            # Pre-extract columns once per batch — avoids [None]*n allocation inside the inner loop
+            timestamps = data["timestamp"]
+            tenant_ids = data["tenant_id"]
+            cell_ids = data["cell_id"]
+            meta_col_data = {mcol: data.get(mcol) for mcol in _META_COLS}
+            kpi_col_data = {col: data.get(col) for col in kpi_cols}
+
             rows: list[tuple[Any, ...]] = []
 
             for i in range(n):
-                ts = data["timestamp"][i]
+                ts = timestamps[i]
                 if not hasattr(ts, "timestamp"):
                     continue
                 if cutoff is not None and ts > cutoff:
                     continue
-                if data["tenant_id"][i] != tenant_id:
+                if tenant_ids[i] != tenant_id:
                     continue
 
                 stats["wide_rows_kept"] += 1
-                entity_id = data["cell_id"][i]
+                entity_id = cell_ids[i]
 
                 meta: dict[str, Any] = {}
-                for mcol in ["rat_type", "band", "site_id", "vendor", "deployment_profile", "is_nsa_scg_leg"]:
-                    if mcol in data and data[mcol][i] is not None:
-                        meta[mcol] = data[mcol][i]
+                for mcol, col in meta_col_data.items():
+                    if col is not None and col[i] is not None:
+                        meta[mcol] = col[i]
                 meta_json = json.dumps(meta)
 
-                for kpi_col in kpi_cols:
-                    val = data.get(kpi_col, [None] * n)[i]
+                for kpi_col, col in kpi_col_data.items():
+                    val = col[i] if col is not None else None
                     if val is None:
                         continue
                     rows.append((ts, tenant_id, entity_id, kpi_col, float(val), meta_json))
@@ -243,7 +252,7 @@ def load_baseline_kpi(
                     page_size=long_page_size,
                 )
 
-            if batch_num % 25 == 0:
+            if batch_num % 10 == 0:
                 metrics_conn.commit()
                 log.info(
                     "    batch %d: scanned=%s kept=%s long_attempted=%s",
