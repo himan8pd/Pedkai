@@ -181,6 +181,7 @@ def _compress_old_chunks(compress_conn, latest_ts) -> int:
 
 def load_baseline_kpi(
     metrics_conn,
+    metrics_dsn: str,
     filepath: Path,
     tenant_id: str,
     dry_run: bool,
@@ -226,7 +227,7 @@ def load_baseline_kpi(
 
     # Separate autocommit connection for compression.
     # compress_chunk cannot run inside an open INSERT transaction.
-    compress_conn = psycopg2.connect(metrics_conn.dsn)
+    compress_conn = psycopg2.connect(metrics_dsn)
     compress_conn.autocommit = True
 
     t0 = _timer()
@@ -613,6 +614,7 @@ def main() -> None:
 
         baseline_stats = load_baseline_kpi(
             metrics_conn=metrics_conn,
+            metrics_dsn=dsn,
             filepath=baseline_file,
             tenant_id=tenant_id,
             dry_run=args.dry_run,
