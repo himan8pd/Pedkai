@@ -172,7 +172,7 @@ def _compress_old_chunks(compress_conn, latest_ts) -> int:
             n = len(compressed)
         if n:
             with compress_conn.cursor() as cur:
-                cur.execute("SELECT pg_size_pretty(pg_total_relation_size('kpi_metrics'))")
+                cur.execute("SELECT pg_size_pretty(hypertable_size('kpi_metrics'))")
                 size = cur.fetchone()[0]
             log.info("  [compress] %d chunk(s) compressed (cutoff=%s) | table=%s", n, cutoff.date(), size)
         return n
