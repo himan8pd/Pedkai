@@ -71,42 +71,13 @@ async def lifespan(app: FastAPI):
     # Start sleeping cell detector scheduler (P2.4)
     sleeping_cell_task = None
     if settings.sleeping_cell_enabled:
-        from backend.app.services.sleeping_cell_detector import SleepingCellDetector
+        from backend.app.api.sleeping_cells import _run_scan_and_cache
         from backend.app.workers.scheduled import start_scheduler
-
-        detector = SleepingCellDetector()
-
-        async def _scan_sleeping_cells():
-            """Run sleeping cell scan. Uses data-driven reference time for historic mode."""
-            try:
-                # Determine reference time from actual data so that historic
-                # datasets (e.g. timestamped Jan 2024) produce meaningful
-                # results instead of comparing against datetime.now().
-                from sqlalchemy import text as sa_text
-
-                from backend.app.core.database import metrics_session_maker
-
-                ref_time = None
-                try:
-                    async with metrics_session_maker() as msession:
-                        result = await msession.execute(
-                            sa_text(
-                                "SELECT MAX(timestamp) FROM kpi_metrics WHERE tenant_id = :tid"
-                            ),
-                            {"tid": settings.default_tenant_id},
-                        )
-                        max_ts = result.scalar()
-                    ref_time = max_ts if max_ts else None
-                except Exception as e:
-                    logger.warning(f"Could not determine KPI reference time: {e}")
-
-                await detector.scan(settings.default_tenant_id, reference_time=ref_time)
-            except Exception as e:
-                logger.error(f"Sleeping cell scan error: {e}", exc_info=True)
 
         sleeping_cell_task = start_scheduler(
             settings.sleeping_cell_scan_interval_seconds,
-            _scan_sleeping_cells,
+            _run_scan_and_cache,
+            settings.default_tenant_id,
         )
         logger.info(
             f"Sleeping cell scheduler started "

@@ -6,6 +6,7 @@ The detector compares latest KPI values against a 7-day baseline to identify
 cells with anomalous traffic degradation.
 """
 
+import asyncio
 import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -27,6 +28,9 @@ settings = get_settings()
 
 # Module-level cache of last scan results per tenant
 _scan_cache: Dict[str, Dict[str, Any]] = {}
+
+# Guards against concurrent scans for the same tenant
+_scan_in_progress: Dict[str, bool] = {}
 
 _detector = SleepingCellDetector()
 
@@ -88,6 +92,31 @@ def _event_to_cell(event: SleepingCellDetectedEvent) -> SleepingCellResponse:
     )
 
 
+async def _run_scan_and_cache(tenant_id: str) -> None:
+    """Run a full sleeping cell scan and populate the cache.
+
+    Safe to call as a fire-and-forget background task. Concurrent calls for
+    the same tenant are deduplicated — if a scan is already in progress the
+    second call returns immediately so the detector is never called twice at
+    the same time.
+    """
+    if _scan_in_progress.get(tenant_id):
+        logger.info(f"Sleeping cell scan already in progress for {tenant_id}, skipping duplicate")
+        return
+    _scan_in_progress[tenant_id] = True
+    try:
+        ref_time = await _resolve_reference_time(tenant_id)
+        events = await _detector.scan(tenant_id, reference_time=ref_time)
+        cells = [_event_to_cell(evt) for evt in events]
+        last_run = datetime.now(timezone.utc).isoformat()
+        _scan_cache[tenant_id] = {"cells": cells, "last_run": last_run}
+        logger.info(f"Sleeping cell scan complete for {tenant_id}: {len(cells)} cells cached")
+    except Exception as e:
+        logger.error(f"Sleeping cell scan failed for {tenant_id}: {e}", exc_info=True)
+    finally:
+        _scan_in_progress[tenant_id] = False
+
+
 async def _resolve_reference_time(tenant_id: str) -> Optional[datetime]:
     """Determine reference time from actual data for historic/demo mode."""
     try:
@@ -125,20 +154,22 @@ async def get_sleeping_cells(
 async def detect_sleeping_cells(
     current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
 ):
-    """Trigger an on-demand sleeping cell detection scan."""
+    """Trigger sleeping cell detection.
+
+    Returns cached results immediately (if available) and fires a background
+    refresh so the next call gets fresher data. Never blocks the HTTP
+    connection waiting for the scan to complete, avoiding Cloudflare 524
+    gateway timeouts on slow queries.
+    """
     tenant_id = current_user.tenant_id or settings.default_tenant_id
 
-    try:
-        ref_time = await _resolve_reference_time(tenant_id)
-        events = await _detector.scan(tenant_id, reference_time=ref_time)
-    except Exception as e:
-        logger.error(f"Sleeping cell scan failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Detection scan failed: {e}")
+    # Fire background refresh (deduplicated — no-op if already running)
+    asyncio.create_task(_run_scan_and_cache(tenant_id))
 
-    cells = [_event_to_cell(evt) for evt in events]
-    last_run = datetime.now(timezone.utc).isoformat()
+    # Return cached results immediately if warm
+    cached = _scan_cache.get(tenant_id)
+    if cached:
+        return SleepingCellsListResponse(cells=cached["cells"], last_run=cached["last_run"])
 
-    # Cache results for the GET endpoint
-    _scan_cache[tenant_id] = {"cells": cells, "last_run": last_run}
-
-    return SleepingCellsListResponse(cells=cells, last_run=last_run)
+    # Cold cache (first ever request) — return empty; client should poll GET
+    return SleepingCellsListResponse(cells=[], last_run=None)
