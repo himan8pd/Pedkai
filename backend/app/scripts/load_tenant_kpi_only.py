@@ -49,7 +49,7 @@ _DEFAULT_DATA_STORE_ROOT = os.environ.get(
 BATCH_WIDE = 5_000
 BATCH_KPI_LONG = 50_000
 BATCH_OVERRIDES = 50_000
-COMPRESS_EVERY_N_BATCHES = 20   # compress after every 100k wide rows (20 × 5k)
+COMPRESS_EVERY_N_BATCHES = 10   # compress after every 50k wide rows (10 × 5k)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -152,11 +152,13 @@ def _baseline_kpi_columns(pf: pq.ParquetFile) -> list[str]:
 def _compress_old_chunks(compress_conn, latest_ts) -> int:
     """Compress kpi_metrics chunks that are safely behind the current write position.
 
-    Uses a 2-day buffer behind the latest timestamp seen so we never try to
-    compress a chunk that the INSERT transaction may still be writing into.
+    No buffer needed: the parquet is time-ordered, so any chunk with
+    range_end <= latest_ts_seen is fully written and committed before this
+    function is called. The chunk currently being written always has
+    range_end > latest_ts_seen and is therefore excluded by show_chunks().
     Returns the number of chunks compressed.
     """
-    cutoff = latest_ts - timedelta(days=2)
+    cutoff = latest_ts  # compress all fully-completed chunks
     try:
         with compress_conn.cursor() as cur:
             cur.execute(
