@@ -22,6 +22,7 @@ import { useAuth } from "@/app/context/AuthContext";
 interface ScorecardData {
   pedkai_zone_mttr_minutes: number | null;
   pedkai_zone_incident_count: number;
+  pedkai_zone_closed_count: number;
   non_pedkai_zone_mttr_minutes: number | null;
   non_pedkai_zone_incident_count: number | null;
   improvement_pct: number | null;
@@ -213,7 +214,9 @@ export default function ScorecardPage() {
             subtitle={
               scorecard?.pedkai_zone_mttr_minutes != null
                 ? "Pedkai-managed zone"
-                : "No closed incidents yet"
+                : scorecard?.pedkai_zone_closed_count
+                  ? `${scorecard.pedkai_zone_closed_count.toLocaleString()} closed — computing`
+                  : "No closed incidents yet"
             }
             icon={<Clock className="w-5 h-5" />}
             trend={scorecard?.pedkai_zone_mttr_minutes != null ? "down" : null}
@@ -225,10 +228,14 @@ export default function ScorecardPage() {
           <KpiCard
             label="Incidents Tracked"
             value={String(scorecard?.pedkai_zone_incident_count ?? 0)}
-            subtitle="Active monitoring window (30d)"
+            subtitle={
+              scorecard?.pedkai_zone_closed_count
+                ? `${scorecard.pedkai_zone_closed_count.toLocaleString()} closed · ${((scorecard.pedkai_zone_incident_count ?? 0) - (scorecard.pedkai_zone_closed_count ?? 0)).toLocaleString()} open`
+                : "Active monitoring window"
+            }
             icon={<AlertCircle className="w-5 h-5" />}
             color="amber"
-            calculation="Total incidents created from correlated alarms within the 30-day monitoring window. Alarms are grouped by temporal proximity and shared topology."
+            calculation="Total incidents created from correlated alarms within the monitoring window for this tenant."
           />
         </Link>
         <Link href="#detections" className="block">

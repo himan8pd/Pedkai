@@ -62,6 +62,7 @@ class ScorecardResponse(BaseModel):
     pedkai_zone_mttr_minutes: Optional[float] = None
     non_pedkai_zone_mttr_minutes: Optional[float] = None
     pedkai_zone_incident_count: int
+    pedkai_zone_closed_count: int = 0
     non_pedkai_zone_incident_count: Optional[int] = None
     improvement_pct: Optional[float] = None
     period_start: datetime

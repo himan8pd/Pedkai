@@ -101,20 +101,43 @@ async def get_scorecard(
         )
     ).scalar() or 0
 
-    # ── MTTR from closed incidents (SQL aggregate) ───────────────────
-    mttr_result = await db.execute(
-        select(
-            func.avg(
-                func.extract("epoch", IncidentORM.closed_at - IncidentORM.created_at) / 60.0
+    # ── Closed incident count (by status, tenant + window) ────────────
+    pedkai_closed_count = (
+        await db.execute(
+            select(func.count(IncidentORM.id)).where(
+                IncidentORM.tenant_id == tenant_id,
+                IncidentORM.status == "closed",
+                IncidentORM.created_at >= period_start,
+                IncidentORM.created_at <= period_end,
             )
-        ).where(
-            IncidentORM.tenant_id == tenant_id,
-            IncidentORM.closed_at.isnot(None),
-            IncidentORM.created_at >= period_start,
-            IncidentORM.created_at <= period_end,
         )
+    ).scalar() or 0
+
+    # ── MTTR from closed incidents (timezone-safe raw SQL) ───────────
+    # Use raw SQL with explicit AT TIME ZONE to avoid naive/aware mismatch.
+    mttr_raw = await db.execute(
+        text(
+            """
+            SELECT AVG(
+                EXTRACT(EPOCH FROM (
+                    closed_at AT TIME ZONE 'UTC' - created_at AT TIME ZONE 'UTC'
+                )) / 60.0
+            )
+            FROM incidents
+            WHERE tenant_id = :tid
+              AND status = 'closed'
+              AND closed_at IS NOT NULL
+              AND created_at >= :period_start
+              AND created_at <= :period_end
+            """
+        ),
+        {
+            "tid": tenant_id,
+            "period_start": period_start,
+            "period_end": period_end,
+        },
     )
-    avg_mttr = mttr_result.scalar()
+    avg_mttr = mttr_raw.scalar()
 
     # B-4 FIX: No fabricated baselines. Shadow-mode data collection required first.
     non_pedkai_zone_mttr = None
@@ -140,6 +163,7 @@ async def get_scorecard(
         pedkai_zone_mttr_minutes=round(avg_mttr, 1) if avg_mttr is not None else None,
         non_pedkai_zone_mttr_minutes=non_pedkai_zone_mttr,
         pedkai_zone_incident_count=pedkai_count,
+        pedkai_zone_closed_count=pedkai_closed_count,
         non_pedkai_zone_incident_count=non_pedkai_zone_incident_count,
         improvement_pct=None,
         period_start=period_start,

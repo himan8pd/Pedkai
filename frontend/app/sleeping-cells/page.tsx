@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface SleepingCell {
   cellId: string;
@@ -26,6 +26,11 @@ function statusBadge(status: SleepingCell["status"]) {
   }
 }
 
+const PAGE_SIZE = 50;
+
+type SortField = "cellId" | "kpiDeviation" | "decayScore" | "status";
+type SortDir = "asc" | "desc";
+
 export default function SleepingCellsPage() {
   const { token, authFetch } = useAuth();
   const [cells, setCells] = useState<SleepingCell[]>([]);
@@ -33,6 +38,10 @@ export default function SleepingCellsPage() {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [sortField, setSortField] = useState<SortField>("decayScore");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const fetchCells = async () => {
     if (!token) return;
@@ -69,7 +78,6 @@ export default function SleepingCellsPage() {
       });
       if (res.ok) {
         setLastRun(new Date().toISOString());
-        // Refresh data after detection
         await fetchCells();
       } else {
         const body = await res.json().catch(() => null);
@@ -82,12 +90,46 @@ export default function SleepingCellsPage() {
     }
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("desc");
+    }
+    setPage(1);
+  };
+
+  // Derived stats (from all cells, not just current page)
   const monitored = cells.length;
   const activeSleeping = cells.filter((c) => c.status === "SLEEPING").length;
   const avgDecay =
     cells.length > 0
       ? cells.reduce((sum, c) => sum + c.decayScore, 0) / cells.length
       : 0;
+
+  // Filter + sort (memoised to avoid recomputing on every render)
+  const filtered = useMemo(() => {
+    let list = statusFilter === "ALL" ? cells : cells.filter((c) => c.status === statusFilter);
+    list = [...list].sort((a, b) => {
+      let av: string | number = a[sortField];
+      let bv: string | number = b[sortField];
+      if (typeof av === "string") av = av.toLowerCase();
+      if (typeof bv === "string") bv = bv.toLowerCase();
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [cells, statusFilter, sortField, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCells = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const SortIndicator = ({ field }: { field: SortField }) =>
+    sortField === field ? (
+      <span className="ml-1 text-cyan-400">{sortDir === "asc" ? "↑" : "↓"}</span>
+    ) : null;
 
   return (
     <div className="space-y-6 p-4 md:p-8">
@@ -169,13 +211,13 @@ export default function SleepingCellsPage() {
               <p className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-1">
                 Cells Monitored
               </p>
-              <p className="text-4xl font-bold text-white">{monitored}</p>
+              <p className="text-4xl font-bold text-white">{monitored.toLocaleString()}</p>
             </div>
             <div className="bg-[#0a2d4a] border border-cyan-900/40 rounded-lg p-5">
               <p className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-1">
                 Active Sleeping Cells
               </p>
-              <p className="text-4xl font-bold text-amber-300">{activeSleeping}</p>
+              <p className="text-4xl font-bold text-amber-300">{activeSleeping.toLocaleString()}</p>
             </div>
             <div className="bg-[#0a2d4a] border border-cyan-900/40 rounded-lg p-5">
               <p className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-1">
@@ -187,31 +229,68 @@ export default function SleepingCellsPage() {
             </div>
           </div>
 
+          {/* Filter + pagination controls */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/60 uppercase tracking-wider">Filter:</span>
+              {(["ALL", "SLEEPING", "RECOVERING", "HEALTHY"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => { setStatusFilter(s); setPage(1); }}
+                  className={cn(
+                    "px-3 py-1 rounded text-xs font-bold transition-colors border",
+                    statusFilter === s
+                      ? s === "SLEEPING"
+                        ? "bg-amber-900/60 text-amber-300 border-amber-700"
+                        : s === "RECOVERING"
+                          ? "bg-cyan-900/60 text-cyan-300 border-cyan-700"
+                          : s === "HEALTHY"
+                            ? "bg-emerald-900/60 text-emerald-300 border-emerald-700"
+                            : "bg-white/10 text-white border-white/30"
+                      : "bg-transparent text-white/50 border-white/15 hover:border-white/30 hover:text-white/80",
+                  )}
+                >
+                  {s === "ALL" ? `All (${monitored.toLocaleString()})` : s}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-white/60">
+              {filtered.length.toLocaleString()} cells · page {page} of {totalPages}
+            </p>
+          </div>
+
           {/* Table */}
           <div className="bg-[#0a2d4a] rounded-lg border border-cyan-900/40 overflow-hidden">
             <table className="w-full">
               <thead className="bg-[#06203b] border-b border-cyan-900/40">
                 <tr>
-                  {[
-                    "Cell ID",
-                    "Site",
-                    "Domain",
-                    "KPI Deviation (%)",
-                    "Decay Score",
-                    "Last Seen",
-                    "Status",
-                  ].map((col) => (
+                  {(
+                    [
+                      { label: "Cell ID", field: "cellId" as SortField },
+                      { label: "Site", field: null },
+                      { label: "Domain", field: null },
+                      { label: "KPI Deviation (%)", field: "kpiDeviation" as SortField },
+                      { label: "Decay Score", field: "decayScore" as SortField },
+                      { label: "Last Seen", field: null },
+                      { label: "Status", field: "status" as SortField },
+                    ] as { label: string; field: SortField | null }[]
+                  ).map(({ label, field }) => (
                     <th
-                      key={col}
-                      className="px-4 py-3 text-left text-xs font-semibold text-white/60 uppercase tracking-wider"
+                      key={label}
+                      onClick={field ? () => handleSort(field) : undefined}
+                      className={cn(
+                        "px-4 py-3 text-left text-xs font-semibold text-white/60 uppercase tracking-wider",
+                        field && "cursor-pointer hover:text-white/90 select-none",
+                      )}
                     >
-                      {col}
+                      {label}
+                      {field && <SortIndicator field={field} />}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {cells.map((cell) => (
+                {pageCells.map((cell) => (
                   <tr
                     key={cell.cellId}
                     className="border-b border-cyan-900/20 hover:bg-white/5 transition-colors"
@@ -266,6 +345,31 @@ export default function SleepingCellsPage() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination footer */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-cyan-900/40 bg-[#06203b]">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold text-white/70 border border-white/15 hover:border-white/30 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                </button>
+                <span className="text-xs text-white/50">
+                  {((page - 1) * PAGE_SIZE + 1).toLocaleString()}–
+                  {Math.min(page * PAGE_SIZE, filtered.length).toLocaleString()} of{" "}
+                  {filtered.length.toLocaleString()}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold text-white/70 border border-white/15 hover:border-white/30 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
