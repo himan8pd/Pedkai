@@ -143,7 +143,10 @@ export default function ScorecardPage() {
 
   useEffect(() => {
     async function fetchAll() {
-      if (!token || !tenantId) return;
+      if (!token || !tenantId) {
+        setLoading(false); // don't hang forever if auth isn't ready
+        return;
+      }
 
       // Restore from cache instantly (stale-while-revalidate)
       const scKey = `scorecard:${tenantId}`;
