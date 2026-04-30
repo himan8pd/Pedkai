@@ -133,10 +133,33 @@ function KpiCard({
 
 export default function ScorecardPage() {
   const { token, tenantId, authFetch } = useAuth();
-  const [scorecard, setScorecard] = useState<ScorecardData | null>(null);
-  const [detections, setDetections] = useState<Detection[]>([]);
-  const [valueCapture, setValueCapture] = useState<ValueCapture | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  // Cache keys — computed once at component scope so lazy state initialisers can use them.
+  const scKey = tenantId ? `scorecard:${tenantId}` : "";
+  const detKey = tenantId ? `scorecard-detections:${tenantId}` : "";
+  const valKey = tenantId ? `scorecard-value:${tenantId}` : "";
+
+  // Initialise state directly from cache so there is ZERO loading flash on
+  // warm-cache navigation (the component renders with real data on the first frame).
+  const [scorecard, setScorecard] = useState<ScorecardData | null>(
+    () => (tenantId ? Cache.get<ScorecardData>(scKey, Cache.TTL.MEDIUM) : null),
+  );
+  const [detections, setDetections] = useState<Detection[]>(
+    () => (tenantId ? (Cache.get<Detection[]>(detKey, Cache.TTL.MEDIUM) ?? []) : []),
+  );
+  const [valueCapture, setValueCapture] = useState<ValueCapture | null>(
+    () => (tenantId ? Cache.get<ValueCapture>(valKey, Cache.TTL.MEDIUM) : null),
+  );
+  // loading=false when all three are already in cache — avoids spinner on re-visit.
+  const [loading, setLoading] = useState(
+    () =>
+      !(
+        tenantId &&
+        Cache.get(scKey, Cache.TTL.MEDIUM) &&
+        Cache.get(detKey, Cache.TTL.MEDIUM) &&
+        Cache.get(valKey, Cache.TTL.MEDIUM)
+      ),
+  );
   const [error, setError] = useState("");
   const [showDetections, setShowDetections] = useState(true);
   const [showMethodology, setShowMethodology] = useState(true);
@@ -144,28 +167,17 @@ export default function ScorecardPage() {
   useEffect(() => {
     async function fetchAll() {
       if (!token || !tenantId) {
-        setLoading(false); // don't hang forever if auth isn't ready
+        setLoading(false);
         return;
       }
 
-      const scKey = `scorecard:${tenantId}`;
-      const detKey = `scorecard-detections:${tenantId}`;
-      const valKey = `scorecard-value:${tenantId}`;
-
-      // Restore from cache instantly
-      const cachedSc = Cache.get<ScorecardData>(scKey, Cache.TTL.MEDIUM);
-      const cachedDet = Cache.get<Detection[]>(detKey, Cache.TTL.MEDIUM);
-      const cachedVal = Cache.get<ValueCapture>(valKey, Cache.TTL.MEDIUM);
-      const allCached = !!(cachedSc && cachedDet && cachedVal);
-
-      if (cachedSc) setScorecard(cachedSc);
-      if (cachedDet) setDetections(cachedDet);
-      if (cachedVal) setValueCapture(cachedVal);
-      if (allCached) setLoading(false);
-
-      // Skip the API call entirely if cache is fresh (< 2 min old).
-      // Only refetch when stale or on first load.
+      // Skip API entirely when all three are cached and fresh (< 2 min old).
       const cacheAgeSec = Cache.ageSeconds(scKey) ?? Infinity;
+      const allCached = !!(
+        Cache.get(scKey, Cache.TTL.MEDIUM) &&
+        Cache.get(detKey, Cache.TTL.MEDIUM) &&
+        Cache.get(valKey, Cache.TTL.MEDIUM)
+      );
       if (allCached && cacheAgeSec < 120) return;
 
       try {
