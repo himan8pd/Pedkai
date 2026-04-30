@@ -17,6 +17,7 @@ import {
   Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import * as Cache from "@/app/apiCache";
 import { useAuth } from "@/app/context/AuthContext";
 
 interface ScorecardData {
@@ -143,6 +144,21 @@ export default function ScorecardPage() {
   useEffect(() => {
     async function fetchAll() {
       if (!token || !tenantId) return;
+
+      // Restore from cache instantly (stale-while-revalidate)
+      const scKey = `scorecard:${tenantId}`;
+      const detKey = `scorecard-detections:${tenantId}`;
+      const valKey = `scorecard-value:${tenantId}`;
+
+      const cachedSc = Cache.get<ScorecardData>(scKey, Cache.TTL.MEDIUM);
+      const cachedDet = Cache.get<Detection[]>(detKey, Cache.TTL.MEDIUM);
+      const cachedVal = Cache.get<ValueCapture>(valKey, Cache.TTL.MEDIUM);
+
+      if (cachedSc) setScorecard(cachedSc);
+      if (cachedDet) setDetections(cachedDet);
+      if (cachedVal) setValueCapture(cachedVal);
+      if (cachedSc && cachedDet && cachedVal) setLoading(false);
+
       try {
         const [scRes, detRes, valRes] = await Promise.allSettled([
           authFetch("/api/v1/autonomous/scorecard"),
@@ -151,13 +167,19 @@ export default function ScorecardPage() {
         ]);
 
         if (scRes.status === "fulfilled" && scRes.value.ok) {
-          setScorecard(await scRes.value.json());
+          const d = await scRes.value.json();
+          setScorecard(d);
+          Cache.set(scKey, d);
         }
         if (detRes.status === "fulfilled" && detRes.value.ok) {
-          setDetections(await detRes.value.json());
+          const d = await detRes.value.json();
+          setDetections(d);
+          Cache.set(detKey, d);
         }
         if (valRes.status === "fulfilled" && valRes.value.ok) {
-          setValueCapture(await valRes.value.json());
+          const d = await valRes.value.json();
+          setValueCapture(d);
+          Cache.set(valKey, d);
         }
       } catch (e: any) {
         setError(e.message);

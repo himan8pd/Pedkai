@@ -33,6 +33,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
+import * as Cache from "@/app/apiCache";
 
 // ── Type colours ────────────────────────────────────────────────────────────
 const TYPE_META: Record<
@@ -468,32 +469,35 @@ export default function DivergencePage() {
   const fetchSummary = useCallback(async () => {
     if (!token) return;
     setError(null);
+    // Restore from cache instantly
+    const ck = `divergence-summary:${tenantId}`;
+    const cached = Cache.get<any>(ck, Cache.TTL.LONG);
+    if (cached) { setSummary(cached); setLoading(false); }
     try {
-      const s = await apiFetch(
-        `/api/v1/reports/divergence/summary`,
-        token,
-      );
+      const s = await apiFetch(`/api/v1/reports/divergence/summary`, token);
       setSummary(s);
+      Cache.set(ck, s);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, tenantId]);
 
   // ── Fetch aggregations ─────────────────────────────────────────────────
   const fetchAggregations = useCallback(async () => {
     if (!token) return;
+    const ck = `divergence-agg:${tenantId}`;
+    const cached = Cache.get<any>(ck, Cache.TTL.LONG);
+    if (cached) setAggregations(cached);
     try {
-      const a = await apiFetch(
-        `/api/v1/reports/divergence/aggregations`,
-        token,
-      );
+      const a = await apiFetch(`/api/v1/reports/divergence/aggregations`, token);
       setAggregations(a);
+      Cache.set(ck, a);
     } catch {
       setAggregations(null);
     }
-  }, [token]);
+  }, [token, tenantId]);
 
   // ── Fetch evaluation score ─────────────────────────────────────────────
   const fetchScore = useCallback(async () => {
@@ -567,6 +571,8 @@ export default function DivergencePage() {
             pollRef.current = null;
             setRunning(false);
             setJobId(null);
+            // Invalidate divergence cache so fresh results are fetched
+            Cache.clear("divergence-");
             // Refresh all views
             setPage(1);
             setFilterType("");
