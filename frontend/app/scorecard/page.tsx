@@ -148,19 +148,25 @@ export default function ScorecardPage() {
         return;
       }
 
-      // Restore from cache instantly (stale-while-revalidate)
       const scKey = `scorecard:${tenantId}`;
       const detKey = `scorecard-detections:${tenantId}`;
       const valKey = `scorecard-value:${tenantId}`;
 
+      // Restore from cache instantly
       const cachedSc = Cache.get<ScorecardData>(scKey, Cache.TTL.MEDIUM);
       const cachedDet = Cache.get<Detection[]>(detKey, Cache.TTL.MEDIUM);
       const cachedVal = Cache.get<ValueCapture>(valKey, Cache.TTL.MEDIUM);
+      const allCached = !!(cachedSc && cachedDet && cachedVal);
 
       if (cachedSc) setScorecard(cachedSc);
       if (cachedDet) setDetections(cachedDet);
       if (cachedVal) setValueCapture(cachedVal);
-      if (cachedSc && cachedDet && cachedVal) setLoading(false);
+      if (allCached) setLoading(false);
+
+      // Skip the API call entirely if cache is fresh (< 2 min old).
+      // Only refetch when stale or on first load.
+      const cacheAgeSec = Cache.ageSeconds(scKey) ?? Infinity;
+      if (allCached && cacheAgeSec < 120) return;
 
       try {
         const [scRes, detRes, valRes] = await Promise.allSettled([

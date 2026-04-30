@@ -38,6 +38,25 @@ from backend.app.services.drift_calibration import DriftCalibrationService
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# ── Server-side result caches ─────────────────────────────────────────────────
+# Keyed by tenant_id. Avoids repeated expensive DB queries across navigations
+# from different browser sessions (or page refreshes that bust the client cache).
+import time as _time
+
+_scorecard_cache: dict = {}          # {tenant_id: (result, ts)}
+_SCORECARD_TTL = 120                 # seconds — recompute every 2 minutes
+
+
+def _scorecard_cache_get(tenant_id: str):
+    entry = _scorecard_cache.get(tenant_id)
+    if entry and (_time.monotonic() - entry[1]) < _SCORECARD_TTL:
+        return entry[0]
+    return None
+
+
+def _scorecard_cache_set(tenant_id: str, result):
+    _scorecard_cache[tenant_id] = (result, _time.monotonic())
+
 
 @router.get("/scorecard", response_model=ScorecardResponse)
 async def get_scorecard(
@@ -64,6 +83,11 @@ async def get_scorecard(
             detail="No tenant bound to session. Call /auth/select-tenant first.",
         )
     tenant_id = current_user.tenant_id
+
+    # ── Server-side cache (2-min TTL) ────────────────────────────────────
+    cached = _scorecard_cache_get(tenant_id)
+    if cached is not None:
+        return cached
 
     # ── Determine time window (data-driven for historic mode) ─────────
     # Find the actual data range for this tenant's incidents so that
@@ -150,7 +174,7 @@ async def get_scorecard(
     except Exception as e:
         drift_calibration = {"error": str(e)}
 
-    return ScorecardResponse(
+    result = ScorecardResponse(
         pedkai_zone_mttr_minutes=round(avg_mttr, 1) if avg_mttr is not None else None,
         non_pedkai_zone_mttr_minutes=non_pedkai_zone_mttr,
         pedkai_zone_incident_count=pedkai_count,
@@ -170,6 +194,8 @@ async def get_scorecard(
         baseline_note=baseline_note,
         drift_calibration=drift_calibration,
     )
+    _scorecard_cache_set(tenant_id, result)
+    return result
 
 
 @router.get("/detections", response_model=List[DriftPrediction])
