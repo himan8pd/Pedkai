@@ -14,18 +14,27 @@ jobs:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
+          # Stop on first error so a broken deploy fails the workflow
+          script_stop: true
           script: |
+            # Ensure PATH includes common install locations (snap, /usr/local/bin)
+            export PATH="/usr/local/bin:/usr/bin:/usr/sbin:/snap/bin:$HOME/.local/bin:$PATH"
+
             cd ~/Pedkai
             git pull origin main
 
             # Rebuild and restart containers (canonical: docker-compose.cloud.yml)
             docker compose -f docker-compose.cloud.yml down
             docker compose -f docker-compose.cloud.yml up -d --build
-            
+
+            # Wait for frontend container to finish copying static files
+            echo "Waiting for frontend static files..."
+            sleep 5
+
             # Copy frontend static files to Caddy serve directory
             docker cp pedkai-frontend:/srv/frontend/. /srv/frontend/
 
             # Restart Caddy to pick up any config changes
-            sudo systemctl reload caddy
+            sudo systemctl reload caddy || sudo systemctl restart caddy || true
 
             echo "Deployment complete"
