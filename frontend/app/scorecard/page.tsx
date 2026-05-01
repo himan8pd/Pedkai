@@ -171,14 +171,24 @@ export default function ScorecardPage() {
         return;
       }
 
-      // Skip API entirely when all three are cached and fresh (< 2 min old).
+      // Restore from cache and skip API when cache is fresh (< 2 min old).
+      // This also handles the auth-race case: if tenantId was null on first
+      // render the lazy state initialisers got empty keys / null, so we must
+      // explicitly set state here when the effect first fires with a real key.
+      const cachedSc = Cache.get<ScorecardData>(scKey, Cache.TTL.MEDIUM);
+      const cachedDet = Cache.get<Detection[]>(detKey, Cache.TTL.MEDIUM);
+      const cachedVal = Cache.get<ValueCapture>(valKey, Cache.TTL.MEDIUM);
+      const allCached = !!(cachedSc && cachedDet && cachedVal);
       const cacheAgeSec = Cache.ageSeconds(scKey) ?? Infinity;
-      const allCached = !!(
-        Cache.get(scKey, Cache.TTL.MEDIUM) &&
-        Cache.get(detKey, Cache.TTL.MEDIUM) &&
-        Cache.get(valKey, Cache.TTL.MEDIUM)
-      );
-      if (allCached && cacheAgeSec < 120) return;
+
+      if (allCached) {
+        // Update state (no-op if lazy init already captured the same refs)
+        setScorecard(cachedSc);
+        setDetections(cachedDet);
+        setValueCapture(cachedVal);
+        setLoading(false);
+        if (cacheAgeSec < 120) return; // fresh — skip API
+      }
 
       try {
         const [scRes, detRes, valRes] = await Promise.allSettled([

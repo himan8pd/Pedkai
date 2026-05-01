@@ -8,7 +8,7 @@ cells with anomalous traffic degradation.
 
 import asyncio
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Security
@@ -117,11 +117,7 @@ def _event_to_cell(
         domain=event.metric_name,
         kpiDeviation=round(kpi_deviation, 2),
         decayScore=round(decay_score, 3),
-        lastSeen=(
-            event.timestamp.isoformat()
-            if event.timestamp
-            else datetime.now(timezone.utc).isoformat()
-        ),
+        lastSeen=event.timestamp.isoformat(),
         status=status,
         entityName=entity_name,
         entityType=entity_type,
@@ -217,14 +213,41 @@ async def _run_scan_and_cache(
 
 
 async def _resolve_reference_time(tenant_id: str) -> Optional[datetime]:
-    """Determine reference time from actual KPI data (historic/demo mode)."""
+    """Determine the actual KPI data epoch for this tenant.
+
+    Uses a two-pass strategy to avoid being fooled by load-time ingestion
+    artifacts — rows whose ``timestamp`` was set to the server clock at the
+    moment of bulk-load rather than the simulation/historic timestamp.
+
+    Pass 1 (historic / demo mode):
+        MAX(timestamp) from rows older than 48 h.  For a dataset that was
+        bulk-loaded today but covers e.g. Apr 1-13, this returns Apr 13
+        (the real data edge) and ignores the load-day outliers.
+
+    Pass 2 fallback (live mode):
+        If all data is recent (< 48 h old) the dataset is live; return
+        MAX(timestamp) unconditionally.
+    """
     try:
         async with metrics_session_maker() as session:
+            now = datetime.now(timezone.utc)
+            cutoff_48h = now - timedelta(hours=48)
+
             result = await session.execute(
                 sa_text(
-                    "SELECT MAX(timestamp) FROM kpi_metrics WHERE tenant_id = :tid"
+                    """
+                    SELECT COALESCE(
+                        (SELECT MAX(timestamp)
+                         FROM kpi_metrics
+                         WHERE tenant_id = :tid
+                           AND timestamp < :cutoff),
+                        (SELECT MAX(timestamp)
+                         FROM kpi_metrics
+                         WHERE tenant_id = :tid)
+                    )
+                    """
                 ),
-                {"tid": tenant_id},
+                {"tid": tenant_id, "cutoff": cutoff_48h},
             )
             max_ts = result.scalar()
             return max_ts if max_ts else None

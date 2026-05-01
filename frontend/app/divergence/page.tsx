@@ -342,9 +342,17 @@ export default function DivergencePage() {
     return res.json();
   }
 
-  // Data state
-  const [summary, setSummary] = useState<any>(null);
-  const [aggregations, setAggregations] = useState<any>(null);
+  // Cache keys (component-scope so lazy initialisers and effects share them)
+  const ckSummary = tenantId ? `divergence-summary:${tenantId}` : "";
+  const ckAgg = tenantId ? `divergence-agg:${tenantId}` : "";
+
+  // Data state — lazy-init from cache to avoid loading flash on warm-cache nav
+  const [summary, setSummary] = useState<any>(
+    () => (tenantId ? Cache.get<any>(ckSummary, Cache.TTL.LONG) : null),
+  );
+  const [aggregations, setAggregations] = useState<any>(
+    () => (tenantId ? Cache.get<any>(ckAgg, Cache.TTL.LONG) : null),
+  );
   const [score, setScore] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -369,7 +377,10 @@ export default function DivergencePage() {
   const [loadingEnriched, setLoadingEnriched] = useState<string | null>(null);
 
   // Loading state
-  const [loading, setLoading] = useState(true);
+  // loading=false immediately if both summary and agg are already cached
+  const [loading, setLoading] = useState(
+    () => !(tenantId && Cache.get(ckSummary, Cache.TTL.LONG) && Cache.get(ckAgg, Cache.TTL.LONG)),
+  );
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -469,14 +480,22 @@ export default function DivergencePage() {
   const fetchSummary = useCallback(async () => {
     if (!token) return;
     setError(null);
-    // Restore from cache instantly
-    const ck = `divergence-summary:${tenantId}`;
-    const cached = Cache.get<any>(ck, Cache.TTL.LONG);
-    if (cached) { setSummary(cached); setLoading(false); }
+
+    // Restore from cache and update state (handles auth-race where tenantId
+    // was null at mount so lazy init returned null)
+    const cached = Cache.get<any>(ckSummary, Cache.TTL.LONG);
+    const cacheAge = Cache.ageSeconds(ckSummary) ?? Infinity;
+    if (cached) {
+      setSummary(cached);
+      setLoading(false);
+      // Skip API entirely if data is fresh (< TTL.LONG / 2 = 7.5 min)
+      if (cacheAge < Cache.TTL.LONG / 2 / 1000) return;
+    }
+
     try {
       const s = await apiFetch(`/api/v1/reports/divergence/summary`, token);
       setSummary(s);
-      Cache.set(ck, s);
+      Cache.set(ckSummary, s);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -487,13 +506,18 @@ export default function DivergencePage() {
   // ── Fetch aggregations ─────────────────────────────────────────────────
   const fetchAggregations = useCallback(async () => {
     if (!token) return;
-    const ck = `divergence-agg:${tenantId}`;
-    const cached = Cache.get<any>(ck, Cache.TTL.LONG);
-    if (cached) setAggregations(cached);
+
+    const cached = Cache.get<any>(ckAgg, Cache.TTL.LONG);
+    const cacheAge = Cache.ageSeconds(ckAgg) ?? Infinity;
+    if (cached) {
+      setAggregations(cached);
+      if (cacheAge < Cache.TTL.LONG / 2 / 1000) return;
+    }
+
     try {
       const a = await apiFetch(`/api/v1/reports/divergence/aggregations`, token);
       setAggregations(a);
-      Cache.set(ck, a);
+      Cache.set(ckAgg, a);
     } catch {
       setAggregations(null);
     }

@@ -107,7 +107,8 @@ class SleepingCellDetector:
                 latest = latest_res.scalars().first()
 
                 if not latest:
-                    # No samples at all — treat as idle
+                    # No samples at all — treat as idle; last_ts is the entity's
+                    # most-recent KPI row across ALL metrics (from the outer query).
                     evt = SleepingCellDetectedEvent(
                         tenant_id=tenant_id,
                         entity_id=entity_id,
@@ -115,12 +116,14 @@ class SleepingCellDetector:
                         baseline_mean=0.0,
                         current_value=None,
                         metric_name="traffic_volume_gb",
+                        timestamp=last_ts or now,
                     )
                     events.append(evt)
                     await publish_event(evt)
                     continue
 
-                # If latest sample older than idle_cutoff, flag absence of signal
+                # If latest sample older than idle_cutoff, flag absence of signal.
+                # Use the actual KPI data timestamp for "last seen", not wall clock.
                 if latest.timestamp < idle_cutoff:
                     evt = SleepingCellDetectedEvent(
                         tenant_id=tenant_id,
@@ -129,6 +132,7 @@ class SleepingCellDetector:
                         baseline_mean=float(mean) if mean is not None else 0.0,
                         current_value=None,
                         metric_name="traffic_volume_gb",
+                        timestamp=latest.timestamp,
                     )
                     events.append(evt)
                     await publish_event(evt)
@@ -145,6 +149,7 @@ class SleepingCellDetector:
                             baseline_mean=float(mean),
                             current_value=float(latest.value),
                             metric_name="traffic_volume_gb",
+                            timestamp=latest.timestamp,
                         )
                         events.append(evt)
                         await publish_event(evt)
