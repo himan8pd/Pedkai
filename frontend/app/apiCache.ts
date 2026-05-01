@@ -55,6 +55,11 @@ export function clear(prefix?: string): void {
   }
 }
 
+/** Remove a single cache entry by exact key. */
+export function del(key: string): void {
+  _store.delete(key);
+}
+
 /** How old (in seconds) is the cached entry? Returns null if not cached. */
 export function ageSeconds(key: string): number | null {
   const e = _store.get(key);

@@ -43,19 +43,19 @@ router = APIRouter()
 # from different browser sessions (or page refreshes that bust the client cache).
 import time as _time
 
-_scorecard_cache: dict = {}          # {tenant_id: (result, ts)}
-_SCORECARD_TTL = 120                 # seconds — recompute every 2 minutes
+_result_cache: dict = {}             # {cache_key: (result, monotonic_ts)}
+_CACHE_TTL = 120                     # seconds — recompute every 2 minutes
 
 
-def _scorecard_cache_get(tenant_id: str):
-    entry = _scorecard_cache.get(tenant_id)
-    if entry and (_time.monotonic() - entry[1]) < _SCORECARD_TTL:
+def _cache_get(key: str):
+    entry = _result_cache.get(key)
+    if entry and (_time.monotonic() - entry[1]) < _CACHE_TTL:
         return entry[0]
     return None
 
 
-def _scorecard_cache_set(tenant_id: str, result):
-    _scorecard_cache[tenant_id] = (result, _time.monotonic())
+def _cache_set(key: str, result):
+    _result_cache[key] = (result, _time.monotonic())
 
 
 @router.get("/scorecard", response_model=ScorecardResponse)
@@ -85,7 +85,7 @@ async def get_scorecard(
     tenant_id = current_user.tenant_id
 
     # ── Server-side cache (2-min TTL) ────────────────────────────────────
-    cached = _scorecard_cache_get(tenant_id)
+    cached = _cache_get(f"scorecard:{tenant_id}")
     if cached is not None:
         return cached
 
@@ -194,7 +194,7 @@ async def get_scorecard(
         baseline_note=baseline_note,
         drift_calibration=drift_calibration,
     )
-    _scorecard_cache_set(tenant_id, result)
+    _cache_set(f"scorecard:{tenant_id}", result)
     return result
 
 
@@ -213,14 +213,30 @@ async def get_detections(
     service = AutonomousShieldService(async_session_maker)
     tenant_id = current_user.tenant_id or settings.default_tenant_id
 
+    # Server-side cache — this query scans the full kpi_metrics hypertable
+    cached = _cache_get(f"detections:{tenant_id}")
+    if cached is not None:
+        return cached
+
     detections: List[DriftPrediction] = []
 
     try:
         async with metrics_session_maker() as session:
-            # Data-driven reference time (handles historic datasets)
+            # Data-driven reference time — COALESCE avoids load-time artifacts
+            # (rows whose timestamp was set to server clock during bulk-load
+            # rather than the simulation date).
+            now_utc = datetime.now(timezone.utc)
+            cutoff_48h = now_utc - timedelta(hours=48)
             ref_result = await session.execute(
-                text("SELECT MAX(timestamp) FROM kpi_metrics WHERE tenant_id = :tid"),
-                {"tid": tenant_id},
+                text("""
+                    SELECT COALESCE(
+                        (SELECT MAX(timestamp) FROM kpi_metrics
+                         WHERE tenant_id = :tid AND timestamp < :cutoff),
+                        (SELECT MAX(timestamp) FROM kpi_metrics
+                         WHERE tenant_id = :tid)
+                    )
+                """),
+                {"tid": tenant_id, "cutoff": cutoff_48h},
             )
             ref_time = ref_result.scalar()
             if not ref_time:
@@ -292,6 +308,7 @@ async def get_detections(
     except Exception as e:
         logger.warning("Drift detection query failed: %s", e)
 
+    _cache_set(f"detections:{tenant_id}", detections)
     return detections
 
 
@@ -314,6 +331,10 @@ async def get_value_capture(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No tenant bound to session. Call /auth/select-tenant first.",
         )
+
+    cached = _cache_get(f"value-capture:{tenant_id}")
+    if cached is not None:
+        return cached
 
     # Finding 3 Fix: Derive from actual incidents (tenant-filtered)
     result = await db.execute(
@@ -344,6 +365,7 @@ async def get_value_capture(
         )
 
     value = service.calculate_value_protected(actions_taken)
+    _cache_set(f"value-capture:{tenant_id}", value)
     return value
 
 

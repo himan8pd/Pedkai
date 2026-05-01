@@ -168,6 +168,13 @@ export default function SleepingCellsPage() {
   const handleRunDetection = async () => {
     if (!token) return;
     setRunning(true);
+    setError(null);
+
+    // Invalidate cached empty result for this time seed so that polling
+    // actually hits the API instead of reading the stale empty cache.
+    const ck = cacheKey(tenantId, timeSeed);
+    Cache.del(ck);
+
     try {
       const params = timeSeed
         ? `?reference_time=${encodeURIComponent(timeSeed)}`
@@ -177,36 +184,55 @@ export default function SleepingCellsPage() {
       });
       if (res.ok) {
         const d: SleepingCellsData = await res.json();
-        // If scan returned data immediately (cache was warm), use it
         if (d.cells.length > 0) {
-          Cache.set(cacheKey(tenantId, timeSeed), d);
+          // Scan returned results immediately (server cache was warm)
+          Cache.set(ck, d);
           setData(d);
+          setRunning(false);
         } else {
-          // Cold cache — backend is running scan; poll GET every 5s
-          startPolling();
+          // Cold cache — backend is running the scan in the background.
+          // Poll GET every 5s until results appear.
+          startPolling(timeSeed, ck);
         }
       } else {
         const body = await res.json().catch(() => null);
         setError(body?.detail || `Detection failed (HTTP ${res.status})`);
+        setRunning(false);
       }
     } catch (err: any) {
       setError(err.message || "Detection request failed");
-    } finally {
       setRunning(false);
     }
   };
 
-  const startPolling = () => {
+  const startPolling = (seed: string, ck: string) => {
     if (pollRef.current) clearTimeout(pollRef.current);
+
     const poll = async (attempts: number) => {
-      await fetchCells(timeSeed);
-      if (
-        (!data || data.cells.length === 0) &&
-        attempts < 12 // up to 60s
-      ) {
-        pollRef.current = setTimeout(() => poll(attempts + 1), 5000);
+      if (attempts >= 24) {
+        // Give up after ~2 minutes
+        setRunning(false);
+        setError("Detection scan timed out. Try again in a moment.");
+        return;
       }
+      try {
+        const params = seed ? `?reference_time=${encodeURIComponent(seed)}` : "";
+        const res = await authFetch(`/api/v1/sleeping-cells${params}`);
+        if (res.ok) {
+          const d: SleepingCellsData = await res.json();
+          if (d.cells.length > 0) {
+            Cache.set(ck, d);
+            setData(d);
+            setRunning(false);
+            return;
+          }
+        }
+      } catch {
+        // network error — keep polling
+      }
+      pollRef.current = setTimeout(() => poll(attempts + 1), 5000);
     };
+
     pollRef.current = setTimeout(() => poll(0), 5000);
   };
 
