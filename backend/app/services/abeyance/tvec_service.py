@@ -3,6 +3,17 @@ T-VEC 1.5B Serving — local SentenceTransformer for telecom-domain embeddings.
 
 LLD v3.0 §2.2: Lazy singleton, ThreadPoolExecutor, micro-batching.
 Zero cloud LLM dependency. Zero marginal cost per call.
+
+Environment:
+    HF_TOKEN              HuggingFace token. T-VEC is a gated repo; the token's
+                          account must have accepted the model conditions.
+    HF_HOME               Cache root. Set to a persistent volume in containers
+                          so the 6GB weights survive restarts.
+    TVEC_MODEL_NAME       HF repo id (default NetoAISolutions/T-VEC).
+    TVEC_MAX_WORKERS      Threads owning the model (default 2).
+    TVEC_CONCURRENCY      Async semaphore over embed calls (default 4).
+    TVEC_TIMEOUT_SECONDS  Single-embed timeout. Defaults are sized for CPU
+                          inference of a 1.5B model on ARM — adjust for GPU.
 """
 
 from __future__ import annotations
@@ -17,8 +28,9 @@ logger = logging.getLogger(__name__)
 
 TVEC_MODEL_NAME = os.environ.get("TVEC_MODEL_NAME", "NetoAISolutions/T-VEC")
 TVEC_MAX_WORKERS = int(os.environ.get("TVEC_MAX_WORKERS", "2"))
-TVEC_TIMEOUT_SECONDS = int(os.environ.get("TVEC_TIMEOUT_SECONDS", "10"))
+TVEC_TIMEOUT_SECONDS = int(os.environ.get("TVEC_TIMEOUT_SECONDS", "60"))
 TVEC_CONCURRENCY = int(os.environ.get("TVEC_CONCURRENCY", "4"))
+TVEC_LOAD_TIMEOUT_SECONDS = int(os.environ.get("TVEC_LOAD_TIMEOUT_SECONDS", "600"))
 TVEC_OUTPUT_DIM = 1536
 
 
@@ -48,9 +60,24 @@ class TVecService:
                 loop = asyncio.get_running_loop()
                 self._model = await asyncio.wait_for(
                     loop.run_in_executor(self._executor, self._load_model),
-                    timeout=120.0,
+                    timeout=TVEC_LOAD_TIMEOUT_SECONDS,
                 )
-                logger.info("T-VEC model loaded: %s", TVEC_MODEL_NAME)
+                # Probe output dim so silent mismatches fail loud at load,
+                # not later in a similarity query.
+                probe = await loop.run_in_executor(
+                    self._executor, self._encode_sync, ["t-vec startup probe"]
+                )
+                probe_dim = len(probe[0]) if probe else 0
+                if probe_dim != TVEC_OUTPUT_DIM:
+                    logger.error(
+                        "T-VEC loaded but emits %d-dim vectors (expected %d) — "
+                        "schema mismatch will pad/truncate",
+                        probe_dim, TVEC_OUTPUT_DIM,
+                    )
+                logger.info(
+                    "T-VEC model loaded: %s (probe_dim=%d)",
+                    TVEC_MODEL_NAME, probe_dim,
+                )
                 return True
             except Exception:
                 logger.error("T-VEC model loading failed", exc_info=True)
@@ -59,18 +86,28 @@ class TVecService:
     @staticmethod
     def _load_model():
         from sentence_transformers import SentenceTransformer
-        return SentenceTransformer(TVEC_MODEL_NAME)
+        # trust_remote_code=True is required: T-VEC ships a custom
+        # telecom-specific tokenizer in modeling code on the HF repo.
+        return SentenceTransformer(TVEC_MODEL_NAME, trust_remote_code=True)
 
     def _encode_sync(self, texts: list[str]) -> list[list[float]]:
-        import numpy as np
         embeddings = self._model.encode(texts, normalize_embeddings=True)
         result = []
         for emb in embeddings:
             vec = emb.tolist()
-            if len(vec) < TVEC_OUTPUT_DIM:
-                vec = vec + [0.0] * (TVEC_OUTPUT_DIM - len(vec))
-            elif len(vec) > TVEC_OUTPUT_DIM:
-                vec = vec[:TVEC_OUTPUT_DIM]
+            actual = len(vec)
+            if actual != TVEC_OUTPUT_DIM:
+                # Defensive: a correctly-loaded T-VEC emits exactly
+                # TVEC_OUTPUT_DIM. Hitting this branch means the loader
+                # picked up the wrong model — log once per occurrence.
+                logger.warning(
+                    "T-VEC dim mismatch: got %d, expected %d — padding/truncating",
+                    actual, TVEC_OUTPUT_DIM,
+                )
+                if actual < TVEC_OUTPUT_DIM:
+                    vec = vec + [0.0] * (TVEC_OUTPUT_DIM - actual)
+                else:
+                    vec = vec[:TVEC_OUTPUT_DIM]
             result.append(vec)
         return result
 

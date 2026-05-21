@@ -47,7 +47,12 @@ huggingface_hub>=0.20.0
 numpy>=1.26.0
 pandas>=2.0.0
 statsmodels>=0.14.0
-sentence-transformers>=2.3.0
+# T-VEC (NetoAISolutions/T-VEC) is a Qwen2-1.5B-based encoder. Qwen2 support
+# landed in transformers 4.37; we pin >=4.40 for stability. sentence-transformers
+# >=2.7 is required to load Qwen2 backbones via trust_remote_code.
+sentence-transformers>=2.7.0
+transformers>=4.40.0
+torch>=2.2.0
 tigramite>=0.9.0
 
 # Observability

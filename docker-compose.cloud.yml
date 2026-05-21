@@ -15,6 +15,10 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
+    volumes:
+      # Persistent HuggingFace cache — T-VEC weights are ~6GB and must
+      # survive container restarts. HF_HOME in .env points here.
+      - hf_cache:/root/.cache/huggingface
     depends_on:
       kafka:
         condition: service_healthy
@@ -100,6 +104,10 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ${TELEMETRY_DATA_PATH:-/home/ubuntu/Pedkai-data/output}:/data:ro
+      # Share the HF cache so any future enrichment-touching code path here
+      # reuses the weights downloaded by pedkai-backend instead of pulling
+      # another 6GB.
+      - hf_cache:/root/.cache/huggingface
     environment:
       TELEMETRY_DATA_PATH: /data
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -121,3 +129,4 @@ volumes:
   kafka_data:
   frontend_static:
   ollama_data:
+  hf_cache:
