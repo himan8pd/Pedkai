@@ -64,6 +64,10 @@ ENV PYTHONPATH=/app
 
 # Run as non-root user for security
 RUN useradd -m appuser && chown -R appuser:appuser /app
+# Pre-create HuggingFace cache dir so the named hf_cache volume inherits
+# appuser ownership on first mount. Without this, the volume root is owned
+# by root and the T-VEC model download fails with EACCES.
+RUN mkdir -p /home/appuser/.cache/huggingface && chown -R appuser:appuser /home/appuser/.cache
 USER appuser
 
 EXPOSE 8000
