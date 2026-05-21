@@ -526,7 +526,8 @@ export default function TopologyPage() {
       }
     });
 
-    // Run simple force simulation loops synchronously for instant display
+    // Run simple force simulation loops synchronously for instant display.
+    // Keep behavior consistent while scaling work for large graphs.
     const REPULSION = 2000;
     const SPRING_LEN = 80;
     const SPRING_K = 0.05;
@@ -534,8 +535,11 @@ export default function TopologyPage() {
     // Convert to arrays for faster iteration
     const posEntries = Object.entries(newPos);
     
-    // 50 iterations feels snappy enough
-    for (let iter = 0; iter < 50; iter++) {
+    const nodeCount = posEntries.length;
+    const iterations = nodeCount > 250 ? 18 : nodeCount > 150 ? 28 : nodeCount > 80 ? 38 : 50;
+    const repulsionCutoffSq = nodeCount > 200 ? 40000 : 90000;
+
+    for (let iter = 0; iter < iterations; iter++) {
       const forces: Record<string, { fx: number, fy: number }> = {};
       
       posEntries.forEach(([id]) => { forces[id] = { fx: 0, fy: 0 }; });
@@ -550,7 +554,7 @@ export default function TopologyPage() {
           const dx = a.x - b.x;
           const dy = a.y - b.y;
           const distSq = dx * dx + dy * dy;
-          if (distSq > 0 && distSq < 90000) { // cutoff
+          if (distSq > 0 && distSq < repulsionCutoffSq) { // cutoff
             const dist = Math.sqrt(distSq);
             const force = REPULSION / distSq;
             forces[idA].fx += (dx / dist) * force;
