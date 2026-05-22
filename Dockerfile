@@ -55,7 +55,8 @@ COPY --from=builder /app/requirements.txt .
 
 # Install from pre-built wheels (fast — no compilation)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir /wheels/*
+    pip install --no-cache-dir /wheels/* && \
+    pip install --no-cache-dir "tokenizers>=0.20,<0.22"
 
 COPY . .
 
