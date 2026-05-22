@@ -88,7 +88,13 @@ class TVecService:
         from sentence_transformers import SentenceTransformer
         # trust_remote_code=True is required: T-VEC ships a custom
         # telecom-specific tokenizer in modeling code on the HF repo.
-        return SentenceTransformer(TVEC_MODEL_NAME, trust_remote_code=True)
+        # attn_implementation="eager" bypasses the flash_attn requirement —
+        # flash_attn needs CUDA and won't install on CPU-only ARM instances.
+        return SentenceTransformer(
+            TVEC_MODEL_NAME,
+            trust_remote_code=True,
+            model_kwargs={"attn_implementation": "eager"},
+        )
 
     def _encode_sync(self, texts: list[str]) -> list[list[float]]:
         embeddings = self._model.encode(texts, normalize_embeddings=True)
