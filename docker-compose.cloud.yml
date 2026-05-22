@@ -22,8 +22,6 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-      ollama:
-        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
@@ -72,23 +70,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Ollama for inference
-  ollama:
-    build:
-      context: .
-      dockerfile: Dockerfile.ollama
-    container_name: pedkai-ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-
   # Telemetry Replay Service — streams historical Parquet data into Kafka
   # Run on-demand: docker compose -f docker-compose.cloud.yml run --rm pedkai-replay
   # Or start with the stack: docker compose -f docker-compose.cloud.yml up pedkai-replay
@@ -104,10 +85,6 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ${TELEMETRY_DATA_PATH:-/home/ubuntu/Pedkai-data/output}:/data:ro
-      # Share the HF cache so any future enrichment-touching code path here
-      # reuses the weights downloaded by pedkai-backend instead of pulling
-      # another 6GB.
-      - hf_cache:/home/appuser/.cache/huggingface
     environment:
       TELEMETRY_DATA_PATH: /data
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -128,5 +105,4 @@ services:
 volumes:
   kafka_data:
   frontend_static:
-  ollama_data:
   hf_cache:
