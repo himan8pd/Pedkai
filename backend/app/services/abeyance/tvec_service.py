@@ -85,26 +85,39 @@ class TVecService:
 
     @staticmethod
     def _load_model():
-        import sys
-        import types
         from sentence_transformers import SentenceTransformer
+        import transformers.dynamic_module_utils as _dmu
 
-        # transformers.dynamic_module_utils.check_imports() statically scans
-        # T-VEC's modeling file and calls importlib.import_module("flash_attn")
-        # before from_pretrained runs — so model_kwargs can't help. Injecting
-        # a stub into sys.modules satisfies that check. flash_attn is never
-        # actually called because attn_implementation=eager routes all attention
-        # through standard PyTorch SDPA.
-        if "flash_attn" not in sys.modules:
-            sys.modules["flash_attn"] = types.ModuleType("flash_attn")
+        # Two-stage flash_attn problem on CPU-only ARM:
+        #   1. check_imports() scans the modeling file's top-level imports and
+        #      calls importlib.import_module("flash_attn") — fails because
+        #      flash_attn requires CUDA and isn't installed.
+        #   2. The modeling code itself guards flash_attn behind
+        #      is_flash_attn_2_available() and falls back to standard attention
+        #      when it returns False — which it does naturally when flash_attn
+        #      is absent.
+        # Monkey-patching check_imports to tolerate the missing flash_attn lets
+        # stage 2 work correctly: the model sees flash_attn is unavailable and
+        # uses PyTorch SDPA instead.
+        _original_check_imports = _dmu.check_imports
 
-        # trust_remote_code=True is required: T-VEC ships a custom
-        # telecom-specific tokenizer in modeling code on the HF repo.
-        return SentenceTransformer(
-            TVEC_MODEL_NAME,
-            trust_remote_code=True,
-            model_kwargs={"attn_implementation": "eager"},
-        )
+        def _lenient_check_imports(filename):
+            try:
+                return _original_check_imports(filename)
+            except ImportError as exc:
+                if "flash_attn" in str(exc):
+                    return _dmu.get_relative_imports(filename)
+                raise
+
+        _dmu.check_imports = _lenient_check_imports
+        try:
+            return SentenceTransformer(
+                TVEC_MODEL_NAME,
+                trust_remote_code=True,
+                model_kwargs={"attn_implementation": "eager"},
+            )
+        finally:
+            _dmu.check_imports = _original_check_imports
 
     def _encode_sync(self, texts: list[str]) -> list[list[float]]:
         embeddings = self._model.encode(texts, normalize_embeddings=True)
