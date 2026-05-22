@@ -85,11 +85,21 @@ class TVecService:
 
     @staticmethod
     def _load_model():
+        import sys
+        import types
         from sentence_transformers import SentenceTransformer
+
+        # transformers.dynamic_module_utils.check_imports() statically scans
+        # T-VEC's modeling file and calls importlib.import_module("flash_attn")
+        # before from_pretrained runs — so model_kwargs can't help. Injecting
+        # a stub into sys.modules satisfies that check. flash_attn is never
+        # actually called because attn_implementation=eager routes all attention
+        # through standard PyTorch SDPA.
+        if "flash_attn" not in sys.modules:
+            sys.modules["flash_attn"] = types.ModuleType("flash_attn")
+
         # trust_remote_code=True is required: T-VEC ships a custom
         # telecom-specific tokenizer in modeling code on the HF repo.
-        # attn_implementation="eager" bypasses the flash_attn requirement —
-        # flash_attn needs CUDA and won't install on CPU-only ARM instances.
         return SentenceTransformer(
             TVEC_MODEL_NAME,
             trust_remote_code=True,
