@@ -56,7 +56,9 @@ COPY --from=builder /app/requirements.txt .
 # Install from pre-built wheels (fast — no compilation)
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir /wheels/* && \
-    pip install --no-cache-dir "tokenizers>=0.20,<0.22"
+    pip install --no-cache-dir "tokenizers>=0.20,<0.22" && \
+    sed -i 's|"tokenizers>=0.19,<0.20"|"tokenizers>=0.19"|' \
+        /usr/local/lib/python3.10/site-packages/transformers/dependency_versions_table.py
 
 COPY . .
 
