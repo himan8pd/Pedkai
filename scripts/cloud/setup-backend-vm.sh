@@ -6,6 +6,9 @@
 # Prerequisites: Ubuntu 22.04 aarch64, public IP assigned
 #
 # Usage: sudo bash setup-backend-vm.sh
+#
+# After this script, all services (Caddy, Ollama, FastAPI, Kafka, frontend)
+# run inside Docker Compose — no native service installs required.
 # ============================================================================
 
 set -euo pipefail
@@ -30,44 +33,41 @@ systemctl start docker
 # Add current user to docker group (re-login required)
 usermod -aG docker "${SUDO_USER:-ubuntu}"
 
-# --- 3. Install Caddy ---
-apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-apt-get update
-apt-get install -y caddy
+# --- 3. Create required host directories ---
+mkdir -p /etc/caddy/certs    # Cloudflare origin TLS certs (uploaded manually)
+mkdir -p /opt/tslam           # TSLAM GGUF model file (uploaded manually)
 
-# --- 4. Create directories ---
-mkdir -p /etc/caddy/certs
-mkdir -p /srv/frontend
-
-# --- 5. Install Node.js 20 (for frontend build) ---
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
-
-# --- 6. Configure firewall (iptables — OCI uses security lists too) ---
-# Allow HTTP, HTTPS, and SSH
+# --- 4. Configure firewall (iptables — OCI uses security lists too) ---
+apt-get install -y iptables-persistent
 iptables -I INPUT -p tcp --dport 80 -j ACCEPT
 iptables -I INPUT -p tcp --dport 443 -j ACCEPT
 iptables -I INPUT -p tcp --dport 22 -j ACCEPT
-# Save rules
-apt-get install -y iptables-persistent
 netfilter-persistent save
 
-# --- 7. Set up anti-reclamation cron ---
+# --- 5. Set up anti-reclamation cron (Oracle reclaims idle Always Free VMs) ---
 (crontab -l 2>/dev/null || true; echo "0 */6 * * * dd if=/dev/urandom bs=1M count=100 | md5sum > /dev/null 2>&1") | sort -u | crontab -
 
 echo ""
 echo "=== Backend VM Setup Complete ==="
 echo ""
 echo "Next steps:"
+echo ""
 echo "  1. Upload Cloudflare origin certificate to /etc/caddy/certs/"
-echo "     - origin.pem (certificate)"
-echo "     - origin-key.pem (private key)"
-echo "  2. Copy Caddyfile to /etc/caddy/Caddyfile"
-echo "  3. Clone the Pedkai repo: git clone <repo-url> ~/Pedkai"
-echo "  4. Create .env file in ~/Pedkai/ (use .env.cloud.example as template)"
-echo "  5. Build and start: cd ~/Pedkai && docker compose -f docker-compose.cloud.yml up -d --build"
-echo "  6. Copy frontend files: docker cp pedkai-frontend:/srv/frontend/. /srv/frontend/"
-echo "  7. Start Caddy: sudo systemctl restart caddy"
-echo "  8. Log out and back in for docker group to take effect"
+echo "       origin.pem       (certificate)"
+echo "       origin-key.pem   (private key)"
+echo ""
+echo "  2. Upload TSLAM GGUF model:"
+echo "       scp /path/to/tslam-mini-2b-q4km.gguf ubuntu@<vm-ip>:/opt/tslam/"
+echo ""
+echo "  3. Clone the Pedkai repo:"
+echo "       git clone <repo-url> ~/Pedkai"
+echo ""
+echo "  4. Create .env file:"
+echo "       cp ~/Pedkai/.env.cloud.example ~/Pedkai/.env"
+echo "       # Edit .env — fill in DB IPs, passwords, API keys"
+echo ""
+echo "  5. Start the full stack:"
+echo "       cd ~/Pedkai"
+echo "       docker compose -f docker-compose.cloud.yml up -d --build"
+echo ""
+echo "  6. Log out and back in for docker group to take effect."

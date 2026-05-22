@@ -1,0 +1,12 @@
+FROM /opt/tslam/tslam-mini-2b-q4km.gguf
+
+TEMPLATE """{{ if .System }}<|system|>{{ .System }}<|end|>{{ end }}{{ if .Prompt }}<|user|>{{ .Prompt }}<|end|>{{ end }}<|assistant|>{{ .Response }}<|end|>"""
+
+PARAMETER stop "<|end|>"
+PARAMETER stop "<|assistant|>"
+PARAMETER stop "<|user|>"
+PARAMETER num_ctx 4096
+PARAMETER temperature 0.3
+PARAMETER top_p 0.9
+
+SYSTEM """You are TSLAM-Mini-2B, a telecom network operations AI assistant. You analyze network alarms, incidents, topology divergences, and performance metrics for NOC engineers. Be concise, technical, and actionable."""

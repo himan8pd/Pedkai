@@ -1,7 +1,29 @@
 # Docker Compose for Oracle Cloud deployment (VM 1 — App Server)
-# Database runs on VM 2 (separate, not in this compose file)
+# Database runs on VM 2 (separate, not in this compose file).
+# All services run in Docker — no native Caddy or Ollama installs required.
 
 services:
+
+  # Caddy reverse proxy — TLS termination + API/frontend routing
+  caddy:
+    image: caddy:2-alpine
+    container_name: pedkai-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Cloudflare origin certs — upload once to host at /etc/caddy/certs/
+      - /etc/caddy/certs:/etc/caddy/certs:ro
+      - frontend_static:/srv/frontend:ro
+      - caddy_data:/data
+    depends_on:
+      pedkai-backend:
+        condition: service_healthy
+      pedkai-frontend:
+        condition: service_started
+    restart: unless-stopped
+
   # FastAPI backend
   pedkai-backend:
     build:
@@ -11,10 +33,6 @@ services:
         REQUIREMENTS: requirements-cloud.txt
     container_name: pedkai-backend
     env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8000:8000"
     volumes:
       # Persistent HuggingFace cache — T-VEC weights are ~6GB and must
       # survive container restarts. HF_HOME in .env points here.
@@ -39,7 +57,6 @@ services:
     container_name: pedkai-frontend
     volumes:
       - frontend_static:/srv/frontend
-    # Copy fresh build output to volume on every start, then idle
     command: ["sh", "-c", "rm -rf /srv/frontend/* && cp -r /build-output/* /srv/frontend/ && echo 'Frontend files ready' && sleep infinity"]
     restart: unless-stopped
 
@@ -70,9 +87,28 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # Ollama — on-prem LLM inference (TSLAM-Mini-2B)
+  # GGUF must be uploaded to TSLAM_GGUF_DIR on the host before first start.
+  # On first run the entrypoint imports the model; subsequent restarts skip import.
+  ollama:
+    build:
+      context: .
+      dockerfile: Dockerfile.ollama
+    container_name: pedkai-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+      # Host path containing tslam-mini-2b-q4km.gguf — defaults to /opt/tslam
+      - ${TSLAM_GGUF_DIR:-/opt/tslam}:/opt/tslam:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+
   # Telemetry Replay Service — streams historical Parquet data into Kafka
   # Run on-demand: docker compose -f docker-compose.cloud.yml run --rm pedkai-replay
-  # Or start with the stack: docker compose -f docker-compose.cloud.yml up pedkai-replay
   pedkai-replay:
     build:
       context: .
@@ -81,8 +117,6 @@ services:
         REQUIREMENTS: requirements-cloud.txt
     container_name: pedkai-replay
     env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ${TELEMETRY_DATA_PATH:-/home/ubuntu/Pedkai-data/output}:/data:ro
     environment:
@@ -106,3 +140,5 @@ volumes:
   kafka_data:
   frontend_static:
   hf_cache:
+  ollama_data:
+  caddy_data:

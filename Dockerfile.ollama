@@ -1,2 +1,8 @@
 FROM ollama/ollama
+
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+COPY tslam-mini-2b.Modelfile /opt/pedkai/tslam-mini-2b.Modelfile
+COPY scripts/cloud/entrypoint-ollama.sh /opt/pedkai/entrypoint-ollama.sh
+
+ENTRYPOINT ["/opt/pedkai/entrypoint-ollama.sh"]

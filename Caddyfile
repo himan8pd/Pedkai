@@ -6,7 +6,7 @@ pedk.ai {
 
     # API backend — match these paths first (order matters)
     handle /api/* {
-        reverse_proxy localhost:8000 {
+        reverse_proxy pedkai-backend:8000 {
             transport http {
                 read_buffer_size  16384
                 write_buffer_size 16384
@@ -17,19 +17,19 @@ pedk.ai {
         }
     }
     handle /docs* {
-        reverse_proxy localhost:8000
+        reverse_proxy pedkai-backend:8000
     }
     handle /openapi.json {
-        reverse_proxy localhost:8000
+        reverse_proxy pedkai-backend:8000
     }
     handle /health* {
-        reverse_proxy localhost:8000
+        reverse_proxy pedkai-backend:8000
     }
     handle /tmf-api/* {
-        reverse_proxy localhost:8000
+        reverse_proxy pedkai-backend:8000
     }
     handle /ingest/* {
-        reverse_proxy localhost:8000
+        reverse_proxy pedkai-backend:8000
     }
 
     # Static frontend (Next.js export) — fallback for everything else
