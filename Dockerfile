@@ -61,7 +61,7 @@ RUN --mount=type=bind,from=builder,source=/app/wheels,target=/wheels \
     pip install --no-cache-dir "tokenizers>=0.20,<0.22" && \
     sed -i 's|"tokenizers>=0.19,<0.20"|"tokenizers>=0.19"|' \
         /usr/local/lib/python3.10/site-packages/transformers/dependency_versions_table.py && \
-    pip uninstall -y $(pip list 2>/dev/null | grep -i '^nvidia' | awk '{print $1}') 2>/dev/null || true
+    rm -rf /usr/local/lib/python3.10/site-packages/nvidia
 
 COPY . .
 
