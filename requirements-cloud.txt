@@ -23,7 +23,11 @@ httpx>=0.26.0
 
 # LLM integration
 google-genai
-llama-cpp-python>=0.1.0
+# llama-cpp-python intentionally excluded from cloud build — TSLAM inference
+# is handled by the Ollama container via HTTP. The llama_cpp path in
+# tslam_service.py is only triggered when TSLAM_GGUF_PATH exists inside the
+# backend container, which it never does on cloud. Compiling from source
+# takes ~10 min on ARM and produces dead code for this deployment.
 
 # Kafka
 aiokafka>=0.10.0
