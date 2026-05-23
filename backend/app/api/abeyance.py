@@ -260,6 +260,13 @@ async def get_snap_history(
             snap_score=r.final_score,
             failure_mode=r.failure_mode_profile,
             snapped_at=r.evaluated_at,
+            score_semantic=r.score_semantic,
+            score_topological=r.score_topological,
+            score_temporal=r.score_temporal,
+            score_operational=r.score_operational,
+            score_entity_overlap=r.score_entity_overlap,
+            threshold_applied=r.threshold_applied,
+            decision=r.decision,
         ))
     return snaps
 

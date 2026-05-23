@@ -347,9 +347,14 @@ class SnapEngineV3:
 
             profile_results = self._score_pair(new_fragment, candidate, new_entities, stored_entities)
             k = len(profile_results)
-            snap_thresh = _sidak_threshold(BASE_SNAP_THRESHOLD, k)
-            nm_thresh = _sidak_threshold(NEAR_MISS_THRESHOLD, k)
-            aff_thresh = _sidak_threshold(AFFINITY_THRESHOLD, k)
+            # Use base thresholds directly — each profile is an independent
+            # hypothesis (different failure mode), not a repeated test of the
+            # same null.  The prior Sidak formula 1-(1-α)^(1/k) incorrectly
+            # lowered thresholds (e.g. SNAP 0.75 → 0.24 at k=5), causing
+            # false-positive snaps.
+            snap_thresh = BASE_SNAP_THRESHOLD
+            nm_thresh = NEAR_MISS_THRESHOLD
+            aff_thresh = AFFINITY_THRESHOLD
 
             best_mode, best_score, best_decision = None, 0.0, "NONE"
 

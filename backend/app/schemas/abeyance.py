@@ -220,6 +220,10 @@ class AbeyanceFragmentResponse(BaseModel):
     snapped_hypothesis_id: Optional[UUID] = None
     source_ref: Optional[str] = None
     created_at: Optional[datetime] = None
+    # v3 embedding validity masks (True = T-VEC generated a valid embedding)
+    mask_semantic: Optional[bool] = None
+    mask_topological: Optional[bool] = None
+    mask_operational: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -236,18 +240,29 @@ class AbeyanceFragmentSummary(BaseModel):
     event_timestamp: Optional[datetime] = None
     created_at: Optional[datetime] = None
     source_ref: Optional[str] = None
+    mask_semantic: Optional[bool] = None
+    mask_topological: Optional[bool] = None
+    mask_operational: Optional[bool] = None
 
     class Config:
         from_attributes = True
 
 
 class SnapHistoryEntry(BaseModel):
-    """Snap event record."""
+    """Snap event record with per-dimension scoring provenance."""
     fragment_id: UUID
     snapped_to: Optional[UUID] = None
     snap_score: float = 0.0
     failure_mode: Optional[str] = None
     snapped_at: Optional[datetime] = None
+    # Per-dimension scores (v3)
+    score_semantic: Optional[float] = None
+    score_topological: Optional[float] = None
+    score_temporal: Optional[float] = None
+    score_operational: Optional[float] = None
+    score_entity_overlap: Optional[float] = None
+    threshold_applied: Optional[float] = None
+    decision: Optional[str] = None
 
     class Config:
         from_attributes = True
