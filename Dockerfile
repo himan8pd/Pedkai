@@ -58,7 +58,6 @@ COPY --from=builder /app/requirements.txt .
 RUN --mount=type=bind,from=builder,source=/app/wheels,target=/wheels \
     --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir /wheels/* && \
-    pip uninstall -y $(pip list 2>/dev/null | grep -i '^nvidia' | awk '{print $1}') 2>/dev/null || true && \
     pip install --no-cache-dir "tokenizers>=0.20,<0.22" && \
     sed -i 's|"tokenizers>=0.19,<0.20"|"tokenizers>=0.19"|' \
         /usr/local/lib/python3.10/site-packages/transformers/dependency_versions_table.py
