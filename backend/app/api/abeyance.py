@@ -570,23 +570,23 @@ async def explain_snap_chain(
     # Snap scores context
     snap_stmt = select(SnapDecisionRecordORM).where(
         SnapDecisionRecordORM.tenant_id == tid,
-        SnapDecisionRecordORM.fragment_id.in_([f.id for f in fragments]),
-    ).order_by(SnapDecisionRecordORM.created_at.asc())
+        SnapDecisionRecordORM.new_fragment_id.in_([f.id for f in fragments]),
+    ).order_by(SnapDecisionRecordORM.evaluated_at.asc())
     snap_result = await db.execute(snap_stmt)
     snap_records = list(snap_result.scalars().all())
 
     snap_summary = []
     seen_pairs = set()
     for sr in snap_records:
-        pair = tuple(sorted([str(sr.fragment_id), str(sr.snapped_to_id)]))
+        pair = tuple(sorted([str(sr.new_fragment_id), str(sr.candidate_fragment_id)]))
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
         snap_summary.append(
-            f"  {sr.failure_mode}: score={sr.composite_score:.3f} "
-            f"(semantic={sr.dim_semantic_score or 0:.3f}, "
-            f"topological={sr.dim_topological_score or 0:.3f}, "
-            f"entity_overlap={sr.dim_entity_overlap_score or 0:.3f})"
+            f"  {sr.failure_mode_profile}: score={sr.final_score:.3f} "
+            f"(semantic={sr.score_semantic or 0:.3f}, "
+            f"topological={sr.score_topological or 0:.3f}, "
+            f"entity_overlap={sr.score_entity_overlap or 0:.3f})"
         )
 
     snap_text = "\n".join(snap_summary[:10]) if snap_summary else "No snap records available."
