@@ -12,6 +12,8 @@ LLD ref: §5 (Fragment Model), §9 (Snap Engine), §10 (Accumulation Graph),
          §8 (Shadow Topology), §12 (Incident Reconstruction)
 """
 
+import asyncio
+
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 from uuid import UUID
@@ -555,15 +557,16 @@ async def explain_snap_chain(
     if not fragments:
         raise HTTPException(status_code=404, detail="No fragments in time window")
 
-    # Build combined context from all fragments
+    # Build combined context from all fragments (truncate content for ARM speed)
     chain_context = []
     for frag in fragments:
         entities = [e["identifier"] for e in (frag.extracted_entities or [])]
+        content = (frag.raw_content or "")[:300]
         chain_context.append(
             f"[{frag.source_type}] {frag.event_timestamp.isoformat()} | "
             f"entities: {', '.join(entities)} | "
             f"status: {frag.snap_status} | "
-            f"{frag.raw_content}"
+            f"{content}"
         )
     combined = "\n\n".join(chain_context)
 
@@ -624,9 +627,15 @@ async def explain_snap_chain(
         ),
     }
 
-    for perspective, prompt in prompts.items():
-        raw = await tslam.generate(prompt, max_tokens=256, temperature=0.3)
-        perspectives[perspective] = raw or f"[TSLAM generation unavailable for {perspective}]"
+    async def _gen(name: str, prompt: str) -> tuple[str, str]:
+        raw = await tslam.generate(prompt, max_tokens=128, temperature=0.3)
+        return name, raw or f"[TSLAM generation unavailable for {name}]"
+
+    results = await asyncio.gather(
+        *[_gen(name, prompt) for name, prompt in prompts.items()]
+    )
+    for name, text in results:
+        perspectives[name] = text
 
     return {
         "entity": entity_identifier,

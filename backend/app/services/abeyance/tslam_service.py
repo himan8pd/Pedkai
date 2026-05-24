@@ -31,7 +31,7 @@ TSLAM_LLAMA_CPP_THREADS = int(os.environ.get("TSLAM_LLAMA_CPP_THREADS", "4"))
 TSLAM_CONCURRENCY_VLLM = int(os.environ.get("TSLAM_CONCURRENCY", "8"))
 TSLAM_CONCURRENCY_LLAMA = 2
 # ARM CPU inference is slow (~3 tok/s) — allow generous timeout
-TSLAM_TIMEOUT_VLLM = int(os.environ.get("TSLAM_TIMEOUT_SECONDS", "180"))
+TSLAM_TIMEOUT_VLLM = int(os.environ.get("TSLAM_TIMEOUT_SECONDS", "600"))
 TSLAM_TIMEOUT_LLAMA = 60
 
 
