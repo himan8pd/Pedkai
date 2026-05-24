@@ -498,3 +498,150 @@ async def discovery_status(
         "discovery_loop": "available" if services.get("discovery_loop") else "unavailable",
     }
 
+
+# ---------------------------------------------------------------------------
+# POST /explain — TSLAM-backed multi-perspective explanation of a snap chain
+# ---------------------------------------------------------------------------
+
+@router.post("/explain")
+async def explain_snap_chain(
+    entity_identifier: str = Query(..., description="Shared entity to anchor the chain"),
+    time_start: Optional[datetime] = Query(None),
+    time_end: Optional[datetime] = Query(None),
+    tenant_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Generate 3 perspective explanations of a snap chain using TSLAM.
+
+    Returns telecom, technical, and executive summaries derived from
+    fragments connected to the given entity within the time window.
+
+    LLD v3.0 ref: §12 (Incident Reconstruction), §2.3 (TSLAM)
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+    services = _get_services()
+    tslam = services.get("tslam")
+    if tslam is None:
+        raise HTTPException(status_code=503, detail="TSLAM service not available")
+
+    # Gather fragments touching this entity
+    entity_stmt = (
+        select(FragmentEntityRefORM.fragment_id)
+        .where(
+            FragmentEntityRefORM.tenant_id == tid,
+            FragmentEntityRefORM.entity_identifier == entity_identifier,
+        )
+        .distinct()
+    )
+    entity_result = await db.execute(entity_stmt)
+    fragment_ids = {row[0] for row in entity_result.fetchall()}
+
+    if not fragment_ids:
+        raise HTTPException(status_code=404, detail=f"No fragments reference entity {entity_identifier}")
+
+    stmt = select(AbeyanceFragmentORM).where(
+        AbeyanceFragmentORM.id.in_(fragment_ids),
+        AbeyanceFragmentORM.tenant_id == tid,
+    )
+    if time_start:
+        stmt = stmt.where(AbeyanceFragmentORM.event_timestamp >= time_start)
+    if time_end:
+        stmt = stmt.where(AbeyanceFragmentORM.event_timestamp <= time_end)
+    stmt = stmt.order_by(AbeyanceFragmentORM.event_timestamp.asc())
+
+    result = await db.execute(stmt)
+    fragments = list(result.scalars().all())
+    if not fragments:
+        raise HTTPException(status_code=404, detail="No fragments in time window")
+
+    # Build combined context from all fragments
+    chain_context = []
+    for frag in fragments:
+        entities = [e["identifier"] for e in (frag.extracted_entities or [])]
+        chain_context.append(
+            f"[{frag.source_type}] {frag.event_timestamp.isoformat()} | "
+            f"entities: {', '.join(entities)} | "
+            f"status: {frag.snap_status} | "
+            f"{frag.raw_content}"
+        )
+    combined = "\n\n".join(chain_context)
+
+    # Snap scores context
+    snap_stmt = select(SnapDecisionRecordORM).where(
+        SnapDecisionRecordORM.tenant_id == tid,
+        SnapDecisionRecordORM.fragment_id.in_([f.id for f in fragments]),
+    ).order_by(SnapDecisionRecordORM.created_at.asc())
+    snap_result = await db.execute(snap_stmt)
+    snap_records = list(snap_result.scalars().all())
+
+    snap_summary = []
+    seen_pairs = set()
+    for sr in snap_records:
+        pair = tuple(sorted([str(sr.fragment_id), str(sr.snapped_to_id)]))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        snap_summary.append(
+            f"  {sr.failure_mode}: score={sr.composite_score:.3f} "
+            f"(semantic={sr.dim_semantic_score or 0:.3f}, "
+            f"topological={sr.dim_topological_score or 0:.3f}, "
+            f"entity_overlap={sr.dim_entity_overlap_score or 0:.3f})"
+        )
+
+    snap_text = "\n".join(snap_summary[:10]) if snap_summary else "No snap records available."
+
+    # Generate 3 perspectives
+    perspectives = {}
+    prompts = {
+        "telecom": (
+            f"You are a senior telecom network engineer. Analyze this chain of "
+            f"correlated network events and explain what happened from a network "
+            f"operations perspective. Focus on the physical infrastructure, "
+            f"protocol behavior, and service impact.\n\n"
+            f"Events:\n{combined}\n\n"
+            f"Correlation scores:\n{snap_text}\n\n"
+            f"Provide a concise explanation (3-5 sentences) of the root cause "
+            f"and how these events are connected."
+        ),
+        "technical": (
+            f"You are a systems reliability engineer. Analyze this chain of "
+            f"correlated monitoring events and explain the technical detection "
+            f"and correlation mechanism. Focus on how the system identified "
+            f"these events as related despite coming from different sources.\n\n"
+            f"Events:\n{combined}\n\n"
+            f"Correlation scores:\n{snap_text}\n\n"
+            f"Provide a concise technical explanation (3-5 sentences) of "
+            f"the correlation methodology and confidence levels."
+        ),
+        "executive": (
+            f"You are a VP of Network Operations. Summarize this correlated "
+            f"incident chain for a C-level audience. Focus on business impact, "
+            f"detection speed, and resolution timeline.\n\n"
+            f"Events:\n{combined}\n\n"
+            f"Provide a concise executive summary (2-3 sentences) covering "
+            f"impact, detection advantage, and outcome."
+        ),
+    }
+
+    for perspective, prompt in prompts.items():
+        raw = await tslam.generate(prompt, max_tokens=256, temperature=0.3)
+        perspectives[perspective] = raw or f"[TSLAM generation unavailable for {perspective}]"
+
+    return {
+        "entity": entity_identifier,
+        "fragment_count": len(fragments),
+        "fragments": [
+            {
+                "id": str(f.id),
+                "source_type": f.source_type,
+                "source_ref": f.source_ref,
+                "event_timestamp": f.event_timestamp.isoformat(),
+                "snap_status": f.snap_status,
+            }
+            for f in fragments
+        ],
+        "snap_decisions": len(snap_records),
+        "explanations": perspectives,
+    }
+

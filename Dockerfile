@@ -54,17 +54,19 @@ COPY --from=builder /app/requirements.txt .
 
 # Install from builder's wheels without copying them into this image's layers.
 # --mount=type=bind makes /wheels available during this RUN only — no layer created.
-# Nvidia CUDA packages are stripped afterwards: ARM is CPU-only, they're pure waste (~1.7GB).
 RUN --mount=type=bind,from=builder,source=/app/wheels,target=/wheels \
     --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir /wheels/* && \
     pip install --no-cache-dir "tokenizers>=0.20,<0.22" && \
     sed -i 's|"tokenizers>=0.19,<0.20"|"tokenizers>=0.19"|' \
-        /usr/local/lib/python3.10/site-packages/transformers/dependency_versions_table.py && \
-    rm -rf /usr/local/lib/python3.10/site-packages/nvidia && \
-    rm -f /usr/local/lib/python3.10/site-packages/torch/lib/libc10_cuda.so \
-          /usr/local/lib/python3.10/site-packages/torch/lib/libtorch_cuda.so \
-          /usr/local/lib/python3.10/site-packages/torch/lib/libtorch_cuda_linalg.so
+        /usr/local/lib/python3.10/site-packages/transformers/dependency_versions_table.py
+
+# ARM CPU-only: torch's aarch64 binaries link against CUDA unconditionally.
+# nvidia pip packages provide stub .so files the dynamic linker needs at import.
+# ldconfig registers them; torch.cuda.is_available() returns False (no GPU).
+# Do NOT delete nvidia packages or torch CUDA .so files — torch crashes without them.
+RUN find /usr/local/lib/python3.10/site-packages/nvidia -type d -name lib 2>/dev/null \
+      | tee /etc/ld.so.conf.d/nvidia.conf > /dev/null && ldconfig || true
 
 COPY . .
 

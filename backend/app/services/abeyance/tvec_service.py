@@ -39,31 +39,41 @@ class TVecService:
 
     Model loaded lazily on first call. Thread pool prevents blocking the
     asyncio event loop during CPU-bound encode() calls.
+
+    The loaded model is shared across all instances (class-level) so that
+    a startup warmup benefits all later service factory invocations.
     """
 
+    _shared_model = None
+    _shared_lock = asyncio.Lock()
+
     def __init__(self) -> None:
-        self._model = None
-        self._lock = asyncio.Lock()
         self._executor = ThreadPoolExecutor(
             max_workers=TVEC_MAX_WORKERS, thread_name_prefix="tvec"
         )
         self._semaphore = asyncio.Semaphore(TVEC_CONCURRENCY)
         self._error_count = 0
 
+    @property
+    def _model(self):
+        return TVecService._shared_model
+
+    @_model.setter
+    def _model(self, value):
+        TVecService._shared_model = value
+
     async def _ensure_model(self) -> bool:
-        if self._model is not None:
+        if TVecService._shared_model is not None:
             return True
-        async with self._lock:
-            if self._model is not None:
+        async with TVecService._shared_lock:
+            if TVecService._shared_model is not None:
                 return True
             try:
                 loop = asyncio.get_running_loop()
-                self._model = await asyncio.wait_for(
+                TVecService._shared_model = await asyncio.wait_for(
                     loop.run_in_executor(self._executor, self._load_model),
                     timeout=TVEC_LOAD_TIMEOUT_SECONDS,
                 )
-                # Probe output dim so silent mismatches fail loud at load,
-                # not later in a similarity query.
                 probe = await loop.run_in_executor(
                     self._executor, self._encode_sync, ["t-vec startup probe"]
                 )

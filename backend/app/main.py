@@ -6,6 +6,7 @@ Adding a comment to commit the file again.
 FastAPI application entry point.
 """
 
+import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -99,9 +100,32 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Failed to start telemetry consumers: {e}", exc_info=True)
 
+    # Pre-warm T-VEC model in background (avoids 524 timeout on first ingest)
+    async def _warmup_tvec():
+        try:
+            from backend.app.services.abeyance.tvec_service import TVecService
+            svc = TVecService()
+            loaded = await svc._ensure_model()
+            if loaded:
+                logger.info("T-VEC model pre-warmed successfully")
+            else:
+                logger.warning("T-VEC model warmup failed — first ingest will retry")
+        except Exception as e:
+            logger.warning(f"T-VEC warmup error (non-fatal): {e}")
+
+    tvec_warmup_task = asyncio.create_task(_warmup_tvec())
+
     yield
     # Shutdown
     logger.info(f"👋 Shutting down {settings.app_name}")
+
+    # Cancel T-VEC warmup if still running
+    if not tvec_warmup_task.done():
+        tvec_warmup_task.cancel()
+        try:
+            await tvec_warmup_task
+        except Exception:
+            pass
 
     # Cancel telemetry consumer
     if telemetry_consumer_task and not telemetry_consumer_task.done():
