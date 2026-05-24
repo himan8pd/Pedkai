@@ -17,12 +17,21 @@ import httpx
 logger = logging.getLogger(__name__)
 
 TSLAM_BACKEND = os.environ.get("TSLAM_BACKEND", "auto")
-TSLAM_VLLM_URL = os.environ.get("TSLAM_VLLM_URL", "http://localhost:8100")
+# OpenAI-compatible endpoint: vLLM, Ollama (/v1/chat/completions), or similar
+TSLAM_VLLM_URL = os.environ.get(
+    "TSLAM_VLLM_URL",
+    os.environ.get("PEDKAI_ONPREM_URL", "http://localhost:8100"),
+)
+TSLAM_MODEL_NAME = os.environ.get(
+    "TSLAM_MODEL_NAME",
+    os.environ.get("PEDKAI_ONPREM_MODEL", "tslam-mini-2b"),
+)
 TSLAM_GGUF_PATH = os.environ.get("TSLAM_GGUF_PATH", "models/tslam-4b-q4_k_m.gguf")
 TSLAM_LLAMA_CPP_THREADS = int(os.environ.get("TSLAM_LLAMA_CPP_THREADS", "4"))
 TSLAM_CONCURRENCY_VLLM = int(os.environ.get("TSLAM_CONCURRENCY", "8"))
 TSLAM_CONCURRENCY_LLAMA = 2
-TSLAM_TIMEOUT_VLLM = int(os.environ.get("TSLAM_TIMEOUT_SECONDS", "30"))
+# ARM CPU inference is slow (~3 tok/s) — allow generous timeout
+TSLAM_TIMEOUT_VLLM = int(os.environ.get("TSLAM_TIMEOUT_SECONDS", "180"))
 TSLAM_TIMEOUT_LLAMA = 60
 
 
@@ -35,17 +44,22 @@ class TSLAMService:
         self._lock = asyncio.Lock()
         self._semaphore: Optional[asyncio.Semaphore] = None
         self._error_count = 0
-        self._http_client = httpx.AsyncClient(timeout=TSLAM_TIMEOUT_VLLM)
+        self._http_client = httpx.AsyncClient(timeout=float(TSLAM_TIMEOUT_VLLM))
 
     async def _detect_backend(self) -> str:
         if TSLAM_BACKEND != "auto":
             return TSLAM_BACKEND
-        try:
-            resp = await self._http_client.get(f"{TSLAM_VLLM_URL}/health")
-            if resp.status_code == 200:
-                return "vllm"
-        except Exception:
-            pass
+        # Try OpenAI-compatible server (vLLM or Ollama)
+        for path in ("/health", "/"):
+            try:
+                resp = await self._http_client.get(
+                    f"{TSLAM_VLLM_URL}{path}", timeout=5,
+                )
+                if resp.status_code == 200:
+                    logger.info("TSLAM detected OpenAI-compat server at %s%s", TSLAM_VLLM_URL, path)
+                    return "vllm"
+            except Exception:
+                pass
         if os.path.exists(TSLAM_GGUF_PATH):
             return "llama_cpp"
         return "unavailable"
@@ -69,10 +83,11 @@ class TSLAMService:
 
     async def _generate_vllm(self, prompt: str, max_tokens: int, temperature: float) -> Optional[str]:
         payload = {
-            "model": "tslam-8b",
+            "model": TSLAM_MODEL_NAME,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "stream": False,
         }
         try:
             resp = await self._http_client.post(
