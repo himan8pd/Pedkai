@@ -86,19 +86,40 @@ async def lifespan(app: FastAPI):
             f"tenant={settings.default_tenant_id})"
         )
 
-    # Start telemetry Kafka consumers (if enabled)
+    # Start telemetry Kafka consumers (if enabled).
+    # Background retry loop so the backend stays available while waiting for
+    # Kafka to become ready — Docker does not enforce depends_on ordering
+    # when restarting containers after a VM reboot.
     telemetry_consumer_task = None
     fragment_bridge_task = None
+    telemetry_retry_task = None
     if settings.telemetry_consumers_enabled:
-        try:
-            from backend.app.telemetry.kafka_consumers import start_telemetry_consumer
+        async def _start_telemetry_with_retry():
+            nonlocal telemetry_consumer_task, fragment_bridge_task
+            backoff = 5
+            max_backoff = 60
+            while True:
+                try:
+                    from backend.app.telemetry.kafka_consumers import start_telemetry_consumer
+                    telemetry_consumer_task, fragment_bridge_task = await start_telemetry_consumer()
+                    logger.info("Telemetry Kafka consumers started")
+                    if fragment_bridge_task:
+                        logger.info("Abeyance Memory fragment bridge started")
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.warning(
+                        "Telemetry consumer startup failed (retrying in %ds): %s",
+                        backoff, e,
+                    )
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, max_backoff)
 
-            telemetry_consumer_task, fragment_bridge_task = await start_telemetry_consumer()
-            logger.info("Telemetry Kafka consumers started")
-            if fragment_bridge_task:
-                logger.info("Abeyance Memory fragment bridge started")
-        except Exception as e:
-            logger.error(f"Failed to start telemetry consumers: {e}", exc_info=True)
+        telemetry_retry_task = asyncio.create_task(
+            _start_telemetry_with_retry(),
+            name="telemetry-consumer-retry",
+        )
 
     # Pre-warm T-VEC model in background (avoids 524 timeout on first ingest)
     async def _warmup_tvec():
@@ -124,6 +145,14 @@ async def lifespan(app: FastAPI):
         tvec_warmup_task.cancel()
         try:
             await tvec_warmup_task
+        except Exception:
+            pass
+
+    # Cancel telemetry retry loop (if still waiting for Kafka)
+    if telemetry_retry_task and not telemetry_retry_task.done():
+        telemetry_retry_task.cancel()
+        try:
+            await telemetry_retry_task
         except Exception:
             pass
 
