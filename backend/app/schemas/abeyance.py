@@ -461,6 +461,7 @@ class EntitySnapCard(BaseModel):
     dimensions: dict[str, Optional[float]] = Field(default_factory=dict)
     dominant_driver: Optional[str] = None
     why: str = ""
+    rescored_live: bool = False  # True = scored against current T-VEC embeddings
 
 
 class EntityDivergenceFlag(BaseModel):

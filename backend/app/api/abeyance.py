@@ -891,27 +891,45 @@ async def investigate_entity(
             best_by_pair[pair] = r
     snap_records = list(best_by_pair.values())[:snap_limit]
 
-    # Resolve matched-fragment snippets that live outside the entity set
-    matched_ids = set()
+    # Resolve pairs + load matched fragments (full rows, incl. embeddings)
+    pair_list = []       # (record, ours_id, other_id)
+    involved: set = set()
     for r in snap_records:
         ours = r.new_fragment_id if r.new_fragment_id in frag_id_set else r.candidate_fragment_id
         other = r.candidate_fragment_id if ours == r.new_fragment_id else r.new_fragment_id
-        matched_ids.add(other)
-    matched_ids -= set(frag_by_id.keys())
-    if matched_ids:
+        pair_list.append((r, ours, other))
+        involved.update((ours, other))
+    missing = involved - set(frag_by_id.keys())
+    if missing:
         mres = await db.execute(
             select(AbeyanceFragmentORM).where(
-                AbeyanceFragmentORM.id.in_(matched_ids),
+                AbeyanceFragmentORM.id.in_(missing),
                 AbeyanceFragmentORM.tenant_id == tid,
             )
         )
         for mf in mres.scalars().all():
             frag_by_id[mf.id] = mf
 
+    # Entity sets for every involved fragment (needed for live re-scoring)
+    ent_map: dict = {fid: set() for fid in involved}
+    if involved:
+        eres = await db.execute(
+            select(FragmentEntityRefORM.fragment_id, FragmentEntityRefORM.entity_identifier)
+            .where(
+                FragmentEntityRefORM.tenant_id == tid,
+                FragmentEntityRefORM.fragment_id.in_(involved),
+            )
+        )
+        for fid, eid in eres.fetchall():
+            ent_map.setdefault(fid, set()).add(eid)
+
+    snap_engine = _get_services()["snap_engine_v3"]
+
     snaps = []
-    for r in snap_records:
-        ours = r.new_fragment_id if r.new_fragment_id in frag_id_set else r.candidate_fragment_id
-        other = r.candidate_fragment_id if ours == r.new_fragment_id else r.new_fragment_id
+    for r, ours, other in pair_list:
+        of = frag_by_id.get(ours)
+        mf = frag_by_id.get(other)
+        rescored = False
         dims = {
             "semantic": r.score_semantic,
             "topological": r.score_topological,
@@ -919,21 +937,51 @@ async def investigate_entity(
             "operational": r.score_operational,
             "entity_overlap": r.score_entity_overlap,
         }
-        dominant, why = _derive_why(dims, r.weights_used, r.failure_mode_profile)
-        matched = frag_by_id.get(other)
+        weights = r.weights_used
+        fmode = r.failure_mode_profile
+        final = r.final_score
+        # Re-score live against current embeddings when both sides are embedded,
+        # so the "why" reflects T-VEC rather than the frozen historical record.
+        if of is not None and mf is not None and of.emb_semantic is not None and mf.emb_semantic is not None:
+            try:
+                scored = snap_engine._score_pair(
+                    of, mf, ent_map.get(ours, set()), ent_map.get(other, set()),
+                )
+                chosen = next(
+                    (s for s in scored if s["failure_mode_profile"] == fmode), None
+                ) or (max(scored, key=lambda s: s["final_score"]) if scored else None)
+                if chosen:
+                    dims = {
+                        "semantic": chosen["score_semantic"],
+                        "topological": chosen["score_topological"],
+                        "temporal": chosen["score_temporal"],
+                        "operational": chosen["score_operational"],
+                        "entity_overlap": chosen["score_entity_overlap"],
+                    }
+                    weights = chosen.get("weights_used")
+                    fmode = chosen["failure_mode_profile"]
+                    final = chosen["final_score"]
+                    rescored = True
+            except Exception:
+                logger.warning("Live snap re-score failed", exc_info=True)
+
+        dominant, why = _derive_why(dims, weights, fmode)
         snaps.append(EntitySnapCard(
             fragment_id=ours,
             matched_fragment_id=other,
-            matched_snippet=_snippet(matched.raw_content) if matched else "",
-            matched_source_type=matched.source_type if matched else None,
-            failure_mode=r.failure_mode_profile,
-            final_score=r.final_score,
+            matched_snippet=_snippet(mf.raw_content) if mf else "",
+            matched_source_type=mf.source_type if mf else None,
+            failure_mode=fmode,
+            final_score=final,
             decision=r.decision,
             evaluated_at=r.evaluated_at,
             dimensions=dims,
             dominant_driver=dominant,
             why=why,
+            rescored_live=rescored,
         ))
+
+    snaps.sort(key=lambda c: c.final_score, reverse=True)
 
     # Reconciliation divergence flags for this entity
     dres = await db.execute(
