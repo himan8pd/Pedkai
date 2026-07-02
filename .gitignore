@@ -65,3 +65,38 @@ Bug fixes.txt
 Bug fixes 2.txt
 Pedkai Deployment - Local Instructions Full.txt
 PRODUCT_SPEC_FINSERV.md
+
+# Microsoft Word
+*.doc
+*.docx
+
+# PDFs
+*.pdf
+
+# LaTeX source
+*.tex
+*.sty
+*.cls
+*.bib
+*.bst
+*.bbl
+*.blg
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.nav
+*.snm
+*.vrb
+
+# Eisvogel
+eisvogel.*
+eisvogel/
+docs/Eisvogel-3.4.0/
