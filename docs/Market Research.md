@@ -60,32 +60,6 @@ ServiceNow's AIOps operates through multiple technical layers:
 3. **Manual (M)**: Operator parent-child assignment
 4. **CMDB (C)**: Groups based on CI relationships in CMDB
 
-**Anomaly Detection Stack** -- multiple statistical models running in parallel:
-- **MAD (Median Absolute Deviation)**: For skewed/heavy-tailed distributions (~30% improvement over standard approaches)
-- **Time series models**: Weekly/daily patterns, trendy, noisy, accumulator, near-constant, multinomial, skewed noisy with GEV distribution
-- **Kalman Filter**: For linear dynamic systems with noisy measurements
-- **Non-parametric models**: For unknown/non-symmetrical noise distributions
-- **Anomaly scoring**: 0-10 scale; new CIs get 7-day grace period before triggering
-
-**Log Anomaly Detection** (4 steps):
-1. Automated log parsing (metadata + messages)
-2. Message clustering via "online graph-based dynamic learning algorithm"
-3. Seven independent anomaly detection types using "online unsupervised learning"
-4. Correlation via extracted entities and temporal relationships
-
-**Alert Intelligence -- 5 RCA Correlation Algorithms**:
-- Conditional probability + mutual information graph clustering
-- Fuzzy matching via Levenshtein distance
-- K-means text-based clustering for unstructured alerts
-- Temporal proximity analysis
-- Entity presence analysis (URLs, IPs, filenames)
-
-**Knowledge Graph**: Semantic overlay on existing CMDB -- "does not store new data, duplicate information, infer relationships, or bypass security. It references existing systems of record." Operates via: semantic definition -> query translation -> real-time data retrieval -> AI reasoning. Current limitation: cannot handle relational abstraction (requires "exact table name" rather than reference-based relationships).
-
-**LEAP (Learning-Enhanced Automation Playbooks)**: "Resolution mining AI Agent" that dives into "past 6-month incident resolution notes" and analyzes associated KB articles. Specific ML models undisclosed. Generates automation playbooks from historical patterns.
-
-**Agent Architecture**: AI Control Tower (governance/monitoring) -> AI Agent Orchestrator (meta-agent task delegation) -> Specialized agents using Flow Designer, Decision Tables, GenAI, RAG, Scripted REST APIs. Supports "persistent memory to track previous interactions" but implementation specifics undocumented.
-
 **How Abeyance Memory compares:**
 
 | Capability | ServiceNow | Abeyance Memory 3.0 | Assessment |
@@ -97,8 +71,6 @@ ServiceNow's AIOps operates through multiple technical layers:
 | **Cross-domain semantic gap** | K-means text clustering + Levenshtein fuzzy matching -- limited ability to connect different vocabulary describing the same failure | 4-column embeddings: topology-aware T-VEC encoding ensures "high BLER on cell 8842-A" and "CRC errors on S1 bearer" are compared via topological neighborhood, not just text similarity | **AM significantly stronger**: This is Abeyance Memory's core innovation |
 | **Ecosystem/distribution** | Massive installed base. CMDB already deployed at most Tier-1 operators. ITSM workflow integration native | Standalone platform requiring integration | **ServiceNow dominant**: Distribution advantage is overwhelming. Must integrate with, not compete against |
 | **Data quality** | Security concern noted: "Knowledge Graph does leak information that should not be available for the user based on ACLs" | Tenant isolation (INV-7), dedup keys, validated schema (INV constraints) | **AM more rigorous**: Multi-tenant security is architecturally enforced |
-
-**Key ServiceNow threat**: They already own the ticket/incident data that is Abeyance Memory's highest-value input (NFF tickets at 0.95 base relevance). If ServiceNow adds latent evidence retention to their "persistent memory" agent capability and connects it to their 5-algorithm RCA, they could replicate AM's core value while leveraging their installed base.
 
 ---
 
@@ -708,15 +680,7 @@ Training data available:
 
 **Critical insight**: A global telecom firm was paying $40,000/year for 220 standalone ServiceNow Discovery licenses *while already having ITOM subscriptions that included the same entitlement*. This illustrates the pricing opacity and accidental overspend that characterizes the incumbents.
 
-### 13.2 Market Segmentation by Budget
-
-| Segment | Typical IT Ops Budget | Current Solutions | Pain Points | AM Opportunity |
-|---|---|---|---|---|
-| **Tier-1 (AT&T, Vodafone, DT)** | $50M-200M+ ops/year | ServiceNow + TEM-native + custom internal tools | Integration complexity, vendor lock-in, diminishing ROI from incumbents | **Add-on layer**: AM as intelligence enhancement on top of existing ServiceNow/BMC stack. Premium pricing justified by prevented major outages ($M per incident) |
-| **Tier-2 (MasOrange, TPG, TalkTalk)** | $5M-50M ops/year | Mix of BMC/ServiceNow + TEM-native | Cost pressure, fewer engineering resources, harder to justify ServiceNow total cost | **Primary platform play**: AM + BMC Helix integration at lower total cost than ServiceNow standalone |
-| **Emerging market (Jio, Airtel, African operators)** | $1M-20M ops/year | In-house + limited TEM tools + open source | Extreme cost pressure, massive scale, data sovereignty requirements | **Embedded/partnership**: AM as the abeyance layer within operator-built stacks. Local model serving is decisive advantage. Usage-based pricing |
-| **Smaller/regional operators** | <$1M ops/year | Basic NMS + spreadsheets | Cannot afford ServiceNow/BMC. Need "good enough" at fraction of cost | **SaaS**: Tupl-style monthly subscription, self-service deployment. AM Lite (Layer 1-2 only) |
-
+ 
 ### 13.3 Recommended Pricing Strategy
 
 **Principle: Undercut incumbents on total cost while delivering superior discovery value.**

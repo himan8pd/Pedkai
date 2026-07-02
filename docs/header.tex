@@ -1,0 +1,16 @@
+\usepackage{graphicx}
+\usepackage{array}
+
+% Rotated header cell
+\newcommand{\rothead}[1]{\rotatebox{90}{\parbox{2.6cm}{\centering\strut #1}}}
+
+% Make header row taller so rotated text fits nicely
+\renewcommand{\arraystretch}{1.2}
+
+% start each chapter on a new page.
+%\usepackage{titlesec}
+%\newcommand{\sectionbreak}{\clearpage}
+
+% ---> NATIVE KOMA-SCRIPT FIX FOR PAGE BREAKS <---
+\let\oldsection\section
+\renewcommand{\section}{\clearpage\oldsection}

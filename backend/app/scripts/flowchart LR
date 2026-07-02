@@ -1,0 +1,58 @@
+flowchart LR
+    classDef ext fill:#f7f7f5,stroke:#6b7280,color:#111827
+    classDef svc fill:#e8f3ff,stroke:#2563eb,color:#0f172a
+    classDef data fill:#eefbf3,stroke:#059669,color:#052e16
+    classDef ai fill:#fff4db,stroke:#d97706,color:#431407
+    classDef ui fill:#f3e8ff,stroke:#7c3aed,color:#2e1065
+    classDef ops fill:#fff1f2,stroke:#e11d48,color:#4c0519
+
+    users[Client users\nNOC, ops, engineering]:::ext
+    files[Client parquet files\nCMDB, KPI telemetry, alarms,\nneighbour relations]:::ext
+    feeds[Optional live sources\nTMF alarms / performance feeds]:::ext
+
+    subgraph platform[Pedkai platform]
+        replay[Pedkai Replay container\nPython worker\nPyArrow + Pandas\nReads telemetry parquet\nPublishes Kafka topics]:::svc
+
+        kafka[Kafka container\nApache Kafka 3.9\nEvent streaming backbone]:::svc
+        kafkaui[Kafka UI container\nProvectus Kafka UI\nInspect / visualize events]:::ui
+
+        backend[Pedkai Backend container\nPython 3.10\nFastAPI + Uvicorn\nSQLAlchemy + AsyncPG\nAIOKafka consumers\nAlembic migrations\nDecision logic + APIs]:::svc
+
+        pyscripts[Python data scripts / workers\nload_tenant.py\nload_tenant_kpi_only.py\nload_telco2_tenant.py\nbackfill scripts\ntelemetry CLI]:::ops
+
+        ollama[Ollama LLM container\nOn-platform inference\nAI enrichment / analysis]:::ai
+
+        frontend[Pedkai Frontend container\nNext.js 16\nReact 19 + TypeScript\nTailwind CSS\nLeaflet topology views\nDashboard / divergence / scorecard]:::ui
+    end
+
+    subgraph stores[Platform data layer]
+        pg[(PostgreSQL + pgvector\nCMDB entities\nrelationships\nalarms\nincidents\ndecision memory)]:::data
+        ts[(TimescaleDB\nKPI time-series metrics\nhot-path analytics)]:::data
+    end
+
+    files --> replay
+    replay --> kafka
+    feeds --> kafka
+    kafka --> backend
+    kafka --> kafkaui
+
+    files --> pyscripts
+    pyscripts --> pg
+    pyscripts --> ts
+
+    backend --> pg
+    backend --> ts
+    backend <--> ollama
+    frontend <--> backend
+    users --> frontend
+
+    backend -. REST APIs .-> frontend
+    backend -. SSE live alarm stream .-> frontend
+
+    use1[Divergence detection\nCMDB vs observed network state]:::ops
+    use2[Sleeping cell detection\nKPI-based degradation analysis]:::ops
+    use3[Scorecard / ROI / incidents / topology\nOperational intelligence views]:::ops
+
+    frontend --> use1
+    frontend --> use2
+    frontend --> use3

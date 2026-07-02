@@ -1,0 +1,203 @@
+-- Are the four-column embeddings populated and non-zero?
+PGPASSWORD=WLqU4pZ-ikCqD1DJcM6 psql -h 127.0.0.1 -U pedkai -d pedkai_metrics -c "
+SELECT source_type,
+       (emb_semantic IS NOT NULL)   AS sem,
+       (emb_topological IS NOT NULL) AS topo,
+       (emb_temporal IS NOT NULL)   AS temp,
+       (emb_operational IS NOT NULL) AS oper,
+       mask_semantic, mask_topological, mask_operational,
+       array_length(string_to_array(emb_semantic::text, ','), 1) AS sem_dim
+FROM abeyance_fragment
+WHERE tenant_id = 'six_telecom'
+LIMIT 5;"
+
+-- Are real snaps being persisted with per-dimension breakdown?
+"SELECT failure_mode_profile, decision,
+       score_semantic, score_topological, score_temporal, score_operational, score_entity_overlap,
+       raw_composite, temporal_modifier, final_score, threshold_applied,
+       multiple_comparisons_k
+FROM snap_decision_record
+WHERE tenant_id = 'six_telecom'
+  AND decision = 'SNAP'
+ORDER BY evaluated_at DESC LIMIT 20;"
+
+-- Cross-domain (DARK_EDGE) snaps specifically — the "no rule engine could write this" class
+"SELECT sdr.*, fa.source_type AS new_src, fb.source_type AS partner_src
+FROM snap_decision_record sdr
+JOIN abeyance_fragment fa ON fa.id = sdr.new_fragment_id
+JOIN abeyance_fragment fb ON fb.id = sdr.candidate_fragment_id
+WHERE sdr.tenant_id = 'six_telecom'
+  AND sdr.failure_mode_profile = 'DARK_EDGE'
+  AND sdr.decision = 'SNAP'
+  AND fa.source_type <> fb.source_type
+ORDER BY sdr.final_score DESC LIMIT 10;"
+
+-- Bridge discoveries (Mechanism #4 — the high-betweenness fragments)
+"SELECT severity, betweenness_centrality, domain_span, entity_domains_spanned, created_at
+FROM bridge_discovery
+WHERE tenant_id = 'six_telecom'
+ORDER BY betweenness_centrality DESC LIMIT 10;"
+
+pedkai=> SELECT source_type,
+       (emb_semantic IS NOT NULL)   AS sem,
+       (emb_topological IS NOT NULL) AS topo,
+       (emb_temporal IS NOT NULL)   AS temp,
+       (emb_operational IS NOT NULL) AS oper,
+       mask_semantic, mask_topological, mask_operational,
+       array_length(string_to_array(emb_semantic::text, ','), 1) AS sem_dim
+FROM abeyance_fragment
+WHERE tenant_id = 'six_telecom'
+LIMIT 5;
+   source_type   | sem | topo | temp | oper | mask_semantic | mask_topological | mask_operational | sem_dim 
+-----------------+-----+------+------+------+---------------+------------------+------------------+---------
+ TELEMETRY_EVENT | f   | f    | f    | f    | f             | f                | f                |        
+ TELEMETRY_EVENT | f   | f    | f    | f    | f             | f                | f                |        
+ TELEMETRY_EVENT | f   | f    | f    | f    | f             | f                | f                |        
+ TELEMETRY_EVENT | f   | f    | f    | f    | f             | f                | f                |        
+ TELEMETRY_EVENT | f   | f    | f    | f    | f             | f                | f                |        
+(5 rows)
+
+pedkai=> SELECT failure_mode_profile, decision,
+       score_semantic, score_topological, score_temporal, score_operational, score_entity_overlap,
+       raw_composite, temporal_modifier, final_score, threshold_applied,
+       multiple_comparisons_k
+FROM snap_decision_record
+WHERE tenant_id = 'six_telecom'
+  AND decision = 'SNAP'
+ORDER BY evaluated_at DESC LIMIT 20;
+ failure_mode_profile | decision | score_semantic | score_topological |   score_temporal   | score_operational | score_entity_overlap | raw_composite | tempora
+l_modifier | final_score | threshold_applied | multiple_comparisons_k 
+----------------------+----------+----------------+-------------------+--------------------+-------------------+----------------------+---------------+--------
+-----------+-------------+-------------------+------------------------
+ DARK_ATTRIBUTE       | SNAP     |                |                   | 0.2292342197666423 |                   |                    1 |      0.807309 |        
+  0.974918 |     0.78706 | 0.242141716744801 |                      5
+ DARK_EDGE            | SNAP     |                |                   | 0.2292342197666423 |                   |                    1 |      0.807309 |        
+  0.974918 |     0.78706 | 0.242141716744801 |                      5
+ IDENTITY_MUTATION    | SNAP     |                |                   | 0.2292342197666423 |                   |                    1 |      0.859861 |        
+  0.974918 |    0.838294 | 0.242141716744801 |                      5
+ PHANTOM_CI           | SNAP     |                |                   | 0.2292342197666423 |                   |                    1 |      0.807309 |        
+  0.974918 |     0.78706 | 0.242141716744801 |                      5
+ DARK_NODE            | SNAP     |                |                   | 0.2292342197666423 |                   |                    1 |      0.828719 |        
+  0.974918 |    0.807933 | 0.242141716744801 |                      5
+ DARK_ATTRIBUTE       | SNAP     |                |                   | 0.9999999999999999 |                   |                    1 |             1 |        
+         1 |           1 | 0.242141716744801 |                      5
+ DARK_EDGE            | SNAP     |                |                   | 0.9999999999999999 |                   |                    1 |             1 |        
+         1 |           1 | 0.242141716744801 |                      5
+ IDENTITY_MUTATION    | SNAP     |                |                   | 0.9999999999999999 |                   |                    1 |             1 |        
+         1 |           1 | 0.242141716744801 |                      5
+ PHANTOM_CI           | SNAP     |                |                   | 0.9999999999999999 |                   |                    1 |             1 |        
+         1 |           1 | 0.242141716744801 |                      5
+ DARK_NODE            | SNAP     |                |                   | 0.9999999999999999 |                   |                    1 |             1 |        
+         1 |           1 | 0.242141716744801 |                      5
+ DARK_ATTRIBUTE       | SNAP     |                |                   | 0.6806708289173145 |                   |                    1 |      0.920168 |        
+   0.99114 |    0.912015 | 0.242141716744801 |                      5
+ DARK_EDGE            | SNAP     |                |                   | 0.6806708289173145 |                   |                    1 |      0.920168 |        
+   0.99114 |    0.912015 | 0.242141716744801 |                      5
+ IDENTITY_MUTATION    | SNAP     |                |                   | 0.6806708289173145 |                   |                    1 |       0.94194 |        
+   0.99114 |    0.933595 | 0.242141716744801 |                      5
+ PHANTOM_CI           | SNAP     |                |                   | 0.6806708289173145 |                   |                    1 |      0.920168 |        
+   0.99114 |    0.912015 | 0.242141716744801 |                      5
+ DARK_NODE            | SNAP     |                |                   | 0.6806708289173145 |                   |                    1 |      0.929038 |        
+   0.99114 |    0.920807 | 0.242141716744801 |                      5
+ DARK_ATTRIBUTE       | SNAP     |                |                   |                  0 |                   |                    1 |          0.75 |        
+  0.500001 |    0.375001 | 0.242141716744801 |                      5
+ DARK_EDGE            | SNAP     |                |                   |                  0 |                   |                    1 |          0.75 |        
+  0.500001 |    0.375001 | 0.242141716744801 |                      5
+ IDENTITY_MUTATION    | SNAP     |                |                   |                  0 |                   |                    1 |      0.818182 |        
+  0.500001 |    0.409092 | 0.242141716744801 |                      5
+ PHANTOM_CI           | SNAP     |                |                   |                  0 |                   |                    1 |          0.75 |        
+  0.500001 |    0.375001 | 0.242141716744801 |                      5
+ DARK_NODE            | SNAP     |                |                   |                  0 |                   |                    1 |      0.777778 |        
+  0.500001 |     0.38889 | 0.242141716744801 |                      5
+(20 rows)
+
+pedkai=> SELECT sdr.*, fa.source_type AS new_src, fb.source_type AS partner_src
+FROM snap_decision_record sdr
+JOIN abeyance_fragment fa ON fa.id = sdr.new_fragment_id
+JOIN abeyance_fragment fb ON fb.id = sdr.candidate_fragment_id
+WHERE sdr.tenant_id = 'six_telecom'
+  AND sdr.failure_mode_profile = 'DARK_EDGE'
+  AND sdr.decision = 'SNAP'
+  AND fa.source_type <> fb.source_type
+ORDER BY sdr.final_score DESC LIMIT 10;
+                  id                  |  tenant_id  |           new_fragment_id            |        candidate_fragment_id         |         evaluated_at       
+   | failure_mode_profile |   score_semantic   | score_topological  |   score_temporal   | score_operational  | score_entity_overlap |                         
+                      masks_active                                                |                                       weights_used                         
+               |                                weights_base                                 | component_scores | raw_composite | temporal_modifier | final_sco
+re | threshold_applied | decision | multiple_comparisons_k |     new_src     | partner_src 
+--------------------------------------+-------------+--------------------------------------+--------------------------------------+----------------------------
+---+----------------------+--------------------+--------------------+--------------------+--------------------+----------------------+-------------------------
+----------------------------------------------------------------------------------+----------------------------------------------------------------------------
+---------------+-----------------------------------------------------------------------------+------------------+---------------+-------------------+----------
+---+-------------------+----------+------------------------+-----------------+-------------
+ e69635fd-9b01-7097-8cb3-a5fb861943cf | six_telecom | fd0de81c-d061-7523-b808-d7c76f0b00bb | d98fcc31-b601-73f6-855b-cc5f0f6b3874 | 2024-01-20 12:00:00+00     
+   | DARK_EDGE            |                NaN |                NaN | 0.9893883614570712 |                NaN |   0.9856119692854373 | {"sem": false, "oper": f
+alse, "temp": true, "topo": false}                                                | {"ent": 0.7499999999999999, "temp": 0.25}                                  
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.986556 |          0.972163 |    0.9590
+93 |          0.292893 | SNAP     |                      4 | trace           | metric
+ fa29d53e-fd20-7f61-bf71-6d9462aac9b9 | six_telecom | cbfe4ab8-d9e8-742a-a960-a5601dc96729 | 568181ea-fdfa-7eec-98f1-a5784a64a4a1 | 2024-01-24 07:00:00+00     
+   | DARK_EDGE            |                NaN |                NaN | 0.8851907457264703 |                NaN |   0.9751448395780019 | {"sem": false, "oper": f
+alse, "temp": true, "topo": false}                                                | {"ent": 0.7499999999999999, "temp": 0.25}                                  
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.952656 |          0.988708 |    0.9418
+99 |              0.75 | SNAP     |                      1 | ticket          | metric
+ b9d80228-81f0-7abd-af63-4c95d839002b | six_telecom | 5ab682e8-e4a6-792b-b8fe-d2a34c17331b | 1c14f641-f2a1-76d1-8012-783bfc9b16c9 | 2024-01-21 08:00:00+00     
+   | DARK_EDGE            |                NaN |                NaN | 0.9034154205217106 |                NaN |   0.9787186480068923 | {"sem": false, "oper": f
+alse, "temp": true, "topo": false}                                                | {"ent": 0.7499999999999999, "temp": 0.25}                                  
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.959893 |          0.978369 |     0.939
+13 |          0.370039 | SNAP     |                      3 | trace           | ticket
+ a28bbec2-3836-7272-827b-0548e2f29c3f | six_telecom | 492af1b5-088d-78ad-aab5-88bc2283ce4e | 62afc113-63d4-701f-aef8-64924e1e8efe | 2024-01-21 22:00:00+00     
+   | DARK_EDGE            |                NaN |                NaN | 0.9121882284140373 |                NaN |   0.9614823433148993 | {"sem": false, "oper": f
+alse, "temp": true, "topo": false}                                                | {"ent": 0.7499999999999999, "temp": 0.25}                                  
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.949159 |          0.957131 |     0.908
+47 |               0.5 | SNAP     |                      2 | log             | trace
+ 38525295-8118-71e0-9836-31fb5fb3dd07 | six_telecom | c58e7259-3611-7256-acce-debd70f6f7b0 | 87759ed7-4cd0-7c27-ab16-33f10187b47b | 2024-01-06 19:00:00+00     
+   | DARK_EDGE            | 0.9805487747255616 |                NaN | 0.8403108676406454 |                NaN |   0.9727636752937321 | {"sem": true, "oper": fa
+lse, "temp": true, "topo": false}                                                 | {"ent": 0.5454545454545454, "sem": 0.2727272727272727, "temp": 0.1818181818
+1818182}       | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.950805 |          0.942968 |    0.8965
+78 |          0.292893 | SNAP     |                      4 | trace           | cmdb_delta
+ c84e8b75-f0b1-7f76-bb04-4939b27be90f | six_telecom | 2276c957-3f75-7a3a-ab98-ce23fdee62f7 | d5bdd170-ee1a-758c-93c3-8c74e0e2ce39 | 2024-01-05 09:00:00+00     
+   | DARK_EDGE            |                NaN |                NaN | 0.8594203525245667 |                NaN |   0.9940073038325759 | {"sem": false, "oper": f
+alse, "temp": true, "topo": false}                                                | {"ent": 0.7499999999999999, "temp": 0.25}                                  
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.960361 |          0.933371 |    0.8963
+73 |              0.75 | SNAP     |                      1 | ticket          | trace
+ 31f85b66-853d-7b64-988f-97466d158650 | six_telecom | fbfda675-3fad-796c-80c3-7809a23bea26 | fd9f4f00-04dc-7ae3-9e7b-a62a76c23335 | 2024-01-05 11:00:00+00     
+   | DARK_EDGE            |                NaN |                NaN | 0.8017920878086404 |                NaN |   0.9883035509239408 | {"sem": false, "oper": f
+alse, "temp": true, "topo": false}                                                | {"ent": 0.7499999999999999, "temp": 0.25}                                  
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.941676 |          0.951598 |    0.8960
+97 |          0.292893 | SNAP     |                      4 | alarm           | ticket
+ ad25aa9c-317b-7deb-a0f4-eaedae03e296 | six_telecom | 4e66ed4d-495d-7424-bdf9-ed9e286c47c0 | 466a64c8-1325-71f3-9bdb-45df42e55243 | 2024-01-18 17:00:00+00     
+   | DARK_EDGE            | 0.9217630172188361 | 0.8870769612610584 | 0.8522148076205265 | 0.9639609772484609 |    0.934687722735343 | {"sem": true, "oper": tr
+ue, "temp": true, "topo": true}                                                   | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}          
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.914609 |          0.976944 |    0.8935
+22 |          0.292893 | SNAP     |                      4 | alarm           | log
+ 0ea65d71-13e6-7ab8-9df9-6d376fc85072 | six_telecom | 89b3aea2-7c63-72fb-bc9e-49c29019cdc3 | 517a8232-8a19-7f1d-906c-cb372c50ea5c | 2024-01-22 08:00:00+00     
+   | DARK_EDGE            |                NaN |                NaN | 0.9386597289736646 |                NaN |   0.9509034475280997 | {"sem": false, "oper": f
+alse, "temp": true, "topo": false}                                                | {"ent": 0.7499999999999999, "temp": 0.25}                                  
+               | {"ent": 0.3, "sem": 0.15, "oper": 0.15, "temp": 0.1, "topo": 0.3}           | {}               |      0.947843 |          0.932832 |    0.8841
+78 |          0.370039 | SNAP     |                      3 | trace           | log
+ ed37482b-2835-424e-990f-d8d121a593b4 | six_telecom | 03ad61a0-7518-4b9c-97f8-8c73df155df6 | 0aaeee75-5fc2-49e4-a0a7-0e3cabdefc92 | 2026-05-14 23:58:06.458123+
+00 | DARK_EDGE            |                    |                    | 0.5728214376855052 |                    |                    1 | {"semantic": false, "tem
+poral": true, "operational": false, "topological": false, "entity_overlap": true} | {"w_ent": 0.7499999999999999, "w_sem": 0.0, "w_oper": 0.0, "w_temp": 0.25, 
+"w_topo": 0.0} | {"w_ent": 0.3, "w_sem": 0.15, "w_oper": 0.15, "w_temp": 0.1, "w_topo": 0.3} |                  |      0.893205 |          0.988972 |    0.8833
+55 | 0.242141716744801 | SNAP     |                      5 | TELEMETRY_EVENT | ALARM
+(10 rows)
+
+pedkai=> SELECT severity, betweenness_centrality, domain_span, entity_domains_spanned, created_at
+FROM bridge_discovery
+WHERE tenant_id = 'six_telecom'
+ORDER BY betweenness_centrality DESC LIMIT 10;
+ severity | betweenness_centrality | domain_span |                       entity_domains_spanned                        |       created_at       
+----------+------------------------+-------------+---------------------------------------------------------------------+------------------------
+ CRITICAL |               0.989878 |           3 | ["[\"RAN\"", " \"VNF\"", " \"CORE\"]"]                              | 2024-01-10 06:00:00+00
+ CRITICAL |               0.989283 |           5 | ["[\"TRANSPORT\"", " \"VNF\"", " \"IP\"", " \"RAN\"", " \"CORE\"]"] | 2024-01-01 09:00:00+00
+ CRITICAL |               0.988633 |           4 | ["[\"TRANSPORT\"", " \"CORE\"", " \"RAN\"", " \"VNF\"]"]            | 2024-01-01 10:00:00+00
+ CRITICAL |               0.986779 |           4 | ["[\"IP\"", " \"RAN\"", " \"TRANSPORT\"", " \"VNF\"]"]              | 2024-01-24 22:00:00+00
+ CRITICAL |               0.986373 |           2 | ["[\"TRANSPORT\"", " \"VNF\"]"]                                     | 2024-01-11 12:00:00+00
+ CRITICAL |               0.983364 |           2 | ["[\"RAN\"", " \"VNF\"]"]                                           | 2024-01-08 10:00:00+00
+ CRITICAL |                0.98204 |           3 | ["[\"TRANSPORT\"", " \"CORE\"", " \"VNF\"]"]                        | 2024-01-03 15:00:00+00
+ CRITICAL |               0.981848 |           2 | ["[\"VNF\"", " \"TRANSPORT\"]"]                                     | 2024-01-18 08:00:00+00
+ CRITICAL |                0.98043 |           2 | ["[\"CORE\"", " \"VNF\"]"]                                          | 2024-01-22 10:00:00+00
+ CRITICAL |               0.979408 |           2 | ["[\"VNF\"", " \"IP\"]"]                                            | 2024-01-22 20:00:00+00
+(10 rows)
+
+pedkai=> 

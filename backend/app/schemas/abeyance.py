@@ -430,3 +430,57 @@ class DiscoveryStatusResponse(BaseModel):
     tslam_status: dict[str, Any] = Field(default_factory=dict)
     mechanisms: dict[str, str] = Field(default_factory=dict)
 
+
+# ---------------------------------------------------------------------------
+# Entity Investigation (unified Abeyance + T-VEC view for a single entity)
+# ---------------------------------------------------------------------------
+
+class EntityEvidenceItem(BaseModel):
+    """One fragment referencing the investigated entity (evidence timeline)."""
+    fragment_id: UUID
+    source_type: str
+    event_timestamp: Optional[datetime] = None
+    snap_status: str
+    current_decay_score: float = 0.0
+    snippet: str = ""
+    primary_failure_mode: Optional[str] = None
+    embedded: bool = False  # True once T-VEC semantic embedding exists
+
+
+class EntitySnapCard(BaseModel):
+    """A snap involving the entity, with the human-readable 'why'."""
+    fragment_id: UUID           # the entity's fragment in this snap
+    matched_fragment_id: UUID   # the other fragment it snapped to
+    matched_snippet: str = ""
+    matched_source_type: Optional[str] = None
+    failure_mode: Optional[str] = None
+    final_score: float = 0.0
+    decision: Optional[str] = None
+    evaluated_at: Optional[datetime] = None
+    # Per-dimension scores (None = dimension unavailable for the pair)
+    dimensions: dict[str, Optional[float]] = Field(default_factory=dict)
+    dominant_driver: Optional[str] = None
+    why: str = ""
+
+
+class EntityDivergenceFlag(BaseModel):
+    """A reconciliation divergence recorded against this entity."""
+    divergence_type: str
+    confidence: float = 0.0
+    description: Optional[str] = None
+    attribute_name: Optional[str] = None
+    cmdb_value: Optional[str] = None
+    observed_value: Optional[str] = None
+
+
+class EntityInvestigationResponse(BaseModel):
+    """Unified investigation view for one entity."""
+    entity_identifier: str
+    tenant_id: str
+    embedding_status: str = "ready"   # ready | computing
+    fragment_count: int = 0
+    embedded_count: int = 0
+    evidence: list[EntityEvidenceItem] = Field(default_factory=list)
+    snaps: list[EntitySnapCard] = Field(default_factory=list)
+    divergence: list[EntityDivergenceFlag] = Field(default_factory=list)
+

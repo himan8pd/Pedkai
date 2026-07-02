@@ -1,0 +1,119 @@
+BASE="/Volumes/Projects/Pedkai Data Store/six_telecom"
+mkdir -p "$BASE/apr2026/output"
+ln -s "../intermediate" "$BASE/apr2026/intermediate"
+ln -s "../../output/schemas" "$BASE/apr2026/output/schemas"
+ln -s "../../output/ground_truth_entities.parquet"      "$BASE/apr2026/output/ground_truth_entities.parquet"
+ln -s "../../output/ground_truth_relationships.parquet" "$BASE/apr2026/output/ground_truth_relationships.parquet"
+ln -s "../../output/neighbour_relations.parquet"        "$BASE/apr2026/output/neighbour_relations.parquet"
+cd /Users/himanshu/Projects/pedkai_generator
+source venv/bin/activate   # or source .venv/bin/activate
+pedkai-generate run \
+  --step 3 --step 4 --step 5 --step 6 \
+  --force \
+  --config-file six_telecom.yaml \
+  --data-store "/Volumes/Projects/Pedkai Data Store/six_telecom/apr2026"
+
+psql "host=localhost port=5432 dbname=pedkai_metrics user=pedkai password=WLqU4pZ-ikCqD1DJcM6" -c "
+SELECT remove_retention_policy('kpi_metrics');
+"
+
+# Confirm it's gone:
+psql "host=localhost port=5432 dbname=pedkai_metrics user=pedkai password=WLqU4pZ-ikCqD1DJcM6" -c "
+SELECT * FROM timescaledb_information.jobs WHERE application_name ILIKE '%retention%';
+"
+# Expected: 0 rows
+
+VM1="ubuntu@144.24.244.166"
+DEST="/home/ubuntu/Pedkai-data/output"
+SRC="/Volumes/Projects/Pedkai Data Store/six_telecom/apr2026/output"
+ssh $VM1 "mkdir -p $DEST"
+scp "$SRC/kpi_metrics_wide.parquet"              $VM1:$DEST/
+scp "$SRC/scenario_kpi_overrides.parquet"        $VM1:$DEST/
+scp "$SRC/events_alarms.parquet"                 $VM1:$DEST/
+scp "$SRC/transport_kpis_wide.parquet"           $VM1:$DEST/
+scp "$SRC/fixed_broadband_kpis_wide.parquet"     $VM1:$DEST/
+scp "$SRC/core_element_kpis_wide.parquet"        $VM1:$DEST/
+scp "$SRC/enterprise_circuit_kpis_wide.parquet"  $VM1:$DEST/
+scp "$SRC/power_environment_kpis.parquet"        $VM1:$DEST/
+
+# SSH into VM1
+cd ~/Pedkai
+
+# Delete existing alarms for the tenant
+psql "$GRAPH_DB_DSN" -c "DELETE FROM telco_events_alarms WHERE tenant_id = 'six_telecom';"
+
+# Re-run the loader — all graph DB tables use ON CONFLICT DO NOTHING
+# so only alarms (just deleted) are actually re-inserted
+bash scripts/cloud/load-six-telecom-cloud.sh \
+  /home/ubuntu/Pedkai-data/output
+
+# Verify alarm timestamps
+psql "$GRAPH_DB_DSN" -c "
+SELECT COUNT(*), MIN(raised_at), MAX(raised_at)
+FROM telco_events_alarms WHERE tenant_id = 'six_telecom';"
+
+docker kill $(docker ps --filter "name=pedkai-backend-run" -q)
+
+# 2. Pull the fix and rebuild
+cd ~/Pedkai
+git pull origin main
+docker compose -f docker-compose.cloud.yml build pedkai-backend
+
+# On VM1 — check if compression background workers are active again
+docker exec pedkai-backend python3 -c "
+import psycopg2, os
+conn = psycopg2.connect(os.environ['METRICS_DB_DSN'])
+cur = conn.cursor()
+cur.execute(\"\"\"
+    SELECT pid, state, wait_event_type, wait_event, LEFT(query, 80)
+    FROM pg_stat_activity
+    WHERE query ILIKE '%compress%' OR application_name ILIKE '%compress%'
+\"\"\")
+for r in cur.fetchall(): print(r)
+conn.close()
+"
+
+docker exec pedkai-backend python3 -c "
+import psycopg2, os
+conn = psycopg2.connect(os.environ['METRICS_DB_DSN'])
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute('TRUNCATE TABLE kpi_metrics')
+print('truncated')
+conn.close()
+"
+
+cd ~/Pedkai
+git pull origin main
+docker compose -f docker-compose.cloud.yml build pedkai-backend
+
+docker compose -f docker-compose.cloud.yml run --rm \
+  -e PYTHONPATH=/app \
+  -v /home/ubuntu/Pedkai-data/output:/home/ubuntu/Pedkai-data/output:ro \
+  pedkai-backend \
+  python -m backend.app.scripts.load_tenant_kpi_only \
+    --tenant-id six_telecom \
+    --output-dir /home/ubuntu/Pedkai-data/output \
+    2>&1 | tee /tmp/kpi_load.log
+    
+# 1. Truncate to recover the ~58 GB
+docker exec pedkai-backend python3 -c "
+import psycopg2, os
+conn = psycopg2.connect(os.environ['METRICS_DB_DSN'])
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute('TRUNCATE TABLE kpi_metrics')
+print('truncated')
+conn.close()
+"
+
+# 2. Set 2-hour chunk interval (before any data is inserted)
+docker exec pedkai-backend python3 -c "
+import psycopg2, os
+conn = psycopg2.connect(os.environ['METRICS_DB_DSN'])
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute(\"SELECT set_chunk_time_interval('kpi_metrics', INTERVAL '2 hours')\")
+print('chunk interval set to 2 hours')
+conn.close()
+"

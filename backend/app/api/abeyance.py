@@ -19,10 +19,10 @@ from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import get_db
+from backend.app.core.database import async_session_maker, get_db
 from backend.app.core.logging import get_logger
 from backend.app.core.security import INCIDENT_READ, User, get_current_user
 from backend.app.models.abeyance_orm import (
@@ -31,11 +31,16 @@ from backend.app.models.abeyance_orm import (
     FragmentEntityRefORM,
     SnapDecisionRecordORM,
 )
+from backend.app.models.reconciliation_result_orm import ReconciliationResultORM
 from backend.app.schemas.abeyance import (
     AbeyanceFragmentResponse,
     AbeyanceFragmentSummary,
     AccumulationClusterResponse,
     AccumulationEdgeResponse,
+    EntityDivergenceFlag,
+    EntityEvidenceItem,
+    EntityInvestigationResponse,
+    EntitySnapCard,
     RawEvidence,
     SnapHistoryEntry,
 )
@@ -654,3 +659,310 @@ async def explain_snap_chain(
         "explanations": perspectives,
     }
 
+
+
+# ---------------------------------------------------------------------------
+# GET /entity/{entity_identifier}/investigation
+# Unified Abeyance + T-VEC investigation view for a single entity.
+# ---------------------------------------------------------------------------
+
+# In-flight lazy-embedding tasks keyed by "tenant::entity" so UI polling does
+# not spawn duplicate background jobs.
+_embedding_tasks: dict[str, asyncio.Task] = {}
+
+SEMANTIC_DIM = TOPOLOGICAL_DIM = OPERATIONAL_DIM = 1536
+
+_DIM_WEIGHT_KEY = {
+    "semantic": "w_sem", "topological": "w_topo", "temporal": "w_temp",
+    "operational": "w_oper", "entity_overlap": "w_ent",
+}
+_DIM_LABEL = {
+    "semantic": "fault/semantic similarity", "topological": "shared topology",
+    "temporal": "time proximity", "operational": "operational fingerprint",
+    "entity_overlap": "shared entities",
+}
+
+
+def _snippet(raw: Optional[str], n: int = 160) -> str:
+    if not raw:
+        return ""
+    s = raw.strip().replace("\n", " ")
+    return s[:n] + ("…" if len(s) > n else "")
+
+
+def _build_semantic_text(raw: Optional[str], entities: list) -> Optional[str]:
+    if not raw:
+        return None
+    ent = ", ".join(e.get("identifier", "") for e in (entities or [])[:20])
+    return f"{raw[:1000]} Entities: {ent}"
+
+
+def _build_topo_text(entities: list, neighbourhood: dict) -> Optional[str]:
+    if not entities:
+        return None
+    parts = [f"{e.get('identifier', '?')} ({e.get('domain', 'unknown')})" for e in entities[:20]]
+    return f"Network topology context: {', '.join(parts)}"
+
+
+def _build_operational_text(failure_modes: list, fingerprint: dict) -> Optional[str]:
+    if not failure_modes:
+        return None
+    parts = []
+    for fm in failure_modes[:5]:
+        if isinstance(fm, dict):
+            parts.append(f"{fm.get('divergence_type', 'unknown')}: {fm.get('rationale', '')}")
+    time_bucket = (fingerprint or {}).get("traffic_cycle", {}).get("time_bucket", "unknown")
+    parts.append(f"Traffic: {time_bucket}")
+    return f"Operational context: {'; '.join(parts)}"
+
+
+def _pad_or_trim(vec: list, target_dim: int) -> list:
+    if len(vec) < target_dim:
+        return vec + [0.0] * (target_dim - len(vec))
+    return vec[:target_dim]
+
+
+def _derive_why(dims: dict, weights_used: Optional[dict], failure_mode: Optional[str]) -> tuple[Optional[str], str]:
+    """Turn per-dimension scores into a dominant driver + plain-English reason.
+
+    Ranks dimensions by contribution (weight x score) so entity_overlap (often
+    1.0) does not automatically dominate. Deterministic, no LLM.
+    """
+    contrib: dict = {}
+    for dim, key in _DIM_WEIGHT_KEY.items():
+        score = dims.get(dim)
+        weight = (weights_used or {}).get(key)
+        if score is not None and weight:
+            contrib[dim] = float(weight) * float(score)
+    if not contrib:
+        return None, f"Snapped under the {failure_mode or 'default'} hypothesis"
+    ranked = sorted(contrib, key=contrib.get, reverse=True)
+    dominant = ranked[0]
+    parts = [f"{_DIM_LABEL[d]} ({dims[d]:.2f})" for d in ranked[:2] if dims.get(d) is not None]
+    fm = f" under the {failure_mode} hypothesis" if failure_mode else ""
+    return dominant, f"Driven by {', '.join(parts)}{fm}"
+
+
+async def _entity_fragment_ids(session: AsyncSession, tenant_id: str, entity_identifier: str) -> list:
+    result = await session.execute(
+        select(FragmentEntityRefORM.fragment_id)
+        .where(
+            FragmentEntityRefORM.tenant_id == tenant_id,
+            FragmentEntityRefORM.entity_identifier == entity_identifier,
+        )
+        .distinct()
+    )
+    return [row[0] for row in result.fetchall()]
+
+
+async def _embed_entity_fragments(tenant_id: str, entity_identifier: str) -> None:
+    """Background: compute T-VEC embeddings for this entity's un-embedded
+    fragments, reusing the warm in-process model. Persists per fragment."""
+    from sqlalchemy import update
+
+    tvec = _get_services()["tvec"]
+    try:
+        async with async_session_maker() as session:
+            ids = await _entity_fragment_ids(session, tenant_id, entity_identifier)
+            if not ids:
+                return
+            res = await session.execute(
+                select(AbeyanceFragmentORM).where(
+                    AbeyanceFragmentORM.id.in_(ids),
+                    AbeyanceFragmentORM.tenant_id == tenant_id,
+                    AbeyanceFragmentORM.mask_semantic.is_(False),
+                )
+            )
+            frags = list(res.scalars().all())
+        for frag in frags:
+            plan = [
+                (_build_semantic_text(frag.raw_content or "", frag.extracted_entities or []), "semantic", SEMANTIC_DIM),
+                (_build_topo_text(frag.extracted_entities or [], frag.topological_neighbourhood or {}), "topological", TOPOLOGICAL_DIM),
+                (_build_operational_text(frag.failure_mode_tags or [], frag.operational_fingerprint or {}), "operational", OPERATIONAL_DIM),
+            ]
+            plan = [(t, c, d) for (t, c, d) in plan if t]
+            if not plan:
+                continue
+            vecs = await tvec.embed_batch([t for t, _, _ in plan])
+            patch: dict = {}
+            for (_, col, dim), v in zip(plan, vecs):
+                if v is None:
+                    continue
+                padded = _pad_or_trim(v, dim)
+                if any(x != 0.0 for x in padded):
+                    patch[f"emb_{col}"] = padded
+                    patch[f"mask_{col}"] = True
+            if not patch:
+                continue
+            async with async_session_maker() as session:
+                await session.execute(
+                    update(AbeyanceFragmentORM)
+                    .where(AbeyanceFragmentORM.id == frag.id)
+                    .values(**patch)
+                )
+                await session.commit()
+    except Exception:
+        logger.warning("Lazy embedding failed for entity %s", entity_identifier, exc_info=True)
+    finally:
+        _embedding_tasks.pop(f"{tenant_id}::{entity_identifier}", None)
+
+
+@router.get("/entity/{entity_identifier}/investigation", response_model=EntityInvestigationResponse)
+async def investigate_entity(
+    entity_identifier: str,
+    tenant_id: Optional[str] = Query(None),
+    embed: bool = Query(True, description="Lazily compute missing T-VEC embeddings"),
+    snap_limit: int = Query(30, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Unified investigation view for a single entity: evidence timeline,
+    snaps with per-dimension 'why', and reconciliation divergence flags.
+
+    Lazily embeds the entity's fragments (reusing the warm T-VEC model) so the
+    semantic dimension becomes available without a full-corpus backfill.
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+
+    frag_ids = await _entity_fragment_ids(db, tid, entity_identifier)
+    if not frag_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No fragments reference entity {entity_identifier}",
+        )
+    frag_id_set = set(frag_ids)
+
+    res = await db.execute(
+        select(AbeyanceFragmentORM)
+        .where(
+            AbeyanceFragmentORM.id.in_(frag_ids),
+            AbeyanceFragmentORM.tenant_id == tid,
+        )
+        .order_by(AbeyanceFragmentORM.event_timestamp.desc())
+    )
+    fragments = list(res.scalars().all())
+    frag_by_id = {f.id: f for f in fragments}
+    embedded_count = sum(1 for f in fragments if f.mask_semantic)
+
+    evidence = [
+        EntityEvidenceItem(
+            fragment_id=f.id,
+            source_type=f.source_type,
+            event_timestamp=f.event_timestamp,
+            snap_status=f.snap_status,
+            current_decay_score=f.current_decay_score,
+            snippet=_snippet(f.raw_content),
+            primary_failure_mode=_primary_failure_mode(f),
+            embedded=bool(f.mask_semantic),
+        )
+        for f in fragments
+    ]
+
+    # Lazy embedding trigger
+    key = f"{tid}::{entity_identifier}"
+    embedding_status = "ready"
+    needs_embedding = any((f.raw_content and not f.mask_semantic) for f in fragments)
+    existing = _embedding_tasks.get(key)
+    if embed and needs_embedding:
+        if existing is None or existing.done():
+            _embedding_tasks[key] = asyncio.create_task(
+                _embed_entity_fragments(tid, entity_identifier)
+            )
+        embedding_status = "computing"
+    elif existing is not None and not existing.done():
+        embedding_status = "computing"
+
+    # Snaps involving the entity (dedup to best profile per fragment pair)
+    res = await db.execute(
+        select(SnapDecisionRecordORM)
+        .where(
+            SnapDecisionRecordORM.tenant_id == tid,
+            or_(
+                SnapDecisionRecordORM.new_fragment_id.in_(frag_ids),
+                SnapDecisionRecordORM.candidate_fragment_id.in_(frag_ids),
+            ),
+        )
+        .order_by(SnapDecisionRecordORM.final_score.desc())
+    )
+    best_by_pair: dict = {}
+    for r in res.scalars().all():
+        pair = frozenset((r.new_fragment_id, r.candidate_fragment_id))
+        if pair not in best_by_pair:  # sorted desc -> first seen is best
+            best_by_pair[pair] = r
+    snap_records = list(best_by_pair.values())[:snap_limit]
+
+    # Resolve matched-fragment snippets that live outside the entity set
+    matched_ids = set()
+    for r in snap_records:
+        ours = r.new_fragment_id if r.new_fragment_id in frag_id_set else r.candidate_fragment_id
+        other = r.candidate_fragment_id if ours == r.new_fragment_id else r.new_fragment_id
+        matched_ids.add(other)
+    matched_ids -= set(frag_by_id.keys())
+    if matched_ids:
+        mres = await db.execute(
+            select(AbeyanceFragmentORM).where(
+                AbeyanceFragmentORM.id.in_(matched_ids),
+                AbeyanceFragmentORM.tenant_id == tid,
+            )
+        )
+        for mf in mres.scalars().all():
+            frag_by_id[mf.id] = mf
+
+    snaps = []
+    for r in snap_records:
+        ours = r.new_fragment_id if r.new_fragment_id in frag_id_set else r.candidate_fragment_id
+        other = r.candidate_fragment_id if ours == r.new_fragment_id else r.new_fragment_id
+        dims = {
+            "semantic": r.score_semantic,
+            "topological": r.score_topological,
+            "temporal": r.score_temporal,
+            "operational": r.score_operational,
+            "entity_overlap": r.score_entity_overlap,
+        }
+        dominant, why = _derive_why(dims, r.weights_used, r.failure_mode_profile)
+        matched = frag_by_id.get(other)
+        snaps.append(EntitySnapCard(
+            fragment_id=ours,
+            matched_fragment_id=other,
+            matched_snippet=_snippet(matched.raw_content) if matched else "",
+            matched_source_type=matched.source_type if matched else None,
+            failure_mode=r.failure_mode_profile,
+            final_score=r.final_score,
+            decision=r.decision,
+            evaluated_at=r.evaluated_at,
+            dimensions=dims,
+            dominant_driver=dominant,
+            why=why,
+        ))
+
+    # Reconciliation divergence flags for this entity
+    dres = await db.execute(
+        select(ReconciliationResultORM)
+        .where(
+            ReconciliationResultORM.tenant_id == tid,
+            ReconciliationResultORM.target_id == entity_identifier,
+        )
+        .order_by(ReconciliationResultORM.confidence.desc())
+    )
+    divergence = [
+        EntityDivergenceFlag(
+            divergence_type=d.divergence_type,
+            confidence=d.confidence or 0.0,
+            description=d.description,
+            attribute_name=d.attribute_name,
+            cmdb_value=d.cmdb_value,
+            observed_value=d.observed_value,
+        )
+        for d in dres.scalars().all()
+    ]
+
+    return EntityInvestigationResponse(
+        entity_identifier=entity_identifier,
+        tenant_id=tid,
+        embedding_status=embedding_status,
+        fragment_count=len(fragments),
+        embedded_count=embedded_count,
+        evidence=evidence,
+        snaps=snaps,
+        divergence=divergence,
+    )

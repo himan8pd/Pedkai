@@ -1,0 +1,38 @@
+flowchart TB
+    %% Mobile-first: short labels, vertical flow, minimal crossing lines
+    classDef ext fill:#f7f7f5,stroke:#6b7280,color:#111827
+    classDef svc fill:#e8f3ff,stroke:#2563eb,color:#0f172a
+    classDef data fill:#eefbf3,stroke:#059669,color:#052e16
+    classDef ai fill:#fff4db,stroke:#d97706,color:#431407
+    classDef ui fill:#f3e8ff,stroke:#7c3aed,color:#2e1065
+
+    U[Users]:::ext
+    P[Parquet Data]:::ext
+
+    R[Pedkai Replay\nPython worker]:::svc
+    K[Kafka Broker]:::svc
+    B[Pedkai Backend\nFastAPI + consumers]:::svc
+    O[Ollama LLM]:::ai
+    F[Pedkai Frontend\nNext.js UI]:::ui
+
+    PG[(PostgreSQL\nCMDB + alarms)]:::data
+    TS[(TimescaleDB\nKPI metrics)]:::data
+
+    P --> R
+    R --> K
+    K --> B
+
+    B --> PG
+    B --> TS
+    B <--> O
+
+    U --> F
+    F <--> B
+
+    F --> UC1
+    F --> UC2
+    F --> UC3
+
+    UC1[Divergence]:::ui
+    UC2[Sleeping Cells]:::ui
+    UC3[Scorecard / ROI]:::ui
