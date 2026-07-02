@@ -825,10 +825,33 @@ async def investigate_entity(
     tid = _resolve_tenant(current_user, tenant_id)
 
     frag_ids = await _entity_fragment_ids(db, tid, entity_identifier)
-    if not frag_ids:
+
+    # Reconciliation divergence flags — independent of abeyance fragments: a
+    # Dark/Phantom entity may carry divergence records but reference no fragments.
+    dres = await db.execute(
+        select(ReconciliationResultORM)
+        .where(
+            ReconciliationResultORM.tenant_id == tid,
+            ReconciliationResultORM.target_id == entity_identifier,
+        )
+        .order_by(ReconciliationResultORM.confidence.desc())
+    )
+    divergence = [
+        EntityDivergenceFlag(
+            divergence_type=d.divergence_type,
+            confidence=d.confidence or 0.0,
+            description=d.description,
+            attribute_name=d.attribute_name,
+            cmdb_value=d.cmdb_value,
+            observed_value=d.observed_value,
+        )
+        for d in dres.scalars().all()
+    ]
+
+    if not frag_ids and not divergence:
         raise HTTPException(
             status_code=404,
-            detail=f"No fragments reference entity {entity_identifier}",
+            detail=f"No abeyance evidence or divergence records for entity {entity_identifier}",
         )
     frag_id_set = set(frag_ids)
 
@@ -982,27 +1005,6 @@ async def investigate_entity(
         ))
 
     snaps.sort(key=lambda c: c.final_score, reverse=True)
-
-    # Reconciliation divergence flags for this entity
-    dres = await db.execute(
-        select(ReconciliationResultORM)
-        .where(
-            ReconciliationResultORM.tenant_id == tid,
-            ReconciliationResultORM.target_id == entity_identifier,
-        )
-        .order_by(ReconciliationResultORM.confidence.desc())
-    )
-    divergence = [
-        EntityDivergenceFlag(
-            divergence_type=d.divergence_type,
-            confidence=d.confidence or 0.0,
-            description=d.description,
-            attribute_name=d.attribute_name,
-            cmdb_value=d.cmdb_value,
-            observed_value=d.observed_value,
-        )
-        for d in dres.scalars().all()
-    ]
 
     return EntityInvestigationResponse(
         entity_identifier=entity_identifier,

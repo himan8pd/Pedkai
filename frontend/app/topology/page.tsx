@@ -2,10 +2,11 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { ZoomIn, ZoomOut, Maximize2, Search, ArrowRight, Layers, Network, Map as MapIcon, GitGraph } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Search, ArrowRight, Layers, Network, Map as MapIcon, GitGraph, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext";
+import EntityInvestigationPanel from "@/app/components/EntityInvestigationPanel";
 
 interface TopologyEntity {
   id: string;
@@ -398,6 +399,8 @@ export default function TopologyPage() {
 
   // View state
   const [selectedEntity, setSelectedEntity] = useState<TopologyEntity | null>(null);
+  // Entity investigation drawer (Abeyance + T-VEC)
+  const [investigateEntity, setInvestigateEntity] = useState<TopologyEntity | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -438,6 +441,13 @@ export default function TopologyPage() {
     const entityId = searchParams.get("entity_id");
     if (entityId) setSeedId(entityId);
   }, [tenantId, token, searchParams]);
+
+  // 1c. Auto-open the investigation drawer when arriving with ?investigate=1
+  useEffect(() => {
+    if (searchParams.get("investigate") !== "1" || !seedId) return;
+    const node = entities.find((e) => e.id === seedId);
+    if (node) setInvestigateEntity(node);
+  }, [entities, seedId, searchParams]);
 
   // 2. Fetch Neighborhood Graph
   const fetchGraph = useCallback(async (seed: string, hopCount: number) => {
@@ -1122,10 +1132,17 @@ export default function TopologyPage() {
                   </span>
                 </div>
 
+                <button
+                  onClick={() => setInvestigateEntity(selectedEntity)}
+                  className="w-full mt-3 py-1.5 rounded bg-cyan-400 hover:bg-cyan-300 text-gray-950 font-bold transition-colors text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Investigate with Abeyance Memory
+                </button>
+
                 {selectedEntity.id !== seedId && (
                   <button
                     onClick={() => { setSeedId(selectedEntity.id); setHops(2); }}
-                    className="w-full mt-3 py-1.5 rounded bg-[#06203b] hover:bg-[#0d3b5e] border border-white/25 transition-colors text-xs font-semibold text-white flex items-center justify-center gap-1.5"
+                    className="w-full mt-2 py-1.5 rounded bg-[#06203b] hover:bg-[#0d3b5e] border border-white/25 transition-colors text-xs font-semibold text-white flex items-center justify-center gap-1.5"
                   >
                     <Search className="w-3.5 h-3.5" /> Set as new seed
                   </button>
@@ -1133,6 +1150,17 @@ export default function TopologyPage() {
               </div>
             )}
           </>
+        )}
+
+        {/* Entity investigation drawer (Abeyance Memory + T-VEC) */}
+        {investigateEntity && (
+          <div className="absolute top-0 right-0 h-full z-[1100] shadow-2xl">
+            <EntityInvestigationPanel
+              entityId={investigateEntity.id}
+              entityName={investigateEntity.name}
+              onClose={() => setInvestigateEntity(null)}
+            />
+          </div>
         )}
       </div>
     </div>
