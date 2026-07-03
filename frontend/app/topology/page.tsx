@@ -1238,8 +1238,13 @@ export default function TopologyPage() {
               />
             )}
 
-            {/* View toggle + Zoom controls */}
-            <div className="absolute top-4 right-4 flex flex-col gap-1 z-[1000]">
+            {/* View toggle + Zoom controls — slide left of the investigation
+                drawer when it's open so they stay accessible. */}
+            <div
+              className={`absolute top-4 flex flex-col gap-1 z-[1000] transition-all duration-200 ${
+                investigateEntity ? "right-[436px]" : "right-4"
+              }`}
+            >
               {/* View mode toggle */}
               <div className="flex rounded-lg overflow-hidden border border-cyan-900/40 shadow-lg mb-1">
                 <button

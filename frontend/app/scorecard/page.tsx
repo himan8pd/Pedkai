@@ -47,9 +47,9 @@ interface Detection {
   metric_name: string;
   current_value: number;
   baseline_value: number;
-  drift_pct: number;
-  severity: string;
-  recommendation: string;
+  drift_magnitude: number; // standardised deviation (sigma)
+  severity?: string;
+  recommendation?: string;
   ai_generated: boolean;
   ai_watermark: string;
 }
@@ -142,23 +142,18 @@ export default function ScorecardPage() {
   // Initialise state directly from cache so there is ZERO loading flash on
   // warm-cache navigation (the component renders with real data on the first frame).
   const [scorecard, setScorecard] = useState<ScorecardData | null>(
-    () => (tenantId ? Cache.get<ScorecardData>(scKey, Cache.TTL.MEDIUM) : null),
+    () => (tenantId ? Cache.peek<ScorecardData>(scKey) : null),
   );
   const [detections, setDetections] = useState<Detection[]>(
-    () => (tenantId ? (Cache.get<Detection[]>(detKey, Cache.TTL.MEDIUM) ?? []) : []),
+    () => (tenantId ? (Cache.peek<Detection[]>(detKey) ?? []) : []),
   );
   const [valueCapture, setValueCapture] = useState<ValueCapture | null>(
-    () => (tenantId ? Cache.get<ValueCapture>(valKey, Cache.TTL.MEDIUM) : null),
+    () => (tenantId ? Cache.peek<ValueCapture>(valKey) : null),
   );
-  // loading=false when all three are already in cache — avoids spinner on re-visit.
+  // Instant render whenever the scorecard is buffered (ANY age) — only the very
+  // first cold load shows the spinner. Freshness comes from a background refetch.
   const [loading, setLoading] = useState(
-    () =>
-      !(
-        tenantId &&
-        Cache.get(scKey, Cache.TTL.MEDIUM) &&
-        Cache.get(detKey, Cache.TTL.MEDIUM) &&
-        Cache.get(valKey, Cache.TTL.MEDIUM)
-      ),
+    () => !(tenantId && Cache.peek(scKey)),
   );
   const [error, setError] = useState("");
   const [showDetections, setShowDetections] = useState(true);
@@ -171,24 +166,20 @@ export default function ScorecardPage() {
         return;
       }
 
-      // Restore from cache and skip API when cache is fresh (< 2 min old).
-      // This also handles the auth-race case: if tenantId was null on first
-      // render the lazy state initialisers got empty keys / null, so we must
-      // explicitly set state here when the effect first fires with a real key.
-      const cachedSc = Cache.get<ScorecardData>(scKey, Cache.TTL.MEDIUM);
-      const cachedDet = Cache.get<Detection[]>(detKey, Cache.TTL.MEDIUM);
-      const cachedVal = Cache.get<ValueCapture>(valKey, Cache.TTL.MEDIUM);
-      const allCached = !!(cachedSc && cachedDet && cachedVal);
-      const cacheAgeSec = Cache.ageSeconds(scKey) ?? Infinity;
-
-      if (allCached) {
-        // Update state (no-op if lazy init already captured the same refs)
-        setScorecard(cachedSc);
-        setDetections(cachedDet);
-        setValueCapture(cachedVal);
+      // Render whatever is buffered instantly, IGNORING age (also handles the
+      // auth-race where tenantId was null at first render so the lazy init got
+      // an empty key). Only a genuine cold start (nothing buffered) blocks.
+      const pSc = Cache.peek<ScorecardData>(scKey);
+      const pDet = Cache.peek<Detection[]>(detKey);
+      const pVal = Cache.peek<ValueCapture>(valKey);
+      if (pSc) {
+        setScorecard(pSc);
+        if (pDet) setDetections(pDet);
+        if (pVal) setValueCapture(pVal);
         setLoading(false);
-        if (cacheAgeSec < 120) return; // fresh — skip API
       }
+      const cacheAgeSec = Cache.ageSeconds(scKey) ?? Infinity;
+      if (pSc && cacheAgeSec < 120) return; // buffer is fresh — skip network
 
       try {
         const [scRes, detRes, valRes] = await Promise.allSettled([
@@ -213,7 +204,7 @@ export default function ScorecardPage() {
           Cache.set(valKey, d);
         }
       } catch (e: any) {
-        setError(e.message);
+        if (!pSc) setError(e.message); // don't clobber shown buffer on bg-refetch error
       } finally {
         setLoading(false);
       }
@@ -417,7 +408,15 @@ export default function ScorecardPage() {
               </div>
             ) : (
               <div className="divide-y divide-cyan-900/30">
-                {detections.map((det, idx) => (
+                {detections.map((det, idx) => {
+                  const sev =
+                    det.severity ??
+                    ((det.drift_magnitude ?? 0) >= 4
+                      ? "high"
+                      : (det.drift_magnitude ?? 0) >= 3
+                        ? "medium"
+                        : "low");
+                  return (
                   <div key={idx} className="px-5 py-4">
                     <div className="flex items-start justify-between">
                       <div>
@@ -429,20 +428,22 @@ export default function ScorecardPage() {
                           <span className="text-white font-mono">
                             {det.current_value.toFixed(2)}
                           </span>{" "}
-                          (baseline: {det.baseline_value.toFixed(2)})
+                          <span className="text-amber-300">
+                            ({(det.drift_magnitude ?? 0).toFixed(1)}&sigma; from baseline)
+                          </span>
                         </p>
                       </div>
                       <span
                         className={cn(
                           "px-2 py-1 rounded text-xs font-bold uppercase",
-                          det.severity === "high"
+                          sev === "high"
                             ? "bg-red-900/50 text-red-300"
-                            : det.severity === "medium"
+                            : sev === "medium"
                               ? "bg-amber-900/50 text-amber-300"
                               : "bg-slate-700/50 text-slate-200",
                         )}
                       >
-                        {det.severity}
+                        {sev}
                       </span>
                     </div>
                     {det.recommendation && (
@@ -456,7 +457,8 @@ export default function ScorecardPage() {
                       </span>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

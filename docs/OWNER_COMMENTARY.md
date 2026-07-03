@@ -668,3 +668,29 @@ Also fix this item.
 
 
 **Quick replies/decisions:** “both backend and frontend build succeeded”
+
+## 2026-07-03 · session `5fdcae72` (appended 2026-07-03 13:37)
+
+
+**[08:43]** The recent nodes list is not available while you are on the topology screen and working through different nodes - it loads when you move away from the page and come back to it.
+
+
+**[08:52]** TYPES IN VIEW is relevant for the SEED NODE and must appear under it directly' the recent list needs to be at the bottom and should have a scroll bar.
+
+
+**[09:07]** gNB-821bd034 is reported as a phantom node in divergence, but in topology screen, the view under All / CMDB / Operational tabs never changes. If it is a phantom node, the topology screen should show it in CMDB view, but Operational view must be blank as it is not found in reality.
+
+
+**[09:19]** Most pages take a long time to load, is there a way to buffer them so the buffer loads instantly? Divergence page routinely takes about 15 seconds to load to show exactly the same info it showed a second ago. Same thing happens on incidents, scorecard and topology pages. We need some smart buffering, the user will refresh the screen when they want.
+
+
+**[09:30]** <!-- attach -->
+> One honest caveat I recorded: Operational scope matches fragment_entity_ref by exact identifier (it's UUID-keyed), so the demo flow is paste the full UUID for dark nodes; phantoms searched by name correctly return empty. If you later want a normal live entity searched by name to also register under Operational, I'd add a name→UUID resolve step — say the word. Otherwise this cleanly fixes the phantom/dark toggle. Deploy and confirm the three tabs now differ for gNB-821bd034.
+
+I want this bug fixed too.
+
+
+**[09:37]** The Geographic Map and Forced-directed graph toggle and other buttons around them on topology page hide behind the right hand panel when 'investigate with abeyance memory' option is chosen by the user. I think we need to place those buttons differently where they are always accessible. Use best UI/UX practice to implement the fix.
+
+
+**Quick replies/decisions:** “Continue from where you left off.” · “continue”

@@ -53,6 +53,11 @@ if (_hasWindow) {
   }
 }
 
+// Persist caps so one big payload (a topology graph, a records page) can never
+// blow the ~5MB localStorage budget and wipe everything.
+const MAX_ENTRY_BYTES = 256 * 1024; // skip persisting entries larger than this
+const MAX_TOTAL_BYTES = 4 * 1024 * 1024; // total persisted budget
+
 let _flushTimer: ReturnType<typeof setTimeout> | null = null;
 function _persist(): void {
   if (!_hasWindow || _flushTimer) return;
@@ -60,12 +65,21 @@ function _persist(): void {
   _flushTimer = setTimeout(() => {
     _flushTimer = null;
     try {
+      // Newest-first so the freshest small entries survive the budget.
+      const entries = [..._store.entries()].sort((a, b) => b[1].ts - a[1].ts);
       const obj: Record<string, unknown> = {};
-      for (const [k, v] of _store.entries()) obj[k] = v;
+      let total = 0;
+      for (const [k, v] of entries) {
+        const s = JSON.stringify(v);
+        if (s.length > MAX_ENTRY_BYTES) continue; // too big — in-memory only
+        if (total + s.length > MAX_TOTAL_BYTES) break; // budget exhausted
+        obj[k] = v;
+        total += s.length;
+      }
       window.localStorage.setItem(LS_KEY, JSON.stringify(obj));
     } catch {
-      // Quota exceeded or blocked — the in-memory cache still works. Drop the
-      // persisted blob so a partial/corrupt value never lingers.
+      // Still over quota — drop the blob rather than leaving a corrupt one.
+      // In-memory cache is unaffected.
       try {
         window.localStorage.removeItem(LS_KEY);
       } catch {
@@ -81,6 +95,15 @@ export function get<T>(key: string, ttl: number): T | null {
   if (!e) return null;
   if (Date.now() - e.ts > ttl) return null;
   return e.data;
+}
+
+/**
+ * Return cached data if present, IGNORING TTL. Use for instant "buffer" renders
+ * (show whatever we last had immediately) paired with a background revalidate.
+ */
+export function peek<T>(key: string): T | null {
+  const e = _store.get(key) as Entry<T> | undefined;
+  return e ? e.data : null;
 }
 
 /** Store data in the cache (and mirror to localStorage). */

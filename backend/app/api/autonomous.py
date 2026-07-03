@@ -41,10 +41,15 @@ router = APIRouter()
 # ── Server-side result caches ─────────────────────────────────────────────────
 # Keyed by tenant_id. Avoids repeated expensive DB queries across navigations
 # from different browser sessions (or page refreshes that bust the client cache).
+import os
 import time as _time
 
 _result_cache: dict = {}             # {cache_key: (result, monotonic_ts)}
-_CACHE_TTL = 120                     # seconds — recompute every 2 minutes
+# scorecard/detections aggregate 7 days of the ~9GB kpi_metrics table (~15s cold).
+# On historic/static datasets (e.g. six_telecom, Jan 2024) that result never
+# changes, so a 120s TTL recomputed the heavy scan every 2 minutes — the real
+# cause of the "slow scorecard every time". Default to 1h; override via env.
+_CACHE_TTL = int(os.environ.get("AUTONOMOUS_CACHE_TTL_SECONDS", "3600"))
 
 
 def _cache_get(key: str):
@@ -204,107 +209,84 @@ async def get_detections(
     current_user: User = Security(get_current_user, scopes=[AUTONOMOUS_READ]),
 ):
     """
-    List current KPI drift detections from real kpi_metrics data.
-    Uses z-score analysis (latest value vs 7-day baseline) to identify anomalies.
+    List current KPI drift detections. Reads the z-score anomalies that Abeyance
+    Memory already materialised at ingestion (small, indexed main-DB table)
+    rather than re-aggregating the kpi_metrics hypertable on every request.
     These are RECOMMENDATIONS only — no actions are executed automatically.
     """
-    from backend.app.core.database import metrics_session_maker
+    import re
 
-    service = AutonomousShieldService(async_session_maker)
     tenant_id = current_user.tenant_id or settings.default_tenant_id
 
-    # Server-side cache — this query scans the full kpi_metrics hypertable
+    # Cheap + cacheable: read the KPI anomalies Abeyance Memory already
+    # materialised at ingestion (a small, indexed main-DB table), instead of
+    # re-aggregating the ~9GB kpi_metrics hypertable (~15s) on every call. The
+    # anomalies are the same z-score-vs-baseline events, computed once during
+    # telemetry consumption. See value_methodology.md.
     cached = _cache_get(f"detections:{tenant_id}")
     if cached is not None:
         return cached
 
+    # Fragment raw_content is a fixed template (telemetry/fragment_bridge.py):
+    #   "KPI anomaly on entity <id> (<domain>): <kpi> = <value> (<z> standard
+    #    deviations from baseline). ..."
+    anomaly_re = re.compile(
+        r"on entity (\S+) \(([^)]*)\):\s*(\S+)\s*=\s*(-?[\d.]+)\s*\((-?[\d.]+)\s*standard deviations"
+    )
+
     detections: List[DriftPrediction] = []
-
     try:
-        async with metrics_session_maker() as session:
-            # Data-driven reference time — COALESCE avoids load-time artifacts
-            # (rows whose timestamp was set to server clock during bulk-load
-            # rather than the simulation date).
-            now_utc = datetime.now(timezone.utc)
-            cutoff_48h = now_utc - timedelta(hours=48)
-            ref_result = await session.execute(
-                text("""
-                    SELECT COALESCE(
-                        (SELECT MAX(timestamp) FROM kpi_metrics
-                         WHERE tenant_id = :tid AND timestamp < :cutoff),
-                        (SELECT MAX(timestamp) FROM kpi_metrics
-                         WHERE tenant_id = :tid)
-                    )
-                """),
-                {"tid": tenant_id, "cutoff": cutoff_48h},
-            )
-            ref_time = ref_result.scalar()
-            if not ref_time:
-                return detections
+        result = await db.execute(
+            text("""
+                SELECT raw_content, event_timestamp
+                FROM abeyance_fragment
+                WHERE tenant_id = :tid
+                  AND source_type = 'TELEMETRY_EVENT'
+                  AND raw_content LIKE 'KPI anomaly%'
+                ORDER BY event_timestamp DESC
+                LIMIT 300
+            """),
+            {"tid": tenant_id},
+        )
+        # Keep the strongest anomaly per (entity, metric).
+        best: dict = {}
+        for raw_content, event_ts in result.fetchall():
+            m = anomaly_re.search(raw_content or "")
+            if not m:
+                continue
+            entity_str, _domain, kpi_name, value_s, z_s = m.groups()
+            try:
+                value = float(value_s)
+                z = float(z_s)
+            except ValueError:
+                continue
+            key = (entity_str, kpi_name)
+            prev = best.get(key)
+            if prev is None or abs(z) > abs(prev[2]):
+                best[key] = (entity_str, kpi_name, z, value, event_ts)
 
-            baseline_start = ref_time - timedelta(days=7)
-            recent_start = ref_time - timedelta(hours=1)
-
-            # Get distinct (entity_id, kpi_name) with baseline stats and latest value
-            # in a single query for efficiency
-            drift_query = text("""
-                WITH baseline AS (
-                    SELECT entity_id, kpi_name,
-                           AVG(kpi_value) AS mean_val,
-                           STDDEV_POP(kpi_value) AS std_val
-                    FROM kpi_metrics
-                    WHERE tenant_id = :tid
-                      AND timestamp >= :baseline_start
-                      AND timestamp <= :ref_time
-                    GROUP BY entity_id, kpi_name
-                    HAVING STDDEV_POP(kpi_value) > 0
+        for entity_str, kpi_name, z, value, event_ts in sorted(
+            best.values(), key=lambda t: abs(t[2]), reverse=True
+        )[:20]:
+            try:
+                parsed_id = uuid.UUID(entity_str)
+            except (ValueError, AttributeError):
+                parsed_id = uuid.uuid5(uuid.NAMESPACE_OID, str(entity_str))
+            detections.append(DriftPrediction(
+                entity_id=parsed_id,
+                entity_name=str(entity_str),
+                metric_name=str(kpi_name),
+                current_value=value,
+                baseline_value=value,  # abeyance stores value + z-score, not the baseline mean
+                drift_magnitude=round(abs(z), 4),  # standardised deviation (sigma)
+                confidence=round(min(0.99, abs(z) / 5.0), 3),
+                detected_at=event_ts or datetime.now(timezone.utc),
+                ai_generated=True,
+                ai_watermark=(
+                    "Sourced from Abeyance Memory KPI-anomaly fragments "
+                    "(z-score vs running baseline). Advisory only."
                 ),
-                latest AS (
-                    SELECT DISTINCT ON (entity_id, kpi_name)
-                           entity_id, kpi_name, kpi_value, timestamp
-                    FROM kpi_metrics
-                    WHERE tenant_id = :tid
-                      AND timestamp >= :recent_start
-                    ORDER BY entity_id, kpi_name, timestamp DESC
-                )
-                SELECT l.entity_id, l.kpi_name, l.kpi_value, b.mean_val, b.std_val,
-                       ABS((l.kpi_value - b.mean_val) / b.std_val) AS abs_z
-                FROM latest l
-                JOIN baseline b ON l.entity_id = b.entity_id AND l.kpi_name = b.kpi_name
-                WHERE ABS((l.kpi_value - b.mean_val) / b.std_val) > 2.0
-                ORDER BY abs_z DESC
-                LIMIT 20
-            """)
-
-            result = await session.execute(drift_query, {
-                "tid": tenant_id,
-                "baseline_start": baseline_start,
-                "ref_time": ref_time,
-                "recent_start": recent_start,
-            })
-            rows = result.fetchall()
-
-            for entity_id_str, kpi_name, current_val, mean_val, std_val, abs_z in rows:
-                # Deterministic UUID from entity_id string
-                try:
-                    parsed_id = uuid.UUID(entity_id_str)
-                except (ValueError, AttributeError):
-                    parsed_id = uuid.uuid5(uuid.NAMESPACE_OID, str(entity_id_str))
-
-                detection = service.detect_drift(
-                    entity_id=parsed_id,
-                    entity_name=str(entity_id_str),
-                    metric_name=str(kpi_name),
-                    current_value=float(current_val),
-                    baseline_value=float(mean_val),
-                )
-                detection.ai_generated = True
-                detection.ai_watermark = (
-                    "Real-time KPI drift detection from kpi_metrics. "
-                    "Advisory only — requires human review before action."
-                )
-                detections.append(detection)
-
+            ))
     except Exception as e:
         logger.warning("Drift detection query failed: %s", e)
 
