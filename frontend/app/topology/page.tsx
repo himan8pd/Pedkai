@@ -983,7 +983,10 @@ export default function TopologyPage() {
                     <p className="text-white/60">If it appears under <span className="text-cyan-300">Operational</span>, it&apos;s a Dark Node.</p>
                   </>
                 ) : searchScope === "operational" ? (
-                  <p className="text-white">No operational signals or divergences match.</p>
+                  <>
+                    <p className="text-amber-300 font-semibold">No operational footprint</p>
+                    <p className="text-white/60">If it appears under <span className="text-cyan-300">CMDB</span>, it&apos;s a Phantom node.</p>
+                  </>
                 ) : (
                   <p className="text-white">No entities found.</p>
                 )}

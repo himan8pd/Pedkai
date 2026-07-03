@@ -509,35 +509,12 @@ async def search_entities(
                 })
                 seen.add(r[0])
 
-        # 2. Divergence entities (Dark/Phantom nodes, dark-attribute targets) —
-        #    these live in reconciliation_results and are often absent from CMDB.
-        if run_op and len(entities) < limit:
-            div = await db.execute(
-                text("""
-                    SELECT DISTINCT target_id, target_type, divergence_type
-                    FROM reconciliation_results
-                    WHERE tenant_id = :tid
-                      AND target_id ILIKE :q
-                      AND (entity_or_relationship = 'entity' OR entity_or_relationship IS NULL)
-                    LIMIT :limit
-                """),
-                {"tid": tenant_id, "q": search_term, "limit": limit},
-            )
-            for r in div.fetchall():
-                ident = r[0]
-                if not ident or ident in seen:
-                    continue
-                seen.add(ident)
-                entities.append({
-                    "id": ident, "name": ident, "entity_type": r[1] or "DARK",
-                    "external_id": ident, "status": r[2] or "divergence",
-                    "source": "divergence",
-                })
-                if len(entities) >= limit:
-                    break
-
-        # 3. Abeyance-evidenced entities — exact-identifier fallback (uses the
-        #    index) so a pasted full id resolves even if not in CMDB/divergence.
+        # 2. Operational footprint — entities with actual telemetry-derived
+        #    evidence (abeyance fragments). Deliberately NOT reconciliation_results:
+        #    that is the derived divergence catalog, so a Phantom node lives there
+        #    yet has zero real footprint. Using it would make a Phantom appear
+        #    "operational", breaking the CMDB-vs-Operational distinction. Match by
+        #    exact identifier (indexed) — the demo flow pastes a full id/UUID.
         if run_op and len(entities) < limit:
             ev = await db.execute(
                 text("""
@@ -554,9 +531,9 @@ async def search_entities(
                     continue
                 seen.add(ident)
                 entities.append({
-                    "id": ident, "name": ident, "entity_type": r[1] or "EVIDENCE",
-                    "external_id": ident, "status": "evidence",
-                    "source": "evidence",
+                    "id": ident, "name": ident, "entity_type": r[1] or "OPERATIONAL",
+                    "external_id": ident, "status": "operational",
+                    "source": "operational",
                 })
                 if len(entities) >= limit:
                     break
