@@ -475,29 +475,82 @@ async def search_entities(
     """
     search_term = f"%{q}%"
     try:
-        result = await db.execute(
+        entities: list[dict] = []
+        seen: set[str] = set()
+
+        # 1. CMDB entities — now matches the UUID id too, case-insensitive.
+        cmdb = await db.execute(
             text("""
-                SELECT id, name, entity_type, external_id, operational_status
+                SELECT id::text, name, entity_type, external_id, operational_status
                 FROM network_entities
                 WHERE tenant_id = :tid
-                  AND (name LIKE :q OR external_id LIKE :q OR entity_type LIKE :q)
+                  AND (id::text ILIKE :q OR name ILIKE :q
+                       OR external_id ILIKE :q OR entity_type ILIKE :q)
                 LIMIT :limit
             """),
             {"tid": tenant_id, "q": search_term, "limit": limit},
         )
-        rows = result.fetchall()
-        
-        entities = []
-        for r in rows:
+        for r in cmdb.fetchall():
             entities.append({
-                "id": str(r[0]),
-                "name": r[1],
-                "entity_type": r[2],
-                "external_id": r[3],
-                "status": r[4] or "unknown",
+                "id": r[0], "name": r[1] or r[0], "entity_type": r[2],
+                "external_id": r[3] or r[0], "status": r[4] or "unknown",
+                "source": "cmdb",
             })
-            
-        return {"tenant_id": tenant_id, "query": q, "results": entities}
+            seen.add(r[0])
+
+        # 2. Divergence entities (Dark/Phantom nodes, dark-attribute targets) —
+        #    these live in reconciliation_results and are often absent from CMDB.
+        if len(entities) < limit:
+            div = await db.execute(
+                text("""
+                    SELECT DISTINCT target_id, target_type, divergence_type
+                    FROM reconciliation_results
+                    WHERE tenant_id = :tid
+                      AND target_id ILIKE :q
+                      AND (entity_or_relationship = 'entity' OR entity_or_relationship IS NULL)
+                    LIMIT :limit
+                """),
+                {"tid": tenant_id, "q": search_term, "limit": limit},
+            )
+            for r in div.fetchall():
+                ident = r[0]
+                if not ident or ident in seen:
+                    continue
+                seen.add(ident)
+                entities.append({
+                    "id": ident, "name": ident, "entity_type": r[1] or "DARK",
+                    "external_id": ident, "status": r[2] or "divergence",
+                    "source": "divergence",
+                })
+                if len(entities) >= limit:
+                    break
+
+        # 3. Abeyance-evidenced entities — exact-identifier fallback (uses the
+        #    index) so a pasted full id resolves even if not in CMDB/divergence.
+        if len(entities) < limit:
+            ev = await db.execute(
+                text("""
+                    SELECT DISTINCT entity_identifier, entity_domain
+                    FROM fragment_entity_ref
+                    WHERE tenant_id = :tid AND entity_identifier = :exact
+                    LIMIT :limit
+                """),
+                {"tid": tenant_id, "exact": q, "limit": limit},
+            )
+            for r in ev.fetchall():
+                ident = r[0]
+                if not ident or ident in seen:
+                    continue
+                seen.add(ident)
+                entities.append({
+                    "id": ident, "name": ident, "entity_type": r[1] or "EVIDENCE",
+                    "external_id": ident, "status": "evidence",
+                    "source": "evidence",
+                })
+                if len(entities) >= limit:
+                    break
+
+        return {"tenant_id": tenant_id, "query": q, "results": entities[:limit]}
     except Exception as e:
         logger.error(f"Topology search failed: {e}")
         raise HTTPException(status_code=500, detail="Search failed")

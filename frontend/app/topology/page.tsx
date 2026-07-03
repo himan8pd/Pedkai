@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { ZoomIn, ZoomOut, Maximize2, Search, ArrowRight, Layers, Network, Map as MapIcon, GitGraph, Sparkles } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Search, Layers, Network, Map as MapIcon, GitGraph, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext";
@@ -37,6 +37,7 @@ interface SearchResult {
   entity_type: string;
   external_id: string;
   status: string;
+  source?: string;   // cmdb | divergence | evidence
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -852,25 +853,44 @@ export default function TopologyPage() {
             ) : searchResults.length > 0 ? (
               <div className="divide-y divide-cyan-900/20">
                 {searchResults.map(res => (
-                  <button
-                    key={res.id}
-                    onClick={() => {
-                        setSeedId(res.id);
+                  <div key={res.id} className="flex items-stretch hover:bg-white/5 transition-colors group">
+                    <button
+                      onClick={() => { setSeedId(res.id); setSearchQuery(""); }}
+                      className="flex-1 min-w-0 text-left px-4 py-3"
+                      title="Explore in topology graph"
+                    >
+                      <div className="font-medium text-sm text-white group-hover:text-cyan-400 truncate">
+                        {res.name}
+                      </div>
+                      <div className="text-xs text-white/80 mt-0.5 flex items-center gap-2">
+                        <span className="px-1.5 rounded bg-[#06203b] text-white font-mono text-[10px] shrink-0">
+                          {res.entity_type}
+                        </span>
+                        {res.source && res.source !== "cmdb" && (
+                          <span className="px-1.5 rounded bg-cyan-400/15 text-cyan-300 text-[10px] uppercase tracking-wide shrink-0">
+                            {res.source}
+                          </span>
+                        )}
+                        <span className="truncate">{res.external_id}</span>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setInvestigateEntity({
+                          id: res.id,
+                          name: res.name,
+                          entity_type: res.entity_type,
+                          status: res.status,
+                          external_id: res.external_id,
+                        } as TopologyEntity);
                         setSearchQuery("");
-                    }}
-                    className="w-full text-left px-4 py-3 hover:bg-white/5 transition-colors group"
-                  >
-                    <div className="font-medium text-sm text-white group-hover:text-cyan-400 flex items-center justify-between">
-                      <span className="truncate pr-2">{res.name}</span>
-                      <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </div>
-                    <div className="text-xs text-white/80 mt-0.5 flex items-center gap-2">
-                      <span className="px-1.5 rounded bg-[#06203b] text-white font-mono text-[10px]">
-                        {res.entity_type}
-                      </span>
-                      <span className="truncate">{res.external_id}</span>
-                    </div>
-                  </button>
+                      }}
+                      title="Investigate with Abeyance Memory"
+                      className="px-3 flex items-center text-cyan-400 hover:text-cyan-300 hover:bg-cyan-400/10 border-l border-cyan-900/30 shrink-0"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
