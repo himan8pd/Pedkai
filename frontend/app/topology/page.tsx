@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 import { useAuth } from "@/app/context/AuthContext";
 import { useTheme } from "@/app/context/ThemeContext";
 import EntityInvestigationPanel from "@/app/components/EntityInvestigationPanel";
+import * as Cache from "@/app/apiCache";
 
 interface TopologyEntity {
   id: string;
@@ -514,7 +515,23 @@ export default function TopologyPage() {
   // 2. Fetch Neighborhood Graph
   const fetchGraph = useCallback(async (seed: string, hopCount: number) => {
     if (!tenantId || !token) return;
-    setLoadingGraph(true);
+    const gKey = `topology:${tenantId}:${seed}:${hopCount}`;
+    const cachedG = Cache.get<{
+      entities: TopologyEntity[]; relationships: TopologyRelationship[];
+      shadowEntities: TopologyEntity[]; shadowRelationships: TopologyRelationship[];
+    }>(gKey, Cache.TTL.LONG);
+    if (cachedG) {
+      setEntities(cachedG.entities);
+      setRelationships(cachedG.relationships);
+      setShadowEntities(cachedG.shadowEntities);
+      setShadowRelationships(cachedG.shadowRelationships);
+      const sn = cachedG.entities.find((e) => e.id === seed);
+      if (sn) setSelectedEntity(sn);
+      setLoadingGraph(false);
+      if ((Cache.ageSeconds(gKey) ?? Infinity) < Cache.TTL.LONG / 2 / 1000) return; // fresh — skip network
+    } else {
+      setLoadingGraph(true);
+    }
     setError(null);
     try {
       const res = await authFetch(
@@ -522,43 +539,46 @@ export default function TopologyPage() {
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      
+
       const mappedEntities = (data.entities || []).map((e: any) => ({
         ...e,
         status: e.properties?.status ?? e.status ?? "unknown",
         external_id: e.external_id ?? e.id,
       }));
-      
+      const rels = data.relationships || [];
+
       setEntities(mappedEntities);
-      setRelationships(data.relationships || []);
-      
+      setRelationships(rels);
+
       // Auto-select the seed node
       const seedNode = mappedEntities.find((e: any) => e.id === seed);
       if (seedNode) setSelectedEntity(seedNode);
 
       // Fetch shadow topology overlay
+      let shEnt: TopologyEntity[] = [];
+      let shRel: TopologyRelationship[] = [];
       try {
         const shadowRes = await authFetch(
           `/api/v1/topology/${encodeURIComponent(tenantId)}/neighborhood-with-shadow/${encodeURIComponent(seed)}?hops=${hopCount}`,
         );
         if (shadowRes.ok) {
           const shadowData = await shadowRes.json();
-          setShadowEntities((shadowData.shadow_entities || []).map((e: any) => ({
-            ...e,
-            status: "inferred",
-          })));
-          setShadowRelationships(shadowData.shadow_relationships || []);
+          shEnt = (shadowData.shadow_entities || []).map((e: any) => ({ ...e, status: "inferred" }));
+          shRel = shadowData.shadow_relationships || [];
         }
       } catch {
         // Shadow data optional — fail silently
-        setShadowEntities([]);
-        setShadowRelationships([]);
       }
+      setShadowEntities(shEnt);
+      setShadowRelationships(shRel);
 
+      Cache.set(gKey, { entities: mappedEntities, relationships: rels, shadowEntities: shEnt, shadowRelationships: shRel });
     } catch (e: any) {
-      setError(e.message);
-      setEntities([]);
-      setRelationships([]);
+      if (!cachedG) {
+        setError(e.message);
+        setEntities([]);
+        setRelationships([]);
+      }
     } finally {
       setLoadingGraph(false);
     }

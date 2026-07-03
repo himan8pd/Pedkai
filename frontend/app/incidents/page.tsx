@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/app/context/AuthContext";
+import * as Cache from "@/app/apiCache";
 
 interface Incident {
   id: string;
@@ -120,9 +121,20 @@ type SortableColumn = "title" | "priority" | "severity" | "status" | "created_at
 
 export default function IncidentsPage() {
   const { token, tenantId, authFetch } = useAuth();
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+
+  // Cache keys for the default (mount) view, so revisits render instantly.
+  const _defListKey = tenantId ? `incidents:${tenantId}:1:all:all:created_at:desc:` : "";
+  const _defSumKey = tenantId ? `incidents-summary:${tenantId}:all` : "";
+  const _cachedList = tenantId
+    ? Cache.get<{ incidents: Incident[]; total: number }>(_defListKey, Cache.TTL.MEDIUM)
+    : null;
+  const _cachedSum = tenantId
+    ? Cache.get<{ total: number; closed: number; counts: Record<string, number> }>(_defSumKey, Cache.TTL.MEDIUM)
+    : null;
+
+  const [incidents, setIncidents] = useState<Incident[]>(_cachedList?.incidents ?? []);
+  const [totalCount, setTotalCount] = useState(_cachedList?.total ?? 0);
+  const [loading, setLoading] = useState(!_cachedList);
   const [error, setError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterPriority, setFilterPriority] = useState<string>("all");
@@ -134,27 +146,39 @@ export default function IncidentsPage() {
   const [searchInput, setSearchInput] = useState("");
 
   // Priority card counts -- fetched separately (unfiltered by status/search/page)
-  const [priorityCounts, setPriorityCounts] = useState<Record<string, number>>({});
-  const [summaryTotal, setSummaryTotal] = useState(0);
+  const [priorityCounts, setPriorityCounts] = useState<Record<string, number>>(_cachedSum?.counts ?? {});
+  const [summaryTotal, setSummaryTotal] = useState(_cachedSum?.total ?? 0);
   const [summaryOpen, setSummaryOpen] = useState(0);
-  const [summaryClosed, setSummaryClosed] = useState(0);
+  const [summaryClosed, setSummaryClosed] = useState(_cachedSum?.closed ?? 0);
 
   // Fetch summary counts (total, open, closed) and priority breakdown
   const fetchSummary = useCallback(async () => {
     if (!token || !tenantId) return;
+    const sumKey = `incidents-summary:${tenantId}:${filterStatus}`;
+    const cachedSum = Cache.get<{ total: number; closed: number; counts: Record<string, number> }>(
+      sumKey, Cache.TTL.MEDIUM,
+    );
+    if (cachedSum) {
+      setSummaryTotal(cachedSum.total);
+      setSummaryClosed(cachedSum.closed);
+      setPriorityCounts(cachedSum.counts);
+      if ((Cache.ageSeconds(sumKey) ?? Infinity) < 60) return; // fresh — skip network
+    }
     try {
       // Total and closed counts (always unfiltered for the header line)
       const [countRes, closedRes] = await Promise.all([
         authFetch("/api/v1/incidents?page=1&page_size=1"),
         authFetch("/api/v1/incidents?page=1&page_size=1&status=closed"),
       ]);
+      let sumTotal = cachedSum?.total ?? 0;
+      let sumClosed = cachedSum?.closed ?? 0;
       if (countRes.ok) {
-        const countData = await countRes.json();
-        setSummaryTotal(countData.total);
+        sumTotal = (await countRes.json()).total;
+        setSummaryTotal(sumTotal);
       }
       if (closedRes.ok) {
-        const closedData = await closedRes.json();
-        setSummaryClosed(closedData.total);
+        sumClosed = (await closedRes.json()).total;
+        setSummaryClosed(sumClosed);
       }
 
       // Priority counts — respect the selected tab filter
@@ -183,6 +207,7 @@ export default function IncidentsPage() {
         counts[sevToPri[sev]] = priResults[idx]?.total ?? 0;
       });
       setPriorityCounts(counts);
+      Cache.set(sumKey, { total: sumTotal, closed: sumClosed, counts });
     } catch {
       // Silently fail -- summary is non-critical
     }
@@ -191,7 +216,16 @@ export default function IncidentsPage() {
   // Fetch paginated incidents
   const fetchIncidents = useCallback(async () => {
     if (!token || !tenantId) return;
-    setLoading(true);
+    const listKey = `incidents:${tenantId}:${page}:${filterStatus}:${filterPriority}:${sortBy}:${sortDir}:${searchText}`;
+    const cached = Cache.get<{ incidents: Incident[]; total: number }>(listKey, Cache.TTL.MEDIUM);
+    if (cached) {
+      setIncidents(cached.incidents);
+      setTotalCount(cached.total);
+      setLoading(false);
+      if ((Cache.ageSeconds(listKey) ?? Infinity) < 60) return; // fresh — skip network
+    } else {
+      setLoading(true);
+    }
     setError("");
     try {
       const params = new URLSearchParams({
@@ -229,8 +263,9 @@ export default function IncidentsPage() {
       const data = await res.json();
       setIncidents(data.incidents);
       setTotalCount(data.total);
+      Cache.set(listKey, { incidents: data.incidents, total: data.total });
     } catch (err: any) {
-      setError(err.message ?? "Failed to load incidents");
+      if (!cached) setError(err.message ?? "Failed to load incidents");
     } finally {
       setLoading(false);
     }

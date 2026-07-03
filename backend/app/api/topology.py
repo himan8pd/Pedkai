@@ -14,10 +14,10 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.database import get_db
+from backend.app.core.database import get_db, get_metrics_db
 from backend.app.core.security import (
     TOPOLOGY_READ,
     TOPOLOGY_READ_FULL,
@@ -469,6 +469,7 @@ async def search_entities(
     scope: str = Query("all", description="Where to search: all | cmdb | operational"),
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
+    metrics_db: AsyncSession = Depends(get_metrics_db),
     current_user: User = Security(get_current_user, scopes=[TOPOLOGY_READ]),
 ):
     """
@@ -509,34 +510,70 @@ async def search_entities(
                 })
                 seen.add(r[0])
 
-        # 2. Operational footprint — entities with actual telemetry-derived
-        #    evidence (abeyance fragments). Deliberately NOT reconciliation_results:
-        #    that is the derived divergence catalog, so a Phantom node lives there
-        #    yet has zero real footprint. Using it would make a Phantom appear
-        #    "operational", breaking the CMDB-vs-Operational distinction. Match by
-        #    exact identifier (indexed) — the demo flow pastes a full id/UUID.
+        # 2. Operational footprint — entities actually observed in operations.
+        #    "Observed" = the entity's UUID appears in kpi_metrics or
+        #    telco_events_alarms (metrics DB) — the reconciliation engine's own
+        #    definition. This registers ANY live entity (with OR without anomalies)
+        #    when searched by name, and correctly EXCLUDES a Phantom node (declared
+        #    in CMDB, zero footprint). Deliberately NOT reconciliation_results (the
+        #    derived divergence catalog, where a Phantom lives).
         if run_op and len(entities) < limit:
-            ev = await db.execute(
+            # Resolve candidate UUIDs: CMDB entities matching the query (so name /
+            # external-id search works), plus the raw query as a possible dark-node
+            # UUID that is absent from the CMDB.
+            candidates: dict[str, dict] = {}
+            cand_rows = await db.execute(
                 text("""
-                    SELECT DISTINCT entity_identifier, entity_domain
-                    FROM fragment_entity_ref
-                    WHERE tenant_id = :tid AND entity_identifier = :exact
-                    LIMIT :limit
+                    SELECT id::text, name, entity_type, external_id, operational_status
+                    FROM network_entities
+                    WHERE tenant_id = :tid
+                      AND (id::text ILIKE :q OR name ILIKE :q
+                           OR external_id ILIKE :q OR entity_type ILIKE :q)
+                    LIMIT 200
                 """),
-                {"tid": tenant_id, "exact": q, "limit": limit},
+                {"tid": tenant_id, "q": search_term},
             )
-            for r in ev.fetchall():
-                ident = r[0]
-                if not ident or ident in seen:
-                    continue
-                seen.add(ident)
-                entities.append({
-                    "id": ident, "name": ident, "entity_type": r[1] or "OPERATIONAL",
-                    "external_id": ident, "status": "operational",
-                    "source": "operational",
-                })
-                if len(entities) >= limit:
-                    break
+            for r in cand_rows.fetchall():
+                candidates[r[0]] = {
+                    "id": r[0], "name": r[1] or r[0], "entity_type": r[2],
+                    "external_id": r[3] or r[0], "status": r[4] or "operational",
+                }
+            # Raw query as a dark-node UUID candidate — only if it looks like a
+            # UUID. A non-UUID name is never an entity_id (and would break the
+            # metrics IN filter on a uuid-typed column); named entities are
+            # already resolved to their UUID via network_entities above.
+            _raw_is_uuid = True
+            try:
+                UUID(q)
+            except (ValueError, AttributeError, TypeError):
+                _raw_is_uuid = False
+            if _raw_is_uuid and q not in candidates:
+                candidates[q] = {
+                    "id": q, "name": q, "entity_type": "OPERATIONAL",
+                    "external_id": q, "status": "operational",
+                }
+
+            # Which candidates are actually observed in operational signals?
+            observed: set[str] = set()
+            cand_ids = list(candidates.keys())
+            if cand_ids:
+                try:
+                    for table in ("kpi_metrics", "telco_events_alarms"):
+                        stmt = text(
+                            f"SELECT DISTINCT entity_id FROM {table} "  # noqa: S608 - fixed table names
+                            "WHERE tenant_id = :tid AND entity_id IN :ids"
+                        ).bindparams(bindparam("ids", expanding=True))
+                        mr = await metrics_db.execute(stmt, {"tid": tenant_id, "ids": cand_ids})
+                        observed.update(str(row[0]) for row in mr.fetchall())
+                except Exception as e:
+                    logger.warning(f"Operational-scope metrics lookup failed: {e}")
+
+            for cid, c in candidates.items():
+                if cid in observed and cid not in seen:
+                    seen.add(cid)
+                    entities.append({**c, "source": "operational"})
+                    if len(entities) >= limit:
+                        break
 
         return {"tenant_id": tenant_id, "query": q, "results": entities[:limit]}
     except Exception as e:
