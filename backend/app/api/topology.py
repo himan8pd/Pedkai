@@ -466,41 +466,52 @@ async def get_topology_health(
 async def search_entities(
     tenant_id: str,
     q: str = Query(..., min_length=2, description="Search term (name, external_id, or entity_type)"),
+    scope: str = Query("all", description="Where to search: all | cmdb | operational"),
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Security(get_current_user, scopes=[TOPOLOGY_READ]),
 ):
     """
-    Search for entities in the CMDB. Used to find a seed node for topology exploration.
+    Search for entities. ``scope`` controls the identifier space:
+      - ``cmdb``        : only CMDB-declared entities (network_entities).
+      - ``operational`` : only entities known from operations (reconciliation
+                          divergences + abeyance evidence).
+      - ``all``         : both (default).
+
+    Searching ``cmdb`` and ``operational`` separately proves a Dark Node —
+    present in operations, absent from the CMDB.
     """
     search_term = f"%{q}%"
+    run_cmdb = scope != "operational"
+    run_op = scope != "cmdb"
     try:
         entities: list[dict] = []
         seen: set[str] = set()
 
-        # 1. CMDB entities — now matches the UUID id too, case-insensitive.
-        cmdb = await db.execute(
-            text("""
-                SELECT id::text, name, entity_type, external_id, operational_status
-                FROM network_entities
-                WHERE tenant_id = :tid
-                  AND (id::text ILIKE :q OR name ILIKE :q
-                       OR external_id ILIKE :q OR entity_type ILIKE :q)
-                LIMIT :limit
-            """),
-            {"tid": tenant_id, "q": search_term, "limit": limit},
-        )
-        for r in cmdb.fetchall():
-            entities.append({
-                "id": r[0], "name": r[1] or r[0], "entity_type": r[2],
-                "external_id": r[3] or r[0], "status": r[4] or "unknown",
-                "source": "cmdb",
-            })
-            seen.add(r[0])
+        # 1. CMDB entities — matches the UUID id too, case-insensitive.
+        if run_cmdb:
+            cmdb = await db.execute(
+                text("""
+                    SELECT id::text, name, entity_type, external_id, operational_status
+                    FROM network_entities
+                    WHERE tenant_id = :tid
+                      AND (id::text ILIKE :q OR name ILIKE :q
+                           OR external_id ILIKE :q OR entity_type ILIKE :q)
+                    LIMIT :limit
+                """),
+                {"tid": tenant_id, "q": search_term, "limit": limit},
+            )
+            for r in cmdb.fetchall():
+                entities.append({
+                    "id": r[0], "name": r[1] or r[0], "entity_type": r[2],
+                    "external_id": r[3] or r[0], "status": r[4] or "unknown",
+                    "source": "cmdb",
+                })
+                seen.add(r[0])
 
         # 2. Divergence entities (Dark/Phantom nodes, dark-attribute targets) —
         #    these live in reconciliation_results and are often absent from CMDB.
-        if len(entities) < limit:
+        if run_op and len(entities) < limit:
             div = await db.execute(
                 text("""
                     SELECT DISTINCT target_id, target_type, divergence_type
@@ -527,7 +538,7 @@ async def search_entities(
 
         # 3. Abeyance-evidenced entities — exact-identifier fallback (uses the
         #    index) so a pasted full id resolves even if not in CMDB/divergence.
-        if len(entities) < limit:
+        if run_op and len(entities) < limit:
             ev = await db.execute(
                 text("""
                     SELECT DISTINCT entity_identifier, entity_domain

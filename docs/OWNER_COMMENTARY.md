@@ -527,3 +527,144 @@ nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
 cf-ray: a14d05e3bc3cc8a4-ZRH
 
 {"entity_identifier":"60a97b6f-71d7-78e1-891f-3e4e2e3370c2","tenant_id":"six_telecom","embedding_status":"ready","fragment_count":15,"embedded_count":15,"evidence":[{"fragment_id":"e287eed9-2cfb-4c15-ba8f-c6d826e23572","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-13T06:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_packet_loss_pct = 0.0065 (3.0 standard deviations from baseline). Timestamp: 20…","primary_failure_mode":null,"embedded":true},{"fragment_id":"5b78527f-4c7c-44b7-991a-e076b8b2c047","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-12T23:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_uptime_seconds = 3597.8259 (-4.8 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true},{"fragment_id":"0f4195e7-5c5b-42a9-a92f-92acf0dc181f","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-12T23:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_packet_loss_pct = 0.0065 (3.7 standard deviations from baseline). Timestamp: 20…","primary_failure_mode":null,"embedded":true},{"fragment_id":"bc9503b6-609e-4451-9857-4ad449f5e736","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-12T23:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_availability_pct = 99.9396 (-4.8 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true},{"fragment_id":"7a8c736e-b0cf-4634-9370-3ae79c0b4a7f","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-12T15:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): cos_queue_drops = 2.0000 (4.0 standard deviations from baseline). Timestamp: 2026-04-12…","primary_failure_mode":null,"embedded":true},{"fragment_id":"2d3b9da9-3842-4203-900c-af661d108242","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-12T11:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_availability_pct = 99.9705 (-3.2 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true},{"fragment_id":"53a13461-e35f-45ad-8127-ac3705fee1e1","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-12T11:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_uptime_seconds = 3598.9382 (-3.2 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true},{"fragment_id":"7b894ec8-23c4-4527-b19a-392d36760b73","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-12T10:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): cos_queue_drops = 1.0000 (3.0 standard deviations from baseline). Timestamp: 2026-04-12…","primary_failure_mode":null,"embedded":true},{"fragment_id":"2b8b45b2-03fb-4deb-9366-1d243cc82373","source_type":"TELEMETRY_EVENT","event_timestamp":"2026-04-02T01:00:00Z","snap_status":"ACTIVE","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): cos_queue_drops = 1.0000 (3.2 standard deviations from baseline). Timestamp: 2026-04-02…","primary_failure_mode":null,"embedded":true},{"fragment_id":"d0ce111b-ae54-4347-9a7b-bcb594a1903a","source_type":"TELEMETRY_EVENT","event_timestamp":"2024-01-03T10:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): vpn_prefix_count = 434.4478 (-3.1 standard deviations from baseline). Timestamp: 2024-0…","primary_failure_mode":null,"embedded":true},{"fragment_id":"5bf97179-8a3f-4821-baf5-75468e3f89c2","source_type":"TELEMETRY_EVENT","event_timestamp":"2024-01-03T00:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_uptime_seconds = 3598.8071 (-3.2 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true},{"fragment_id":"76553603-64c2-4565-9923-f8c70ee3a75b","source_type":"TELEMETRY_EVENT","event_timestamp":"2024-01-03T00:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_availability_pct = 99.9669 (-3.2 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true},{"fragment_id":"d07e875c-43e9-4db2-bdd9-90a0553d5f75","source_type":"TELEMETRY_EVENT","event_timestamp":"2024-01-02T23:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_packet_loss_pct = 0.0077 (3.3 standard deviations from baseline). Timestamp: 20…","primary_failure_mode":null,"embedded":true},{"fragment_id":"8b35978b-6367-4b16-b703-c71be24fc390","source_type":"TELEMETRY_EVENT","event_timestamp":"2024-01-02T13:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_uptime_seconds = 3599.0261 (-3.3 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true},{"fragment_id":"e322a32b-bc34-44b8-bcae-5f2f39a08af9","source_type":"TELEMETRY_EVENT","event_timestamp":"2024-01-02T13:00:00Z","snap_status":"SNAPPED","current_decay_score":0.6,"snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_availability_pct = 99.9729 (-3.3 standard deviations from baseline). Timestamp:…","primary_failure_mode":null,"embedded":true}],"snaps":[{"fragment_id":"8b35978b-6367-4b16-b703-c71be24fc390","matched_fragment_id":"e322a32b-bc34-44b8-bcae-5f2f39a08af9","matched_snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_availability_pct = 99.9729 (-3.3 standard deviations from baseline). Timestamp:…","matched_source_type":"TELEMETRY_EVENT","failure_mode":"IDENTITY_MUTATION","final_score":1.0,"decision":"SNAP","evaluated_at":"2026-03-27T02:19:55.001276Z","dimensions":{"semantic":null,"topological":null,"temporal":1.0,"operational":null,"entity_overlap":1.0},"dominant_driver":"entity_overlap","why":"Driven by shared entities (1.00), time proximity (1.00) under the IDENTITY_MUTATION hypothesis"},{"fragment_id":"0f4195e7-5c5b-42a9-a92f-92acf0dc181f","matched_fragment_id":"bc9503b6-609e-4451-9857-4ad449f5e736","matched_snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_availability_pct = 99.9396 (-4.8 standard deviations from baseline). Timestamp:…","matched_source_type":"TELEMETRY_EVENT","failure_mode":"DARK_ATTRIBUTE","final_score":1.0,"decision":"SNAP","evaluated_at":"2026-04-29T17:05:45.984774Z","dimensions":{"semantic":null,"topological":null,"temporal":0.9999999999999999,"operational":null,"entity_overlap":1.0},"dominant_driver":"entity_overlap","why":"Driven by shared entities (1.00), time proximity (1.00) under the DARK_ATTRIBUTE hypothesis"},{"fragment_id":"2d3b9da9-3842-4203-900c-af661d108242","matched_fragment_id":"7b894ec8-23c4-4527-b19a-392d36760b73","matched_snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): cos_queue_drops = 1.0000 (3.0 standard deviations from baseline). Timestamp: 2026-04-12…","matched_source_type":"TELEMETRY_EVENT","failure_mode":"IDENTITY_MUTATION","final_score":0.934435,"decision":"SNAP","evaluated_at":"2026-04-28T11:21:36.674790Z","dimensions":{"semantic":null,"topological":null,"temporal":0.6853329007572843,"operational":null,"entity_overlap":1.0},"dominant_driver":"entity_overlap","why":"Driven by shared entities (1.00), time proximity (0.69) under the IDENTITY_MUTATION hypothesis"},{"fragment_id":"76553603-64c2-4565-9923-f8c70ee3a75b","matched_fragment_id":"d07e875c-43e9-4db2-bdd9-90a0553d5f75","matched_snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_packet_loss_pct = 0.0077 (3.3 standard deviations from baseline). Timestamp: 20…","matched_source_type":"TELEMETRY_EVENT","failure_mode":"IDENTITY_MUTATION","final_score":0.86975,"decision":"SNAP","evaluated_at":"2026-03-27T14:47:03.586418Z","dimensions":{"semantic":null,"topological":null,"temporal":0.32638656389895504,"operational":null,"entity_overlap":1.0},"dominant_driver":"entity_overlap","why":"Driven by shared entities (1.00), time proximity (0.33) under the IDENTITY_MUTATION hypothesis"},{"fragment_id":"7a8c736e-b0cf-4634-9370-3ae79c0b4a7f","matched_fragment_id":"53a13461-e35f-45ad-8127-ac3705fee1e1","matched_snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_uptime_seconds = 3598.9382 (-3.2 standard deviations from baseline). Timestamp:…","matched_source_type":"TELEMETRY_EVENT","failure_mode":"IDENTITY_MUTATION","final_score":0.823676,"decision":"SNAP","evaluated_at":"2026-04-28T19:58:52.576535Z","dimensions":{"semantic":null,"topological":null,"temporal":0.6835557012363419,"operational":null,"entity_overlap":1.0},"dominant_driver":"entity_overlap","why":"Driven by shared entities (1.00), time proximity (0.68) under the IDENTITY_MUTATION hypothesis"},{"fragment_id":"e287eed9-2cfb-4c15-ba8f-c6d826e23572","matched_fragment_id":"5b78527f-4c7c-44b7-991a-e076b8b2c047","matched_snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_uptime_seconds = 3597.8259 (-4.8 standard deviations from baseline). Timestamp:…","matched_source_type":"TELEMETRY_EVENT","failure_mode":"IDENTITY_MUTATION","final_score":0.591435,"decision":"SNAP","evaluated_at":"2026-04-30T15:38:27.044619Z","dimensions":{"semantic":null,"topological":null,"temporal":0.25293428865278883,"operational":null,"entity_overlap":1.0},"dominant_driver":"entity_overlap","why":"Driven by shared entities (1.00), time proximity (0.25) under the IDENTITY_MUTATION hypothesis"},{"fragment_id":"d0ce111b-ae54-4347-9a7b-bcb594a1903a","matched_fragment_id":"5bf97179-8a3f-4821-baf5-75468e3f89c2","matched_snippet":"KPI anomaly on entity 60a97b6f-71d7-78e1-891f-3e4e2e3370c2 (enterprise): circuit_uptime_seconds = 3598.8071 (-3.2 standard deviations from baseline). Timestamp:…","matched_source_type":"TELEMETRY_EVENT","failure_mode":"IDENTITY_MUTATION","final_score":0.515842,"decision":"SNAP","evaluated_at":"2026-03-28T06:18:14.964226Z","dimensions":{"semantic":null,"topological":null,"temporal":0.8203379978880048,"operational":null,"entity_overlap":1.0},"dominant_driver":"entity_overlap","why":"Driven by shared entities (1.00), time proximity (0.82) under the IDENTITY_MUTATION hypothesis"}],"divergence":[]}[2026-07-02 10:38:49] ubuntu@pedkai-app:~/Pedkai$
+
+## 2026-07-02 · session `5fdcae72` (appended 2026-07-03 09:20)
+
+
+**[18:13]** committed,  backend rebuilt, results: [2026-07-02 18:12:42] ubuntu@pedkai-app:~/Pedkai$ curl -s "https://pedk.ai/api/v1/abeyance/entity/60a97b6f-71d7-78e1-891f-3e4e2e3370c2/investigation"   -H "Authorization: Bearer $TTOKEN" | jq '.snaps[0] | {failure_mode, final_score, rescored_live, dimensions, why}'
+{
+  "failure_mode": "IDENTITY_MUTATION",
+  "final_score": 0.999051,
+  "rescored_live": true,
+  "dimensions": {
+    "semantic": 0.9924057234358713,
+    "topological": 0.9999999997450272,
+    "temporal": 1,
+    "operational": null,
+    "entity_overlap": 1
+  },
+  "why": "Driven by shared entities (1.00), shared topology (1.00) under the IDENTITY_MUTATION hypothesis"
+}
+[2026-07-02 18:12:50] ubuntu@pedkai-app:~/Pedkai$ curl -s "https://pedk.ai/api/v1/abeyance/entity/0008e2ef-df05-7be6-8d3f-fbddc64968a9/investigation"   -H "Authorization: Bearer $TTOKEN" | jq '{fragment_count, embedding_status, divergence}'
+{
+  "fragment_count": null,
+  "embedding_status": null,
+  "divergence": null
+}
+
+
+**[00:26]** {
+  "fragment_count": 0,
+  "divergence": [
+    {
+      "divergence_type": "dark_node",
+      "confidence": 0.85,
+      "description": "Entity '0008e2ef-df05-7be6-8d3f-fbddc64968a9' observed in operationalsignals (kpi_telemetry) but absent from CMDB. Likely an unregistered network element.",
+      "attribute_name": null,
+      "cmdb_value": null,
+      "observed_value": null
+    }
+  ]
+}
+[2026-07-03 00:25:57] ubuntu@pedkai-app:~/Pedkai$
+
+
+**[00:31]** The search does not work using UUIDs, I am trying a record CELL-LTE-e40c8d6c-S1-L900 which was flagged for a dark attribute, but not searching on UUID is a major pain point of the Topology Explorer
+
+
+**[01:11]** It works, but I need your help to find the best examples that we can use for demo. Can you look up the data through the parquet files available on this machine at '/Volumes/Projects/Pedkai Data Store/six_telecom/output' and find the best examples for demo in each category. Return the specific identifiers that will allow us to demo pedkai in the best light.
+
+
+**[01:19]** == A: richest abeyance entities (full evidence + T-VEC snaps) ==
+  60a97b6f-71d7-78e1-891f-3e4e2e3370c2  frags=15
+  71971ad2-7f22-7f4c-b754-b68b52dca9a9  frags=14
+  d57c7ba7-3bb0-7f1a-8cf7-f5d32c30f7fa  frags=14
+  41116ff0-ea1f-7186-904e-95b7487fb7e8  frags=13
+  592be30e-9061-7526-af71-bc1929d69cef  frags=13
+  70b983ba-6163-79a3-b536-218da6d6dc0d  frags=13
+  3564609c-33d7-7740-bb9c-63d79dd2d330  frags=13
+  422eb829-add9-70f6-b5b8-28fa97e778e7  frags=13
+  671f2ea1-d721-7fc9-9e33-16eda137b902  frags=12
+  46248e12-8dfe-77b9-8dac-7260e2c6f1b9  frags=12
+  0b6f86ec-2df9-7bb5-a13a-aaca330e9d31  frags=12
+  2cd3b7e2-f069-7520-ad91-c772bd5b9d80  frags=12
+
+== B: divergence + abeyance HEROES (badge AND evidence) ==
+  dark_node        71971ad2-7f22-7f4c-b754-b68b52dca9a9  frags=14
+  dark_node        422eb829-add9-70f6-b5b8-28fa97e778e7  frags=13
+  dark_node        fffda334-8f61-70af-82de-9105c5658c41  frags=11
+  dark_node        9aaaa007-5022-7224-9ce2-5ca076d98d08  frags=11
+  dark_node        eb61bd34-f1b7-7759-b24a-43f5b3171ffe  frags=11
+  dark_node        6fcb727d-e5ca-713a-95b5-0a5bdb7ad941  frags=11
+  dark_node        673a9931-8e80-7af0-a79f-62522f9e55e8  frags=10
+  dark_node        3bc6bf52-9842-7667-9e72-ec71b52f84e7  frags=10
+  dark_node        b79828eb-9cce-754d-8333-89e9b8019cb0  frags=10
+  dark_node        20de81e9-20ae-7f43-aebe-aa2f71235a37  frags=10
+  dark_node        289f31c1-b8bd-79dc-b322-358ab1c68467  frags=10
+  dark_node        6a86d9b8-c257-7956-9763-1b84e8efd0f5  frags=10
+  dark_node        3df12a7b-bebf-7793-93ab-34642a156809  frags=10
+  dark_node        52025e40-6c98-7f99-9c53-8a524e48ac72  frags=10
+  dark_node        b0e43716-daa7-7e65-8ff6-796a2cc33bd7  frags=10
+[2026-07-03 01:19:30] ubuntu@pedkai-app:~/Pedkai$
+
+
+**[01:22]** <!-- attach -->
+> For dark_attribute/identity_mutation/phantom, reconciliation keys by cell name while abeyance keys by UUID, so they don't join — a real product gap for the "unified" goal (worth a fix later).
+
+I don't agree with that statement. UUID is also present even though gNB CELL-LTE etc identifiers are available in CMDB.
+
+
+**[01:25]** per divergence_type: how target_id resolves against network_entities
+  dark_edge        n= 197261  by_uuid=      0  by_name=      0
+  phantom_edge     n= 140903  by_uuid=      0  by_name=      0
+  phantom_node     n=  81442  by_uuid=  81442  by_name=      0
+  dark_attribute   n=   7050  by_uuid=   7050  by_name=      0
+  dark_node        n=   6744  by_uuid=      0  by_name=      0
+
+sample raw target_ids per type:
+  dark_attribute   27a6d4c5-6213-7842-bb30-935f9b741a69
+  dark_edge        ffa68554-b184-7040-a1a7-761c8358e7bb
+  dark_node        78b2d30e-9db7-7ef5-9554-5c7b95fb7514
+  phantom_edge     ed610ecd-aeba-7bcf-89b0-757cf1d8f9b9
+  phantom_node     c75f1efa-9c2e-79d6-a13b-f1e18b1e67a0
+[2026-07-03 01:25:15] ubuntu@pedkai-app:~/Pedkai$
+
+
+**[01:30]** Topology Explorer has another key painpoint, the items you have searched previously are not stored and visible as recent searches in the empty space below. That will save me so much pain to remember the right examples. Also, makes the user experience better as the system helps users remember things.
+
+
+**[01:38]** One more fix required to topology explorer. The search function only works once when you go to topology tab, subsequent search attempts return no result. If I move away from the topology tab and come back and search again, then it works, but once only again. Fix that. Also, the examples of hero samples you mention above - list below - are are circuits but classified as dark_node and in the investigation panel show Phantom_CI Identity_Mutation and many other types of errors that make no sense. 
+== B: divergence + abeyance HEROES (badge AND evidence) ==
+  dark_node        71971ad2-7f22-7f4c-b754-b68b52dca9a9  frags=14
+  dark_node        422eb829-add9-70f6-b5b8-28fa97e778e7  frags=13
+  dark_node        fffda334-8f61-70af-82de-9105c5658c41  frags=11
+  dark_node        9aaaa007-5022-7224-9ce2-5ca076d98d08  frags=11
+  dark_node        eb61bd34-f1b7-7759-b24a-43f5b3171ffe  frags=11
+  dark_node        6fcb727d-e5ca-713a-95b5-0a5bdb7ad941  frags=11
+  dark_node        673a9931-8e80-7af0-a79f-62522f9e55e8  frags=10
+  dark_node        3bc6bf52-9842-7667-9e72-ec71b52f84e7  frags=10
+  dark_node        b79828eb-9cce-754d-8333-89e9b8019cb0  frags=10
+  dark_node        20de81e9-20ae-7f43-aebe-aa2f71235a37  frags=10
+  dark_node        289f31c1-b8bd-79dc-b322-358ab1c68467  frags=10
+  dark_node        6a86d9b8-c257-7956-9763-1b84e8efd0f5  frags=10
+  dark_node        3df12a7b-bebf-7793-93ab-34642a156809  frags=10
+  dark_node        52025e40-6c98-7f99-9c53-8a524e48ac72  frags=10
+  dark_node        b0e43716-daa7-7e65-8ff6-796a2cc33bd7  frags=10
+
+
+**[01:46]** But why is circuit telemetry being reported as meaningful fragment for a dark node identification? I don't understand what the dark node report is showing in real telco terms.
+
+
+**[01:49]** <Entity 71971ad2 shows up in the telemetry stream but has no CMDB record → dark node.> -- but to prove that the system should allow me to demo CMDB search and telemetry search side by side. Where can I search a node only in CMDB on the UI? That makes dark node functionality demo almost impossible to do sensibly.
+
+
+**[01:52]** <!-- attach -->
+> Operational evidence (the abeyance/T-VEC value): the anomaly timeline, and the snaps reframed as "Correlated anomalies — T-VEC links these 14 events as one recurring issue, not 14 separate tickets." The dimension bars then honestly explain why they're linked (semantic similarity of the fault text, same entity, time proximity) — which is the real "connect scattered evidence" value, correctly labeled.
+> The fix, concretely: stop labeling telemetry-anomaly snaps with the CMDB failure-mode taxonomy (DARK_NODE/PHANTOM_CI/etc.) — those only make sense for fragments actually classified with a divergence. For unclassified telemetry, label the snap as "Correlated anomaly / recurring signal" and let the dimension bars carry the explanation. That both fixes your confusion and is more honest than my alignment hack.
+> 
+> Want me to implement that reframe — split the drawer into Inventory divergence vs Operational evidence, and relabel telemetry snaps as correlated-evidence instead of failure modes? It's a small backend label change plus a drawer section re-layout, and it makes the dark-node demo tell the truth cleanly.
+
+Also fix this item.
+
+
+**Quick replies/decisions:** “both backend and frontend build succeeded”

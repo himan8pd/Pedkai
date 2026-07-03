@@ -453,7 +453,8 @@ class EntitySnapCard(BaseModel):
     matched_fragment_id: UUID   # the other fragment it snapped to
     matched_snippet: str = ""
     matched_source_type: Optional[str] = None
-    failure_mode: Optional[str] = None
+    failure_mode: Optional[str] = None          # raw scoring profile (provenance)
+    relation_label: str = "Correlated anomaly"  # honest display label
     final_score: float = 0.0
     decision: Optional[str] = None
     evaluated_at: Optional[datetime] = None

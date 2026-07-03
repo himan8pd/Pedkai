@@ -682,6 +682,18 @@ _DIM_LABEL = {
     "entity_overlap": "shared entities",
 }
 
+# Map a reconciliation divergence type to the snap-engine weight profile, so an
+# entity's snaps are labelled coherently with its actual divergence instead of an
+# arbitrary highest-scoring profile (the profiles are scoring weights, not
+# per-snap diagnoses; unclassified telemetry fragments get scored under all 5).
+_DIV_TO_PROFILE = {
+    "dark_node": "DARK_NODE",
+    "dark_edge": "DARK_EDGE",
+    "dark_attribute": "DARK_ATTRIBUTE",
+    "identity_mutation": "IDENTITY_MUTATION",
+    "phantom_node": "PHANTOM_CI",
+}
+
 
 def _snippet(raw: Optional[str], n: int = 160) -> str:
     if not raw:
@@ -722,11 +734,13 @@ def _pad_or_trim(vec: list, target_dim: int) -> list:
     return vec[:target_dim]
 
 
-def _derive_why(dims: dict, weights_used: Optional[dict], failure_mode: Optional[str]) -> tuple[Optional[str], str]:
+def _derive_why(dims: dict, weights_used: Optional[dict]) -> tuple[Optional[str], str]:
     """Turn per-dimension scores into a dominant driver + plain-English reason.
 
     Ranks dimensions by contribution (weight x score) so entity_overlap (often
-    1.0) does not automatically dominate. Deterministic, no LLM.
+    1.0) does not automatically dominate. Deterministic, no LLM. The reason is
+    stated in terms of what links the evidence — no internal scoring-profile
+    jargon.
     """
     contrib: dict = {}
     for dim, key in _DIM_WEIGHT_KEY.items():
@@ -735,12 +749,11 @@ def _derive_why(dims: dict, weights_used: Optional[dict], failure_mode: Optional
         if score is not None and weight:
             contrib[dim] = float(weight) * float(score)
     if not contrib:
-        return None, f"Snapped under the {failure_mode or 'default'} hypothesis"
+        return None, "Linked by shared entity"
     ranked = sorted(contrib, key=contrib.get, reverse=True)
     dominant = ranked[0]
     parts = [f"{_DIM_LABEL[d]} ({dims[d]:.2f})" for d in ranked[:2] if dims.get(d) is not None]
-    fm = f" under the {failure_mode} hypothesis" if failure_mode else ""
-    return dominant, f"Driven by {', '.join(parts)}{fm}"
+    return dominant, f"Linked by {', '.join(parts)}"
 
 
 async def _entity_fragment_ids(session: AsyncSession, tenant_id: str, entity_identifier: str) -> list:
@@ -948,6 +961,15 @@ async def investigate_entity(
 
     snap_engine = _get_services()["snap_engine_v3"]
 
+    # Profiles that match this entity's actual divergence(s) — snaps prefer these
+    # so labels stay coherent (a dark_node's snaps read as DARK_NODE, not a
+    # random highest-scoring profile like PHANTOM_CI/IDENTITY_MUTATION).
+    preferred_profiles = {
+        _DIV_TO_PROFILE[d.divergence_type]
+        for d in divergence
+        if d.divergence_type in _DIV_TO_PROFILE
+    }
+
     snaps = []
     for r, ours, other in pair_list:
         of = frag_by_id.get(ours)
@@ -970,9 +992,11 @@ async def investigate_entity(
                 scored = snap_engine._score_pair(
                     of, mf, ent_map.get(ours, set()), ent_map.get(other, set()),
                 )
-                chosen = next(
-                    (s for s in scored if s["failure_mode_profile"] == fmode), None
-                ) or (max(scored, key=lambda s: s["final_score"]) if scored else None)
+                if scored:
+                    pref = [s for s in scored if s["failure_mode_profile"] in preferred_profiles]
+                    chosen = max(pref or scored, key=lambda s: s["final_score"])
+                else:
+                    chosen = None
                 if chosen:
                     dims = {
                         "semantic": chosen["score_semantic"],
@@ -988,13 +1012,20 @@ async def investigate_entity(
             except Exception:
                 logger.warning("Live snap re-score failed", exc_info=True)
 
-        dominant, why = _derive_why(dims, weights, fmode)
+        dominant, why = _derive_why(dims, weights)
+        # Honest label: use a REAL failure-mode classification only if one of the
+        # fragments actually carries one; unclassified telemetry (KPI anomalies)
+        # is a correlated-evidence link, not a CMDB failure mode.
+        classified = (_primary_failure_mode(of) if of is not None else None) or \
+                     (_primary_failure_mode(mf) if mf is not None else None)
+        relation_label = classified.replace("_", " ").title() if classified else "Correlated anomaly"
         snaps.append(EntitySnapCard(
             fragment_id=ours,
             matched_fragment_id=other,
             matched_snippet=_snippet(mf.raw_content) if mf else "",
             matched_source_type=mf.source_type if mf else None,
             failure_mode=fmode,
+            relation_label=relation_label,
             final_score=final,
             decision=r.decision,
             evaluated_at=r.evaluated_at,

@@ -24,6 +24,7 @@ interface SnapCard {
   matched_snippet: string;
   matched_source_type: string | null;
   failure_mode: string | null;
+  relation_label: string;
   final_score: number;
   decision: string | null;
   evaluated_at: string | null;
@@ -179,36 +180,52 @@ export default function EntityInvestigationPanel({
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" /> {error}
           </div>
         ) : data ? (
-          <div className="p-4 space-y-5">
-            {/* Divergence badges */}
-            {data.divergence.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] uppercase tracking-wider text-white/50 font-bold">CMDB Divergence</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {data.divergence.map((d, i) => (
-                    <span
-                      key={i}
-                      title={d.description ?? ""}
-                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border ${DIVERGENCE_STYLE[d.divergence_type] ?? "bg-slate-500/15 text-slate-300 border-slate-500/40"}`}
-                    >
-                      {d.divergence_type.replace(/_/g, " ")}
-                      <span className="opacity-70">{Math.round((d.confidence ?? 0) * 100)}%</span>
-                    </span>
-                  ))}
-                </div>
-                {data.divergence.find((d) => d.attribute_name) && (
-                  <div className="text-[11px] text-white/60 space-y-0.5 mt-1">
-                    {data.divergence.filter((d) => d.attribute_name).map((d, i) => (
-                      <div key={i}>
-                        <span className="text-white/80">{d.attribute_name}:</span>{" "}
-                        CMDB <span className="text-rose-300">{d.cmdb_value}</span> vs observed{" "}
-                        <span className="text-emerald-300">{d.observed_value}</span>
-                      </div>
+          <div className="p-4 space-y-6">
+            {/* ── SECTION: Inventory divergence (CMDB reconciliation) ── */}
+            <section className="space-y-2">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
+                <h4 className="text-[11px] uppercase tracking-wider text-white/70 font-bold">Inventory divergence</h4>
+              </div>
+              <p className="text-[10px] text-white/40">What the CMDB gets wrong — reconciliation vs. reality</p>
+              {data.divergence.length > 0 ? (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.divergence.map((d, i) => (
+                      <span
+                        key={i}
+                        title={d.description ?? ""}
+                        className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border ${DIVERGENCE_STYLE[d.divergence_type] ?? "bg-slate-500/15 text-slate-300 border-slate-500/40"}`}
+                      >
+                        {d.divergence_type.replace(/_/g, " ")}
+                        <span className="opacity-70">{Math.round((d.confidence ?? 0) * 100)}%</span>
+                      </span>
                     ))}
                   </div>
-                )}
+                  {data.divergence.find((d) => d.attribute_name) && (
+                    <div className="text-[11px] text-white/60 space-y-0.5 mt-1">
+                      {data.divergence.filter((d) => d.attribute_name).map((d, i) => (
+                        <div key={i}>
+                          <span className="text-white/80">{d.attribute_name}:</span>{" "}
+                          CMDB <span className="text-rose-300">{d.cmdb_value}</span> vs observed{" "}
+                          <span className="text-emerald-300">{d.observed_value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-white/50 text-xs">No CMDB divergence recorded for this entity.</p>
+              )}
+            </section>
+
+            {/* ── SECTION: Operational evidence (Abeyance Memory + T-VEC) ── */}
+            <section className="space-y-3 pt-3 border-t border-cyan-900/30">
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-cyan-300" />
+                <h4 className="text-[11px] uppercase tracking-wider text-white/70 font-bold">Operational evidence</h4>
               </div>
-            )}
+              <p className="text-[10px] text-white/40">Accumulated by Abeyance Memory · linked by T-VEC</p>
 
             {/* Embedding status */}
             <div className="flex items-center justify-between text-[11px] rounded-lg bg-[#06203b] border border-cyan-900/30 px-3 py-2">
@@ -225,16 +242,16 @@ export default function EntityInvestigationPanel({
             {/* Snap "why" cards */}
             <div className="space-y-2">
               <p className="text-[10px] uppercase tracking-wider text-white/50 font-bold">
-                What snaps to this entity — and why ({data.snaps.length})
+                Correlated evidence — what T-VEC links here ({data.snaps.length})
               </p>
               {data.snaps.length === 0 ? (
-                <p className="text-white/50 text-xs">No snaps recorded for this entity.</p>
+                <p className="text-white/50 text-xs">No correlated evidence yet.</p>
               ) : (
                 data.snaps.map((s, i) => (
                   <div key={i} className="rounded-lg bg-[#06203b] border border-cyan-900/30 p-3 space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-white/80">
-                        {s.failure_mode}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/80">
+                        {s.relation_label}
                       </span>
                       <div className="flex items-center gap-2">
                         {s.rescored_live && (
@@ -287,6 +304,7 @@ export default function EntityInvestigationPanel({
                 ))}
               </div>
             </div>
+            </section>
           </div>
         ) : null}
       </div>
