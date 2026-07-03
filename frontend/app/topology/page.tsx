@@ -479,6 +479,38 @@ export default function TopologyPage() {
     if (recentsKey) { try { localStorage.removeItem(recentsKey); } catch {} }
   }, [recentsKey]);
 
+  // Shared row for the Recent lists (empty-state + while-exploring panel)
+  const renderRecentRow = (res: SearchResult) => (
+    <div key={res.id} className="flex items-stretch hover:bg-white/5 transition-colors group">
+      <button
+        onClick={() => { pushRecent(res); setSeedId(res.id); }}
+        className="flex-1 min-w-0 text-left px-4 py-2"
+        title="Explore in topology graph"
+      >
+        <div className="font-medium text-sm text-white group-hover:text-cyan-400 truncate">{res.name}</div>
+        <div className="text-xs text-white/70 mt-0.5 flex items-center gap-2">
+          <span className="px-1.5 rounded bg-[#06203b] text-white font-mono text-[10px] shrink-0">{res.entity_type}</span>
+          {res.source && res.source !== "cmdb" && (
+            <span className="px-1.5 rounded bg-cyan-400/15 text-cyan-300 text-[10px] uppercase tracking-wide shrink-0">{res.source}</span>
+          )}
+        </div>
+      </button>
+      <button
+        onClick={() => {
+          pushRecent(res);
+          setInvestigateEntity({
+            id: res.id, name: res.name, entity_type: res.entity_type,
+            status: res.status, external_id: res.external_id,
+          } as TopologyEntity);
+        }}
+        title="Investigate with Abeyance Memory"
+        className="px-3 flex items-center text-cyan-400 hover:text-cyan-300 hover:bg-cyan-400/10 border-l border-cyan-900/30 shrink-0"
+      >
+        <Sparkles className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
   // 2. Fetch Neighborhood Graph
   const fetchGraph = useCallback(async (seed: string, hopCount: number) => {
     if (!tenantId || !token) return;
@@ -1061,6 +1093,26 @@ export default function TopologyPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
+              {/* Recent — quick-jump to other entities while exploring */}
+              {recents.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] uppercase tracking-wider text-white/50 font-bold flex items-center gap-1.5">
+                      <History className="w-3 h-3" /> Recent
+                    </span>
+                    <button
+                      onClick={clearRecents}
+                      className="text-[10px] text-white/50 hover:text-white underline underline-offset-2"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="rounded-lg border border-cyan-900/30 divide-y divide-cyan-900/20 max-h-44 overflow-y-auto">
+                    {recents.map(renderRecentRow)}
+                  </div>
+                </div>
+              )}
+
               {/* Entity types legend for current view */}
               <p className="text-[10px] uppercase tracking-wider text-white font-bold mb-2">
                 Types in View
