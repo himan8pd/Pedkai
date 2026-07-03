@@ -1093,26 +1093,6 @@ export default function TopologyPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-              {/* Recent — quick-jump to other entities while exploring */}
-              {recents.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] uppercase tracking-wider text-white/50 font-bold flex items-center gap-1.5">
-                      <History className="w-3 h-3" /> Recent
-                    </span>
-                    <button
-                      onClick={clearRecents}
-                      className="text-[10px] text-white/50 hover:text-white underline underline-offset-2"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="rounded-lg border border-cyan-900/30 divide-y divide-cyan-900/20 max-h-44 overflow-y-auto">
-                    {recents.map(renderRecentRow)}
-                  </div>
-                </div>
-              )}
-
               {/* Entity types legend for current view */}
               <p className="text-[10px] uppercase tracking-wider text-white font-bold mb-2">
                 Types in View
@@ -1167,6 +1147,26 @@ export default function TopologyPage() {
                 </div>
               </div>
             </div>
+
+            {/* Recent — pinned at the bottom, scrollable, available while exploring */}
+            {recents.length > 0 && (
+              <div className="border-t border-cyan-900/40 bg-[#06203b]">
+                <div className="px-4 pt-3 pb-1 flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-wider text-white/50 font-bold flex items-center gap-1.5">
+                    <History className="w-3 h-3" /> Recent
+                  </span>
+                  <button
+                    onClick={clearRecents}
+                    className="text-[10px] text-white/50 hover:text-white underline underline-offset-2"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="divide-y divide-cyan-900/20 max-h-52 overflow-y-auto">
+                  {recents.map(renderRecentRow)}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
