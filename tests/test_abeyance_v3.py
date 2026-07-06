@@ -272,13 +272,20 @@ class TestEnrichmentChainV3:
         assert key is not None
         assert len(key) == 64
 
-    def test_dedup_key_none_without_source_ref(self):
+    def test_dedup_key_content_fallback_without_source_ref(self):
+        # BLK-03: a missing source_ref no longer yields None — a content-based
+        # key is derived so ref-less sources still dedup deterministically.
         from backend.app.services.abeyance.enrichment_chain_v3 import EnrichmentChainV3
         from backend.app.services.abeyance.events import ProvenanceLogger
         chain = EnrichmentChainV3(provenance=ProvenanceLogger())
         ts = datetime(2026, 3, 16, 12, 0, 0, tzinfo=timezone.utc)
-        key = chain._compute_dedup_key("t1", "ALARM", None, ts)
-        assert key is None
+        key_a = chain._compute_dedup_key("t1", "ALARM", None, ts, raw_content="same content")
+        key_b = chain._compute_dedup_key("t1", "ALARM", None, ts, raw_content="same content")
+        key_c = chain._compute_dedup_key("t1", "ALARM", None, ts, raw_content="different content")
+        assert key_a is not None
+        assert len(key_a) == 64
+        assert key_a == key_b
+        assert key_a != key_c
 
 
 # ---------------------------------------------------------------------------
