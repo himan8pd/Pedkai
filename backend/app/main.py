@@ -136,6 +136,15 @@ async def lifespan(app: FastAPI):
 
     tvec_warmup_task = asyncio.create_task(_warmup_tvec())
 
+    # Start periodic job runner (decay/maintenance/retention/etc. auto-discovery)
+    periodic_tasks: list[asyncio.Task] = []
+    try:
+        from backend.app.workers.periodic_jobs import start_periodic_jobs
+
+        periodic_tasks = await start_periodic_jobs()
+    except Exception as e:
+        logger.error(f"Failed to start periodic jobs: {e}", exc_info=True)
+
     yield
     # Shutdown
     logger.info(f"👋 Shutting down {settings.app_name}")
@@ -179,6 +188,14 @@ async def lifespan(app: FastAPI):
             await sleeping_cell_task
         except Exception:
             pass
+
+    # Stop periodic job runner
+    try:
+        from backend.app.workers.periodic_jobs import stop_periodic_jobs
+
+        await stop_periodic_jobs(periodic_tasks)
+    except Exception:
+        pass
 
     # Cancel consumer task
     if not consumer_task.done():
