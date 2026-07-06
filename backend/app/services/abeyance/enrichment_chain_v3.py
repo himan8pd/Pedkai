@@ -131,7 +131,7 @@ class EnrichmentChainV3:
         polarity = self._detect_polarity(raw_content)
 
         # Deduplication key
-        dedup_key = self._compute_dedup_key(tenant_id, source_type, source_ref, event_ts)
+        dedup_key = self._compute_dedup_key(tenant_id, source_type, source_ref, event_ts, raw_content=raw_content)
 
         # Determine base relevance
         defaults = SOURCE_TYPE_DEFAULTS.get(source_type, {"base_relevance": 0.7})
@@ -581,8 +581,11 @@ class EnrichmentChainV3:
 
     def _compute_dedup_key(
         self, tenant_id: str, source_type: str, source_ref: Optional[str], event_ts: datetime,
+        *, raw_content: str = "",
     ) -> Optional[str]:
         if not source_ref:
-            return None
+            content_digest = hashlib.sha256(raw_content.encode()).hexdigest()[:16]
+            raw = f"{tenant_id}:{source_type}:{content_digest}:{event_ts.isoformat()}"
+            return hashlib.sha256(raw.encode()).hexdigest()[:64]
         raw = f"{tenant_id}:{source_type}:{source_ref}:{event_ts.isoformat()}"
         return hashlib.sha256(raw.encode()).hexdigest()[:64]
