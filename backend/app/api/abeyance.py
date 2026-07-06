@@ -74,6 +74,40 @@ def _resolve_tenant(current_user: User, query_tenant: str | None) -> str:
     return tid
 
 
+# Normalise legacy short mask keys to canonical dimension names so old and new
+# snap records classify identically.
+_MASK_KEY_ALIASES = {
+    "sem": "semantic",
+    "topo": "topological",
+    "temp": "temporal",
+    "oper": "operational",
+}
+
+
+def _classify_sufficiency(masks: dict | None) -> str:
+    """Classify how much per-dimension evidence backed a snap decision.
+
+    Normalises legacy short keys (sem/topo/temp/oper) to canonical names, counts
+    the dimensions flagged active (True), and always counts entity_overlap as an
+    active dimension (it is present for every scored pair).
+
+    Returns "full" (>=4 dims), "partial" (2-3 dims), or "minimal" (<=1 dim).
+    """
+    active: set[str] = {"entity_overlap"}
+    if masks:
+        for key, value in masks.items():
+            if not value:
+                continue
+            name = _MASK_KEY_ALIASES.get(key, key)
+            active.add(name)
+    count = len(active)
+    if count >= 4:
+        return "full"
+    if count >= 2:
+        return "partial"
+    return "minimal"
+
+
 def _primary_failure_mode(fragment: AbeyanceFragmentORM) -> Optional[str]:
     """Get the primary failure mode from a fragment's tags."""
     tags = fragment.failure_mode_tags or []
@@ -293,6 +327,8 @@ async def get_snap_history(
             score_entity_overlap=r.score_entity_overlap,
             threshold_applied=r.threshold_applied,
             decision=r.decision,
+            masks_active=r.masks_active,
+            evidence_sufficiency=_classify_sufficiency(r.masks_active),
         ))
     return snaps
 

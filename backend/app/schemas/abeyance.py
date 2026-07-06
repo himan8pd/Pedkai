@@ -263,6 +263,10 @@ class SnapHistoryEntry(BaseModel):
     score_entity_overlap: Optional[float] = None
     threshold_applied: Optional[float] = None
     decision: Optional[str] = None
+    # Which scoring dimensions had valid embeddings for this pair (v3),
+    # plus a coarse classification of how much evidence backed the decision.
+    masks_active: Optional[dict] = None
+    evidence_sufficiency: Optional[str] = None
 
     class Config:
         from_attributes = True
