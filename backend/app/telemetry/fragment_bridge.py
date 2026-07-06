@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -35,6 +36,9 @@ from backend.app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Log an ERROR every N dropped events (queue-full backpressure signal).
+DROP_LOG_EVERY = int(os.environ.get("FRAGMENT_BRIDGE_DROP_LOG_EVERY", "100"))
 
 # ---------------------------------------------------------------------------
 # Alarm → natural language template (Face 1: "What it says")
@@ -184,6 +188,11 @@ class TelemetryFragmentBridge:
             self._enqueued += 1
         except asyncio.QueueFull:
             self._dropped += 1
+            if self._dropped % DROP_LOG_EVERY == 1:
+                logger.error(
+                    "Fragment bridge queue full — %d events dropped so far",
+                    self._dropped,
+                )
 
     def enqueue_anomaly(
         self,
@@ -210,6 +219,15 @@ class TelemetryFragmentBridge:
             self._enqueued += 1
         except asyncio.QueueFull:
             self._dropped += 1
+            if self._dropped % DROP_LOG_EVERY == 1:
+                logger.error(
+                    "Fragment bridge queue full — %d events dropped so far",
+                    self._dropped,
+                )
+
+    def stats(self) -> dict:
+        """Expose live counters for observability."""
+        return {"dropped": self._dropped, "queue_size": self._queue.qsize()}
 
     # -- Background worker ------------------------------------------------
 
