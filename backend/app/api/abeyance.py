@@ -87,7 +87,7 @@ def _primary_failure_mode(fragment: AbeyanceFragmentORM) -> Optional[str]:
 # POST /ingest
 # ---------------------------------------------------------------------------
 
-@router.post("/ingest", response_model=AbeyanceFragmentResponse, status_code=201)
+@router.post("/ingest", response_model=dict, status_code=201)
 async def ingest_evidence(
     payload: RawEvidence,
     db: AsyncSession = Depends(get_db),
@@ -126,6 +126,12 @@ async def ingest_evidence(
     )
     await db.flush()
 
+    # Track processing outcomes so callers can tell whether post-storage
+    # evaluation succeeded (the fragment itself is always stored either way).
+    errors: list[str] = []
+    snap_evaluation_status = "ok"
+    cluster_detection_status = "ok"
+
     # Run snap evaluation
     try:
         snap_result = await snap_engine.evaluate(
@@ -142,7 +148,11 @@ async def ingest_evidence(
             },
         )
     except Exception as e:
-        logger.warning("Snap evaluation failed (fragment stored): %s", e)
+        logger.error(
+            "Snap evaluation failed (fragment stored): %s", e, exc_info=True
+        )
+        snap_evaluation_status = "failed"
+        errors.append(f"snap_evaluation: {e}")
 
     # Check accumulation clusters (best-effort)
     try:
@@ -152,9 +162,18 @@ async def ingest_evidence(
             trigger_fragment_id=fragment.id,
         )
     except Exception as e:
-        logger.warning("Cluster detection failed: %s", e)
+        logger.error("Cluster detection failed: %s", e, exc_info=True)
+        cluster_detection_status = "failed"
+        errors.append(f"cluster_detection: {e}")
 
-    return AbeyanceFragmentResponse.model_validate(fragment)
+    return {
+        **AbeyanceFragmentResponse.model_validate(fragment).model_dump(),
+        "processing": {
+            "snap_evaluation": snap_evaluation_status,
+            "cluster_detection": cluster_detection_status,
+            "errors": errors,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
