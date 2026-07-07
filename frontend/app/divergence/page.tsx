@@ -271,6 +271,23 @@ function ConfBadge({ value }: { value: number }) {
   );
 }
 
+// ── Low-data-confidence pill (UX-01b) ───────────────────────────────────────
+// PRV-03 annotates phantom findings whose entity type has little peer signal
+// coverage; surface an honest caveat so an operator can tell "decommissioned"
+// from "we never loaded its telemetry".
+function LowDataBadge({ extra }: { extra?: any }) {
+  if (!extra?.low_data_confidence) return null;
+  const pct = Math.round((extra.peer_coverage ?? 0) * 100);
+  return (
+    <span
+      title={`Peer coverage: ${pct}% — absence of signal may reflect missing telemetry, not a phantom`}
+      className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium text-amber-300 bg-amber-500/15 border border-amber-500/40"
+    >
+      LOW DATA
+    </span>
+  );
+}
+
 // ── Score badge (evaluation) ────────────────────────────────────────────────
 function ScoreBadge({ label, value }: { label: string; value: number | null }) {
   if (value === null || value === undefined) return null;
@@ -959,6 +976,7 @@ export default function DivergencePage() {
                                   {meta?.label}
                                 </span>
                                 <ConfBadge value={d.confidence} />
+                                <LowDataBadge extra={d.extra} />
                                 {d.entity_name && (
                                   <EntityLink
                                     targetId={d.target_id}
@@ -1336,6 +1354,7 @@ export default function DivergencePage() {
                               </td>
                               <td className="px-4 py-2 text-xs">
                                 <ConfBadge value={r.confidence ?? 0} />
+                                <LowDataBadge extra={r.extra} />
                               </td>
                               <td className="px-4 py-2 text-white/80 text-xs max-w-md">
                                 <span className="line-clamp-2 leading-relaxed">
