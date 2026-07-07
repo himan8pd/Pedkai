@@ -45,10 +45,20 @@ from backend.app.schemas.abeyance import (
     RawEvidence,
     SnapHistoryEntry,
 )
-from backend.app.services.abeyance import create_abeyance_services
+from backend.app.services.abeyance import (
+    create_abeyance_services,
+    _DisabledMechanism,
+)
 
 logger = get_logger(__name__)
 router = APIRouter()
+
+# Experimental (unvalidated) discovery mechanisms. When disabled via the
+# ABEYANCE_EXPERIMENTAL_MECHANISMS env flag, the factory substitutes a
+# _DisabledMechanism stub; /discovery/status labels these explicitly.
+EXPERIMENTAL_MECHANISM_NAMES = frozenset(
+    {"meta_memory", "counterfactual_sim", "expectation_violation", "pattern_compressor"}
+)
 
 # ---------------------------------------------------------------------------
 # Service singleton (created once, shared across requests)
@@ -551,7 +561,18 @@ async def discovery_status(
     mechanisms = {}
     for name in mechanism_names:
         svc = services.get(name)
-        mechanisms[name] = "available" if svc is not None else "unavailable"
+        if svc is None:
+            mechanisms[name] = "unavailable"
+        elif name in EXPERIMENTAL_MECHANISM_NAMES:
+            # A stub instance means the mechanism is gated off; a real instance
+            # means it was explicitly enabled via ABEYANCE_EXPERIMENTAL_MECHANISMS.
+            mechanisms[name] = (
+                "experimental_disabled"
+                if isinstance(svc, _DisabledMechanism)
+                else "experimental_enabled"
+            )
+        else:
+            mechanisms[name] = "available"
 
     return {
         "tenant_id": tid,

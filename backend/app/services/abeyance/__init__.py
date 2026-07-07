@@ -53,6 +53,73 @@ from backend.app.services.abeyance.discovery.counterfactual_sim import Counterfa
 from backend.app.services.abeyance.discovery.meta_memory import MetaMemoryService
 from backend.app.services.abeyance.discovery.evolutionary_patterns import EvolutionaryPatternService
 
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+# Experimental discovery mechanisms that are not yet validated. They are gated
+# behind the ABEYANCE_EXPERIMENTAL_MECHANISMS csv env var (default "" = all
+# disabled). When disabled, a _DisabledMechanism stub is substituted so the
+# discovery loop runs end-to-end without exercising the unvalidated code paths.
+EXPERIMENTAL_MECHANISMS = frozenset(
+    {"meta_memory", "counterfactual_sim", "expectation_violation", "pattern_compressor"}
+)
+
+
+class _DisabledMechanism:
+    """Inert stand-in for an experimental mechanism that is turned off.
+
+    Every async method returns a benign, side-effect-free value ({} / None)
+    matching what the discovery loop expects (e.g. compute_bias/run_batch are
+    consumed via len(...), so they must return a dict). A DEBUG line is logged
+    once per call so the disabled path is observable without noise.
+    """
+
+    def __init__(self, mechanism_name: str):
+        self._mechanism_name = mechanism_name
+
+    async def _noop(self, method: str, result):
+        logger.debug(
+            "Experimental mechanism '%s' is disabled; %s is a no-op",
+            self._mechanism_name,
+            method,
+        )
+        return result
+
+    # meta_memory (MetaMemoryService)
+    async def compute_bias(self, *args, **kwargs) -> dict:
+        return await self._noop("compute_bias", {})
+
+    async def check_activation(self, *args, **kwargs) -> bool:
+        return await self._noop("check_activation", False)
+
+    async def record_outcome(self, *args, **kwargs) -> None:
+        return await self._noop("record_outcome", None)
+
+    # counterfactual_sim (CounterfactualSimulator)
+    async def run_batch(self, *args, **kwargs) -> dict:
+        return await self._noop("run_batch", {})
+
+    async def enqueue_candidate(self, *args, **kwargs):
+        return await self._noop("enqueue_candidate", None)
+
+    # expectation_violation (ExpectationViolationDetector)
+    async def check_transition(self, *args, **kwargs):
+        return await self._noop("check_transition", None)
+
+    # pattern_compressor (PatternCompressor)
+    async def analyze(self, *args, **kwargs):
+        return await self._noop("analyze", None)
+
+
+def _experimental_enabled() -> frozenset:
+    """Parse ABEYANCE_EXPERIMENTAL_MECHANISMS (csv) into a set of names."""
+    raw = os.environ.get("ABEYANCE_EXPERIMENTAL_MECHANISMS", "")
+    return frozenset(
+        name.strip() for name in raw.split(",") if name.strip()
+    )
+
 
 def create_abeyance_services(
     redis_client=None,
@@ -109,16 +176,36 @@ def create_abeyance_services(
 
     # Layer 3
     hypothesis_generator = HypothesisGenerator(tslam_service=tslam)
-    expectation_violation = ExpectationViolationDetector(temporal_sequence)
     causal_direction = CausalDirectionTester()
 
-    # Layer 4
-    pattern_compressor = PatternCompressor()
-    counterfactual_sim = CounterfactualSimulator(snap_engine_v3)
-
     # Layer 5
-    meta_memory = MetaMemoryService()
     evolutionary_patterns = EvolutionaryPatternService()
+
+    # Experimental mechanisms — constructed for real only when explicitly named
+    # in ABEYANCE_EXPERIMENTAL_MECHANISMS; otherwise a _DisabledMechanism stub is
+    # used so the unvalidated code paths stay dormant.
+    enabled = _experimental_enabled()
+
+    expectation_violation = (
+        ExpectationViolationDetector(temporal_sequence)
+        if "expectation_violation" in enabled
+        else _DisabledMechanism("expectation_violation")
+    )
+    pattern_compressor = (
+        PatternCompressor()
+        if "pattern_compressor" in enabled
+        else _DisabledMechanism("pattern_compressor")
+    )
+    counterfactual_sim = (
+        CounterfactualSimulator(snap_engine_v3)
+        if "counterfactual_sim" in enabled
+        else _DisabledMechanism("counterfactual_sim")
+    )
+    meta_memory = (
+        MetaMemoryService()
+        if "meta_memory" in enabled
+        else _DisabledMechanism("meta_memory")
+    )
 
     # Discovery loop orchestrator
     discovery_loop = DiscoveryLoop(
