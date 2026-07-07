@@ -110,6 +110,8 @@ temporal_factor = clamp(age_factor * (1 + change_bonus) * diurnal, 0.0, 1.0)
 
 ### 2.3 Multiple Comparisons Correction (New)
 
+Superseded --- see §17.
+
 When evaluating under K failure mode profiles, the Sidak correction adjusts thresholds:
 
 ```
@@ -584,3 +586,13 @@ snap_engine = services["snap_engine"]
 
 *Abeyance Memory v2.0 — Remediated per Forensic Audit*
 *"The institutional memory your NOC has always needed and never had."*
+
+---
+
+## 17. Decision Record --- Multiple-Comparisons Policy (2026-07)
+
+The v2.0 Sidak correction documented in §2.3, of the form `adjusted_threshold = 1 - (1 - base_threshold)^(1/K)`, is **rejected**. Contrary to its stated intent, this formula *lowers* thresholds as the number of failure-mode profiles K grows: for a base threshold of 0.75 it yields roughly 0.24 at K=5. A correction meant to guard against inflated false-positive rates must make crossing *harder*, not easier, so this formula is unsound and must not be reintroduced.
+
+The shipping behaviour (`snap_engine_v3`) applies the base thresholds directly — **0.75 / 0.55 / 0.40** per profile — with no K-dependent adjustment. Each failure-mode profile is treated as an independent hypothesis evaluated against its own fixed base threshold, rather than as a family of comparisons sharing a single corrected threshold.
+
+Accordingly, §2.3 of this document is **superseded** by this decision record. Any future multiple-comparisons correction must **raise**, not lower, thresholds as K grows.
