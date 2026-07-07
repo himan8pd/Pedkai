@@ -35,6 +35,7 @@ NO ground-truth tables are accessed. Detection is pure inference:
 import hashlib
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -118,6 +119,41 @@ BATCH_SIZE = 2000
 def _make_result_id(*parts: str) -> str:
     """Deterministic ID from components — idempotent across runs."""
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:40]
+
+
+def compute_peer_coverage(
+    entities_by_type: dict[str, list[str]],
+    active_ids: set[str],
+) -> dict[str, float]:
+    """Compute per-type peer signal coverage.
+
+    Phantom detection infers absence-of-signal, which conflates a genuinely
+    decommissioned entity with one whose telemetry we simply never loaded.
+    Peer coverage quantifies how much of a type's population *does* emit
+    signal: if a type's peers are broadly active, an inactive member is a
+    stronger phantom candidate; if almost none of its peers are active, the
+    absence is more likely a data-loading gap than a real divergence.
+
+    For type T:
+        coverage(T) = |{entities of type T} ∩ active_ids| / |{entities of type T}|
+
+    Args:
+        entities_by_type: mapping of entity_type -> list of entity ids of that type.
+        active_ids: union of entity ids observed in operational signals.
+
+    Returns:
+        mapping of entity_type -> coverage float in [0.0, 1.0]. A type with an
+        empty id list yields 0.0 (no basis to trust the population).
+    """
+    coverage: dict[str, float] = {}
+    for etype, ids in entities_by_type.items():
+        total = len(ids)
+        if total == 0:
+            coverage[etype] = 0.0
+            continue
+        n_active = sum(1 for eid in ids if eid in active_ids)
+        coverage[etype] = n_active / total
+    return coverage
 
 
 class ReconciliationEngine:
@@ -462,6 +498,25 @@ class ReconciliationEngine:
         # or external_id — matching on name prevents false phantom detections.
         signal_ids_lower = {sid.lower() for sid in all_signal_ids if sid}
 
+        # Peer signal coverage per entity type.
+        # Phantom detection infers from signal absence, which conflates a
+        # decommissioned entity with one whose telemetry we simply never
+        # loaded. Coverage = fraction of a type's population that *does* emit
+        # signal; a low value means the absence is more likely a data gap.
+        # Computed from the already-fetched CMDB entity list (no extra query).
+        entities_by_type: dict[str, list[str]] = {}
+        for r in cmdb_rows:
+            entities_by_type.setdefault(r["entity_type"], []).append(r["entity_id"])
+        peer_coverage = compute_peer_coverage(entities_by_type, all_signal_ids)
+        # Precompute per-type active counts ONCE so the per-record loop below is
+        # an O(1) dict lookup, not an O(peers) rescan (phantom scale: ~81K nodes
+        # × up to ~50K same-type peers would be billions of membership checks).
+        active_count_by_type = {
+            et: sum(1 for eid in ids if eid in all_signal_ids)
+            for et, ids in entities_by_type.items()
+        }
+        min_peer_coverage = float(os.environ.get("PHANTOM_MIN_PEER_COVERAGE", "0.2"))
+
         # Step 4: CMDB entities with no signal presence
         # Only flag entity types that are EXPECTED to emit signals.
         # Passive infrastructure (cabinets, antennas, cables, power supplies)
@@ -488,6 +543,26 @@ class ReconciliationEngine:
                 continue
             # Signal-emitting type with no signal presence at all
             # Checked: UUID, external_id, and name (case-insensitive).
+            base_conf = 0.75
+            cov = peer_coverage.get(etype, 0.0)
+            n_total = len(entities_by_type.get(etype, []))
+            n_active = active_count_by_type.get(etype, 0)
+            confidence = max(0.05, min(base_conf, base_conf * cov))
+            extra = {
+                "detection_method": "signal_absence",
+                "signals_checked": [
+                    "kpi_metrics",
+                    "telco_events_alarms",
+                    "neighbour_relations",
+                ],
+                "match_keys_checked": ["id", "external_id", "name"],
+                "cmdb_entity_type": etype,
+                "cmdb_external_id": ext_id,
+                "peer_coverage": cov,
+                "coverage_basis": f"{etype}:{n_active}/{n_total}",
+            }
+            if cov < min_peer_coverage:
+                extra["low_data_confidence"] = True
             records.append(
                 {
                     "result_id": _make_result_id(self.tenant_id, "phantom_node", eid),
@@ -503,18 +578,8 @@ class ReconciliationEngine:
                         f"footprint — zero KPI samples, zero alarms, zero neighbour "
                         f"relations. May be decommissioned or a phantom CI."
                     ),
-                    "confidence": 0.75,
-                    "extra": {
-                        "detection_method": "signal_absence",
-                        "signals_checked": [
-                            "kpi_metrics",
-                            "telco_events_alarms",
-                            "neighbour_relations",
-                        ],
-                        "match_keys_checked": ["id", "external_id", "name"],
-                        "cmdb_entity_type": etype,
-                        "cmdb_external_id": ext_id,
-                    },
+                    "confidence": confidence,
+                    "extra": extra,
                 }
             )
 
@@ -1036,6 +1101,54 @@ class ReconciliationEngine:
         # Combined active set
         active_ids = kpi_active | alarm_active
 
+        # Peer signal coverage per endpoint entity type.
+        # ONE additional query of network_entities, grouped once into a dict,
+        # so a phantom edge whose endpoint types are broadly inactive can be
+        # downgraded (absence more likely a data-loading gap than a real edge
+        # that both endpoints went silent on).
+        ne_rows = await self._fetch(
+            """
+            SELECT CAST(id AS TEXT) AS entity_id, entity_type
+            FROM network_entities
+            WHERE tenant_id = :tid
+            """,
+            {"tid": self.tenant_id},
+        )
+        entities_by_type: dict[str, list[str]] = {}
+        for ne in ne_rows:
+            entities_by_type.setdefault(ne["entity_type"], []).append(ne["entity_id"])
+        peer_coverage = compute_peer_coverage(entities_by_type, active_ids)
+        # Precompute per-type active counts ONCE so _coverage_for_types is an
+        # O(1) lookup per phantom edge (~140K edges) rather than an O(peers) rescan.
+        active_count_by_type = {
+            et: sum(1 for eid in ids if eid in active_ids)
+            for et, ids in entities_by_type.items()
+        }
+        min_peer_coverage = float(os.environ.get("PHANTOM_MIN_PEER_COVERAGE", "0.2"))
+
+        def _coverage_for_types(*types: str) -> tuple[str, float, int, int]:
+            """Pick the endpoint type with the most trustworthy (highest)
+            coverage; that is the strongest evidence the edge should be live.
+            Returns (basis_type, coverage, n_active, n_total)."""
+            best_type = None
+            best_cov = -1.0
+            for t in types:
+                if not t:
+                    continue
+                cov = peer_coverage.get(t)
+                if cov is None:
+                    continue
+                if cov > best_cov:
+                    best_cov = cov
+                    best_type = t
+            if best_type is None:
+                # No CMDB population for either endpoint type — treat as 0.0
+                basis_type = next((t for t in types if t), "UNKNOWN")
+                return basis_type, 0.0, 0, 0
+            n_total = len(entities_by_type.get(best_type, []))
+            n_active = active_count_by_type.get(best_type, 0)
+            return best_type, best_cov, n_active, n_total
+
         # Step 4: Edge is phantom if NEITHER endpoint is active
         # Skip passive infrastructure relationships where telemetry absence
         # is expected (e.g. CABINET→CLIMATE_CONTROL, POWER_SUPPLY→BATTERY_BANK).
@@ -1055,6 +1168,17 @@ class ReconciliationEngine:
             from_active = r["from_id"] in active_ids
             to_active = r["to_id"] in active_ids
             if not from_active and not to_active:
+                base_conf = 0.70
+                basis_type, cov, n_active, n_total = _coverage_for_types(
+                    r["from_type"], r["to_type"]
+                )
+                confidence = max(0.05, min(base_conf, base_conf * cov))
+                extra = {
+                    "peer_coverage": cov,
+                    "coverage_basis": f"{basis_type}:{n_active}/{n_total}",
+                }
+                if cov < min_peer_coverage:
+                    extra["low_data_confidence"] = True
                 records.append(
                     {
                         "result_id": _make_result_id(
@@ -1073,7 +1197,8 @@ class ReconciliationEngine:
                             f"{r['to_type']} ({r['to_id']}) ({r['rel_type']}) — "
                             f"neither endpoint has KPI or alarm activity."
                         ),
-                        "confidence": 0.70,
+                        "confidence": confidence,
+                        "extra": extra,
                     }
                 )
 
