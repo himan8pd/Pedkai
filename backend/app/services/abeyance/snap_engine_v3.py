@@ -280,37 +280,94 @@ class SnapEngineV3:
     # --- Targeted retrieval ---
 
     async def _targeted_retrieval(
-        self, session: AsyncSession, tenant_id: str, entity_ids: set[str],
+        self, session: AsyncSession, tenant_id: str,
+        new_fragment: AbeyanceFragmentORM, entity_ids: set[str],
         min_decay_score: float = 0.1,
     ) -> list[AbeyanceFragmentORM]:
-        if not entity_ids:
-            return []
-        entity_stmt = (
-            select(FragmentEntityRefORM.fragment_id)
-            .where(
-                FragmentEntityRefORM.tenant_id == tenant_id,
-                FragmentEntityRefORM.entity_identifier.in_(list(entity_ids)),
+        # (a) entity-overlap retrieval
+        entity_candidates: list[AbeyanceFragmentORM] = []
+        if entity_ids:
+            entity_stmt = (
+                select(FragmentEntityRefORM.fragment_id)
+                .where(
+                    FragmentEntityRefORM.tenant_id == tenant_id,
+                    FragmentEntityRefORM.entity_identifier.in_(list(entity_ids)),
+                )
+                .distinct()
             )
-            .distinct()
+            entity_result = await session.execute(entity_stmt)
+            fragment_ids = {row[0] for row in entity_result.fetchall()}
+            if fragment_ids:
+                stmt = (
+                    select(AbeyanceFragmentORM)
+                    .where(
+                        AbeyanceFragmentORM.tenant_id == tenant_id,
+                        AbeyanceFragmentORM.snap_status.in_(["ACTIVE", "NEAR_MISS"]),
+                        AbeyanceFragmentORM.current_decay_score >= min_decay_score,
+                        AbeyanceFragmentORM.id.in_(fragment_ids),
+                        AbeyanceFragmentORM.id != new_fragment.id,
+                    )
+                    .order_by(AbeyanceFragmentORM.current_decay_score.desc())
+                    .limit(MAX_CANDIDATES)
+                )
+                result = await session.execute(stmt)
+                entity_candidates = list(result.scalars().all())
+
+        # (b) vector ANN retrieval
+        vector_candidates = await self._vector_retrieval(
+            session, tenant_id, new_fragment, min_decay_score,
         )
-        entity_result = await session.execute(entity_stmt)
-        fragment_ids = {row[0] for row in entity_result.fetchall()}
-        if not fragment_ids:
+
+        # dedupe by id, entity candidates FIRST, cap at MAX_CANDIDATES
+        merged: list[AbeyanceFragmentORM] = []
+        seen: set = set()
+        for frag in (*entity_candidates, *vector_candidates):
+            if frag.id in seen:
+                continue
+            seen.add(frag.id)
+            merged.append(frag)
+            if len(merged) >= MAX_CANDIDATES:
+                break
+        return merged
+
+    async def _vector_retrieval(
+        self, session: AsyncSession, tenant_id: str,
+        new_fragment: AbeyanceFragmentORM, min_decay_score: float = 0.1,
+    ) -> list[AbeyanceFragmentORM]:
+        if session.get_bind().dialect.name != "postgresql":
+            logger.warning(
+                "Vector ANN retrieval unavailable on non-postgresql dialect; "
+                "degrading to entity-only retrieval.",
+            )
             return []
 
-        stmt = (
-            select(AbeyanceFragmentORM)
-            .where(
-                AbeyanceFragmentORM.tenant_id == tenant_id,
-                AbeyanceFragmentORM.snap_status.in_(["ACTIVE", "NEAR_MISS"]),
-                AbeyanceFragmentORM.current_decay_score >= min_decay_score,
-                AbeyanceFragmentORM.id.in_(fragment_ids),
-            )
-            .order_by(AbeyanceFragmentORM.current_decay_score.desc())
-            .limit(MAX_CANDIDATES)
+        collected: dict = {}
+        dimensions = (
+            (new_fragment.mask_semantic, new_fragment.emb_semantic,
+             AbeyanceFragmentORM.mask_semantic, AbeyanceFragmentORM.emb_semantic),
+            (new_fragment.mask_topological, new_fragment.emb_topological,
+             AbeyanceFragmentORM.mask_topological, AbeyanceFragmentORM.emb_topological),
         )
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
+        for query_mask, query_vec, candidate_mask_col, candidate_emb_col in dimensions:
+            if not query_mask or query_vec is None:
+                continue
+            stmt = (
+                select(AbeyanceFragmentORM)
+                .where(
+                    AbeyanceFragmentORM.tenant_id == tenant_id,
+                    AbeyanceFragmentORM.id != new_fragment.id,
+                    AbeyanceFragmentORM.snap_status.in_(["ACTIVE", "NEAR_MISS"]),
+                    AbeyanceFragmentORM.current_decay_score >= min_decay_score,
+                    candidate_mask_col.is_(True),
+                )
+                .order_by(candidate_emb_col.cosine_distance(query_vec))
+                .limit(MAX_CANDIDATES // 2)
+            )
+            result = await session.execute(stmt)
+            for frag in result.scalars().all():
+                if frag.id not in collected:
+                    collected[frag.id] = frag
+        return list(collected.values())
 
     # --- Full evaluation ---
 
@@ -319,16 +376,23 @@ class SnapEngineV3:
     ) -> dict:
         """Full v3 snap evaluation with mask-aware scoring."""
         entity_stmt = (
-            select(FragmentEntityRefORM.entity_identifier)
+            select(
+                FragmentEntityRefORM.entity_identifier,
+                FragmentEntityRefORM.topological_distance,
+            )
             .where(
                 FragmentEntityRefORM.fragment_id == new_fragment.id,
                 FragmentEntityRefORM.tenant_id == tenant_id,
             )
         )
         entity_result = await session.execute(entity_stmt)
-        new_entities = {row[0] for row in entity_result.fetchall()}
+        entity_rows = entity_result.fetchall()
+        new_ref_identifiers = {row[0] for row in entity_rows}
+        new_entities = {row[0] for row in entity_rows if row[1] == 0}
 
-        candidates = await self._targeted_retrieval(session, tenant_id, new_entities)
+        candidates = await self._targeted_retrieval(
+            session, tenant_id, new_fragment, new_ref_identifiers,
+        )
         snaps, near_misses, affinities = [], [], []
 
         for candidate in candidates:
@@ -340,6 +404,7 @@ class SnapEngineV3:
                 .where(
                     FragmentEntityRefORM.fragment_id == candidate.id,
                     FragmentEntityRefORM.tenant_id == tenant_id,
+                    FragmentEntityRefORM.topological_distance == 0,
                 )
             )
             stored_result = await session.execute(stored_stmt)
