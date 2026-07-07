@@ -511,7 +511,64 @@ class EnrichmentChainV3:
 
     def _build_topo_text(self, entities: list[dict], neighbourhood: dict) -> str:
         parts = [f"{e['identifier']} ({e.get('domain', 'unknown')})" for e in entities[:20]]
-        return f"Network topology context: {', '.join(parts)}"
+        base = f"Network topology context: {', '.join(parts)}"
+
+        # RET-03: encode the actual computed neighbourhood (topology signal),
+        # not just the extracted entity names (which duplicate the semantic signal).
+        # Empty/missing neighbourhood reproduces the pre-RET-03 string exactly.
+        if not neighbourhood:
+            return base
+
+        nbr_entities = neighbourhood.get("entities") or []
+        relationships = neighbourhood.get("relationships") or []
+        depths = neighbourhood.get("depths") or {}
+        total_entities = neighbourhood.get("total_entities", len(nbr_entities))
+        total_relationships = neighbourhood.get("total_relationships", len(relationships))
+
+        if not nbr_entities and not relationships:
+            return base
+
+        # Build id -> "identifier (domain)" lookup from neighbourhood entities.
+        # depths hold string ids; ShadowEntityORM.id is a UUID, so key on str(id).
+        id_lookup: dict[str, str] = {}
+        for ent in nbr_entities:
+            ident = getattr(ent, "entity_identifier", None) or "unknown"
+            domain = getattr(ent, "entity_domain", None) or "unknown"
+            id_lookup[str(getattr(ent, "id", ""))] = f"{ident} ({domain})"
+
+        def _depth_labels(depth_key: int) -> list[str]:
+            ids = depths.get(depth_key) or depths.get(str(depth_key)) or []
+            labels = []
+            for eid in ids[:15]:
+                label = id_lookup.get(str(eid))
+                if label:
+                    labels.append(label)
+            return labels
+
+        depth1 = _depth_labels(1)
+        depth2 = _depth_labels(2)
+
+        # Distinct relationship types with counts (up to 8).
+        type_counts: dict[str, int] = {}
+        for rel in relationships:
+            rtype = getattr(rel, "relationship_type", None) or "unknown"
+            type_counts[rtype] = type_counts.get(rtype, 0) + 1
+        rel_type_parts = [
+            f"{rtype} ({count})"
+            for rtype, count in sorted(
+                type_counts.items(), key=lambda kv: (-kv[1], kv[0])
+            )[:8]
+        ]
+
+        text = (
+            f"{base}. Neighbourhood ({total_entities} entities, "
+            f"{total_relationships} links): depth-1: {', '.join(depth1)}; "
+            f"depth-2: {', '.join(depth2)}. "
+            f"Relationship types: {', '.join(rel_type_parts)}."
+        )
+
+        # Cap total text at 1,500 chars.
+        return text[:1500]
 
     def _build_operational_text(self, failure_modes: list[dict], fingerprint: dict) -> str:
         parts = []
