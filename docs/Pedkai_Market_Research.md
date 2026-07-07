@@ -217,9 +217,7 @@ embeddings:
 | Temporal           | 256-d      | Sinusoidal time encoding (cycle position, time-of-day, weekday, near-cut-off windows)          |
 | Operational        | 1536-d     | Operational fingerprint (severity, queue, owner team, recurrence)                              |
 
-A *near-miss boost* of *1.15×* is applied to fragments that almost matched a
-prior candidate; over many cycles, the system surfaces correlations that no
-single window contained.
+A bounded near-miss boost (capped at +50% relevance after repeated near-matches) slows the decay of fragments that almost matched prior candidates; over many cycles, the system surfaces correlations that no single window contained.
 
 *(b) Shadow Topology.* A discovered, confidence-scored graph of the FMI
 estate: trading systems, clearing engine, settlement platform, depository
@@ -295,7 +293,7 @@ CoPilot adds the LLM agent layer. Strongest in deep application
 observability with auto-discovered service topology --- but the topology
 is agent-bound, so anything without a OneAgent is invisible. 
 
->*Compared to pedk.ai:* Davis AI is the closest published peer in *spirit* (causal AI, topology-aware correlation). Differences are that Dynatrace's topology depends on agents (and so cannot see what is not instrumented) and that it carries no persistent memory of unresolved correlations across cycles. Pedk.ai's discovery is agentless and ingestion-driven; its memory persists up to 365 days.
+>*Compared to pedk.ai:* Davis AI is the closest published peer in *spirit* (causal AI, topology-aware correlation). Differences are that Dynatrace's topology depends on agents (and so cannot see what is not instrumented) and that it carries no persistent memory of unresolved correlations across cycles. Pedk.ai's discovery is agentless and ingestion-driven; its memory persists up to 730 days with cold-storage archival beyond.
 
 *Datadog* is the broadest observability platform by data-type coverage
 (metrics, logs, traces, RUM, security, network). Watchdog provides
