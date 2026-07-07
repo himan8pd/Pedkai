@@ -15,6 +15,14 @@ Architecture:
 Invariants enforced:
 - INV-7: tenant_id on every query
 - INV-6: MAX_COLD_BATCH bounds archival batches
+
+Embedding provenance note (RET-06):
+- The ``enriched_embedding`` column stores ``emb_semantic`` for v3
+  fragments; legacy ``enriched_embedding`` for pre-v3.  v3 writes the
+  legacy column as NULL, so archiving/searching on it can never match a
+  v3-era fragment.  This means one column carries mixed provenance
+  (semantic vs legacy concat), but both share the same dimensionality
+  (1536) so cosine distance remains computable across the mix.
 """
 
 from __future__ import annotations
@@ -141,6 +149,17 @@ class AbeyanceColdStorage:
         tenant_id: str,
     ) -> ColdFragmentORM:
         """Archive a fragment to the cold_fragment table for ANN search."""
+        # RET-06: v3 fragments write the legacy `enriched_embedding` column
+        # as NULL and carry the semantic vector in `emb_semantic` (guarded by
+        # `mask_semantic`). Persist the v3 semantic embedding when present so
+        # cold search can match v3-era fragments; fall back to the legacy
+        # column for pre-v3 fragments.
+        embedding_source = (
+            fragment.emb_semantic
+            if getattr(fragment, "mask_semantic", False)
+            and fragment.emb_semantic is not None
+            else fragment.enriched_embedding
+        )
         cold = ColdFragmentORM(
             id=uuid4(),
             tenant_id=tenant_id,
@@ -149,7 +168,7 @@ class AbeyanceColdStorage:
             raw_content_summary=(fragment.raw_content or "")[:500],
             extracted_entities=fragment.extracted_entities or [],
             failure_mode_tags=fragment.failure_mode_tags or [],
-            enriched_embedding=fragment.enriched_embedding,
+            enriched_embedding=embedding_source,
             event_timestamp=fragment.event_timestamp,
             original_created_at=fragment.created_at,
             original_decay_score=fragment.current_decay_score,
