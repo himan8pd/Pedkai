@@ -467,7 +467,9 @@ class ValueEventORM(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     tenant_id = Column(String(100), nullable=False, index=True)
-    ledger_entry_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # WIR-05a made this nullable in the DB so incident-closure value events
+    # (no discovery-ledger entry) can be recorded — keep the ORM in sync.
+    ledger_entry_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     event_type = Column(String(50), nullable=False)
     event_at = Column(
         DateTime(timezone=True),
