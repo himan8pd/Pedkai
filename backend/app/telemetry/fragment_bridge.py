@@ -24,8 +24,10 @@ Design:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import tempfile
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -146,6 +148,81 @@ class AnomalyDetector:
             return z
         return None
 
+    # -- State persistence (PRF-02) --------------------------------------
+
+    def save_state(self, path: str) -> None:
+        """
+        Atomically persist the Welford accumulator state to a JSON file.
+
+        The dict key ``(entity_id, kpi_name)`` is joined with a NUL byte so
+        it round-trips as a single JSON object key. Writes to a temp file in
+        the same directory then ``os.replace``s it into place, so a crash
+        mid-write can never leave a truncated state file.
+        """
+        state: dict[str, dict[str, float | int]] = {}
+        for (entity_id, kpi_name), acc in self._accumulators.items():
+            state["\x00".join((entity_id, kpi_name))] = {
+                "count": acc.n,
+                "mean": acc.mean,
+                "m2": acc.m2,
+            }
+
+        directory = os.path.dirname(os.path.abspath(path))
+        os.makedirs(directory, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=directory, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(state, fh)
+            os.replace(tmp_path, path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    def load_state(self, path: str) -> None:
+        """
+        Load Welford accumulator state from a JSON file.
+
+        Tolerant of a missing or corrupt file: logs a WARNING and leaves the
+        detector empty rather than raising, so a bad snapshot never blocks
+        startup.
+        """
+        try:
+            with open(path, encoding="utf-8") as fh:
+                state = json.load(fh)
+        except FileNotFoundError:
+            logger.warning(
+                "Anomaly state file not found (%s) — starting with empty baselines",
+                path,
+            )
+            return
+        except (json.JSONDecodeError, OSError, ValueError) as e:
+            logger.warning(
+                "Anomaly state file unreadable (%s: %s) — starting with empty baselines",
+                path, e,
+            )
+            return
+
+        accumulators: dict[tuple[str, str], _WelfordAccumulator] = {}
+        try:
+            for joined_key, fields in state.items():
+                entity_id, kpi_name = joined_key.split("\x00", 1)
+                acc = _WelfordAccumulator()
+                acc.n = int(fields["count"])
+                acc.mean = float(fields["mean"])
+                acc.m2 = float(fields["m2"])
+                accumulators[(entity_id, kpi_name)] = acc
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
+            logger.warning(
+                "Anomaly state file malformed (%s: %s) — starting with empty baselines",
+                path, e,
+            )
+            return
+
+        self._accumulators = accumulators
+
 
 # ---------------------------------------------------------------------------
 # Fragment Bridge
@@ -179,6 +256,15 @@ class TelemetryFragmentBridge:
         self._flush_interval = flush_interval
         self._running = False
         self._services: dict | None = None
+
+        # Anomaly-detector baseline persistence (PRF-02).
+        # Feature is OFF unless ANOMALY_STATE_PATH is a non-empty path.
+        self.anomaly_detector = AnomalyDetector(z_threshold=3.0)
+        self._anomaly_state_path = os.environ.get("ANOMALY_STATE_PATH", "")
+        self._anomaly_snapshot_seconds = int(
+            os.environ.get("ANOMALY_STATE_SNAPSHOT_SECONDS", "900")
+        )
+        self._last_anomaly_snapshot = 0.0
 
         # Stats
         self._enqueued = 0
@@ -248,6 +334,16 @@ class TelemetryFragmentBridge:
         self._services = create_abeyance_services()
         self._running = True
 
+        # PRF-02: reload persisted anomaly baselines (feature gated on path).
+        if self._anomaly_state_path:
+            self.anomaly_detector.load_state(self._anomaly_state_path)
+            self._last_anomaly_snapshot = time.monotonic()
+            logger.info(
+                "Anomaly baseline persistence enabled (path=%s, snapshot=%ds)",
+                self._anomaly_state_path,
+                self._anomaly_snapshot_seconds,
+            )
+
         logger.info(
             "Fragment bridge started (queue_size=%d, batch_size=%d)",
             self._queue.maxsize,
@@ -256,6 +352,18 @@ class TelemetryFragmentBridge:
 
         while self._running:
             batch = await self._collect_batch()
+
+            # PRF-02: periodic anomaly-state snapshot (runs even when idle).
+            if self._anomaly_state_path and (
+                time.monotonic() - self._last_anomaly_snapshot
+                >= self._anomaly_snapshot_seconds
+            ):
+                try:
+                    self.anomaly_detector.save_state(self._anomaly_state_path)
+                except Exception as e:
+                    logger.warning("Anomaly state snapshot failed: %s", e)
+                self._last_anomaly_snapshot = time.monotonic()
+
             if not batch:
                 continue
 
@@ -280,6 +388,13 @@ class TelemetryFragmentBridge:
             batch = await self._collect_batch()
             if batch:
                 await self._process_batch(batch)
+
+        # PRF-02: final anomaly-state save (feature gated on path).
+        if self._anomaly_state_path:
+            try:
+                self.anomaly_detector.save_state(self._anomaly_state_path)
+            except Exception as e:
+                logger.warning("Anomaly state save on stop failed: %s", e)
 
         logger.info(
             "Fragment bridge stopped. Processed=%d, Errors=%d, Dropped=%d",
