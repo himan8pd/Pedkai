@@ -430,6 +430,16 @@ app.include_router(
     dependencies=[Depends(oauth2_scheme)],
 )
 
+# Abeyance Snap Feedback API (WIR-01)
+from backend.app.api import abeyance_feedback
+
+app.include_router(
+    abeyance_feedback.router,
+    prefix=f"{settings.api_prefix}/abeyance-feedback",
+    tags=["Abeyance Feedback"],
+    dependencies=[Depends(oauth2_scheme)],
+)
+
 
 @app.get("/")
 async def root():
