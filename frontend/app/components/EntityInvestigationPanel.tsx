@@ -71,6 +71,16 @@ const DIMENSIONS: { key: string; label: string; icon: React.ReactNode }[] = [
   { key: "operational", label: "Operational", icon: <Activity className="w-3 h-3" /> },
 ];
 
+/* UX-02: summarise how much evidence backed a snap from the existing nulls.
+   null in a dimension already means "unavailable"; a snap scored on 2 of 5
+   dimensions must look different from one scored on all 5. */
+function sufficiency(dims: Record<string, number | null>): { label: string; cls: string } {
+  const n = DIMENSIONS.filter((d) => dims[d.key] != null).length;
+  if (n >= 4) return { label: "FULL EVIDENCE", cls: "text-emerald-300 bg-emerald-500/15 border-emerald-500/40" };
+  if (n >= 2) return { label: "PARTIAL EVIDENCE", cls: "text-amber-300 bg-amber-500/15 border-amber-500/40" };
+  return { label: "MINIMAL EVIDENCE", cls: "text-red-300 bg-red-500/15 border-red-500/40" };
+}
+
 const SNAP_STATUS_DOT: Record<string, string> = {
   SNAPPED: "bg-cyan-400", ACTIVE: "bg-emerald-400", NEAR_MISS: "bg-amber-400",
   STALE: "bg-slate-500", EXPIRED: "bg-red-500", COLD: "bg-slate-600", INGESTED: "bg-violet-400",
@@ -259,6 +269,17 @@ export default function EntityInvestigationPanel({
                             <Sparkles className="w-3 h-3" /> live
                           </span>
                         )}
+                        {(() => {
+                          const suf = sufficiency(s.dimensions);
+                          return (
+                            <span
+                              title={`Scored on ${DIMENSIONS.filter((d) => s.dimensions[d.key] != null).length} of 5 dimensions`}
+                              className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${suf.cls}`}
+                            >
+                              {suf.label}
+                            </span>
+                          );
+                        })()}
                         <span className="text-sm font-bold text-white tabular-nums">{s.final_score.toFixed(3)}</span>
                       </div>
                     </div>
