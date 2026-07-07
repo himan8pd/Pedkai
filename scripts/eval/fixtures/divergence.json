@@ -1,0 +1,9 @@
+{
+  "dark_node": {"detected": 120, "truth": 130, "tp": 110, "precision": 0.9167, "recall": 0.8462, "unresolved_detected": 0, "unresolved_truth": 0},
+  "phantom_node": {"detected": 45, "truth": 50, "tp": 40, "precision": 0.8889, "recall": 0.8, "unresolved_detected": 0, "unresolved_truth": 0},
+  "dark_attribute": {"detected": 200, "truth": 210, "tp": 180, "precision": 0.9, "recall": 0.8571, "unresolved_detected": 0, "unresolved_truth": 0},
+  "identity_mutation": {"detected": 30, "truth": 35, "tp": 28, "precision": 0.9333, "recall": 0.8, "unresolved_detected": 0, "unresolved_truth": 0},
+  "dark_edge": {"detected": 88, "truth": 95, "tp": 72, "precision": 0.8182, "recall": 0.7579, "unresolved_detected": 3, "unresolved_truth": 1},
+  "phantom_edge": {"detected": 60, "truth": 66, "tp": 50, "precision": 0.8333, "recall": 0.7576, "unresolved_detected": 2, "unresolved_truth": 0},
+  "overall": {"detected": 543, "truth": 586, "tp": 480, "precision": 0.8840, "recall": 0.8191, "unresolved_detected": 5, "unresolved_truth": 1}
+}

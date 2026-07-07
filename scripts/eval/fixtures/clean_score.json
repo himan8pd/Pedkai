@@ -1,0 +1,23 @@
+{
+  "true_pairs_total": 18432,
+  "snap_pairs_total": 12050,
+  "snap_pairs_correct": 11380,
+  "near_miss_pairs_total": 2140,
+  "retrieval_pairs_total": 17990,
+  "candidates_evaluated_total": 48210,
+  "pair_precision": 0.94440,
+  "pair_recall": 0.61740,
+  "near_miss_recall": 0.11610,
+  "retrieval_recall": 0.95430,
+  "time_to_snap_seconds": {
+    "count": 11380,
+    "median": 42.0,
+    "p90": 180.0,
+    "p95": 320.0,
+    "p99": 900.0,
+    "min": 1.0,
+    "max": 3600.0
+  },
+  "tenant_id": "eval_clean",
+  "answer_groups_total": 5865
+}

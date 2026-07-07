@@ -1,0 +1,6 @@
+{
+  "n_corpus": 15695,
+  "n_answers": 5865,
+  "out_corpus": "/tmp/eval/corpus.jsonl",
+  "out_answers": "/tmp/eval/answers.jsonl"
+}

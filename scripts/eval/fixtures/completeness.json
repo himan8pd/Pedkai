@@ -1,0 +1,38 @@
+{
+  "overall": {
+    "total": 812340,
+    "with_alarm_signal": 41022,
+    "with_kpi_signal": 380145,
+    "with_any_signal": 392550,
+    "coverage": 0.48324,
+    "kpi_included": true
+  },
+  "per_entity_type": {
+    "CELL": {
+      "total": 420110,
+      "with_alarm_signal": 30140,
+      "with_kpi_signal": 250330,
+      "with_any_signal": 258901,
+      "coverage": 0.61627
+    },
+    "NODE": {
+      "total": 220100,
+      "with_alarm_signal": 8012,
+      "with_kpi_signal": 98500,
+      "with_any_signal": 100210,
+      "coverage": 0.45529
+    },
+    "LINK": {
+      "total": 172130,
+      "with_alarm_signal": 2870,
+      "with_kpi_signal": 31315,
+      "with_any_signal": 33439,
+      "coverage": 0.19427
+    }
+  },
+  "sources": {
+    "cmdb_entities": {"path": "/tmp/eval/cmdb_declared_entities.parquet", "id_column": "entity_id"},
+    "alarms": {"path": "/tmp/eval/events_alarms.parquet", "id_column": "entity_id"},
+    "kpi": {"path": "/tmp/eval/kpi_metrics_wide.parquet", "id_column": "entity_id"}
+  }
+}
