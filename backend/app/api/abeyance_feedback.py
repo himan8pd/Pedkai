@@ -27,6 +27,9 @@ from backend.app.core.logging import get_logger
 from backend.app.core.security import INCIDENT_READ, User, get_current_user
 from backend.app.models.abeyance_orm import SnapDecisionRecordORM
 from backend.app.services.abeyance import create_abeyance_services
+from backend.app.services.abeyance.snap_confidence import (
+    get_calibrated_confidence,
+)
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -148,3 +151,45 @@ async def submit_snap_feedback(
         "feedback_id": str(feedback.id),
         "value_ledger_id": str(value_ledger_id) if value_ledger_id else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /snap-confidence
+# ---------------------------------------------------------------------------
+
+@router.get("/snap-confidence")
+async def get_snap_confidence(
+    snap_decision_record_id: UUID = Query(...),
+    tenant_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Return the bin-calibrated confidence for a snap decision (PRV-02).
+
+    Looks up the historical operator-verdict rate for the record's final-score
+    decile within its failure-mode profile. If that bin has accumulated at least
+    ``SNAP_CONFIDENCE_MIN_VOTES`` verdicts the empirical true-positive rate is
+    returned (``calibrated=True``); otherwise the raw ``final_score`` is echoed
+    back (``calibrated=False``).
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+
+    result = await db.execute(
+        select(SnapDecisionRecordORM).where(
+            SnapDecisionRecordORM.id == snap_decision_record_id,
+            SnapDecisionRecordORM.tenant_id == tid,
+        )
+    )
+    record = result.scalars().first()
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Snap decision record {snap_decision_record_id} not found",
+        )
+
+    return await get_calibrated_confidence(
+        session=db,
+        tenant_id=tid,
+        profile=record.failure_mode_profile,
+        final_score=record.final_score,
+    )
