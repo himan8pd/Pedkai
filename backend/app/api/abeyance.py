@@ -514,7 +514,7 @@ async def run_discovery_background(
 
     Runs ignorance mapping, bridge detection, pattern conflict scan,
     causal analysis, pattern compression, counterfactual simulation,
-    evolutionary patterns, and hypothesis expiration.
+    and hypothesis expiration.
 
     LLD v3.0 ref: §12.2 (Background Jobs)
     """
@@ -556,7 +556,7 @@ async def discovery_status(
         "bridge_detector", "outcome_calibration", "pattern_conflict",
         "temporal_sequence", "hypothesis_generator", "expectation_violation",
         "causal_direction", "pattern_compressor", "counterfactual_sim",
-        "meta_memory", "evolutionary_patterns",
+        "meta_memory",
     ]
     mechanisms = {}
     for name in mechanism_names:

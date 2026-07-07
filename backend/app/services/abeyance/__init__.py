@@ -51,7 +51,6 @@ from backend.app.services.abeyance.discovery.causal_direction import CausalDirec
 from backend.app.services.abeyance.discovery.pattern_compression import PatternCompressor
 from backend.app.services.abeyance.discovery.counterfactual_sim import CounterfactualSimulator
 from backend.app.services.abeyance.discovery.meta_memory import MetaMemoryService
-from backend.app.services.abeyance.discovery.evolutionary_patterns import EvolutionaryPatternService
 
 import logging
 import os
@@ -178,9 +177,6 @@ def create_abeyance_services(
     hypothesis_generator = HypothesisGenerator(tslam_service=tslam)
     causal_direction = CausalDirectionTester()
 
-    # Layer 5
-    evolutionary_patterns = EvolutionaryPatternService()
-
     # Experimental mechanisms — constructed for real only when explicitly named
     # in ABEYANCE_EXPERIMENTAL_MECHANISMS; otherwise a _DisabledMechanism stub is
     # used so the unvalidated code paths stay dormant.
@@ -228,7 +224,6 @@ def create_abeyance_services(
         pattern_compressor=pattern_compressor,
         counterfactual_sim=counterfactual_sim,
         meta_memory=meta_memory,
-        evolutionary_patterns=evolutionary_patterns,
     )
 
     return {
@@ -261,7 +256,6 @@ def create_abeyance_services(
         "pattern_compressor": pattern_compressor,
         "counterfactual_sim": counterfactual_sim,
         "meta_memory": meta_memory,
-        "evolutionary_patterns": evolutionary_patterns,
     }
 
 

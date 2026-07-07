@@ -85,7 +85,7 @@ class TestServiceFactoryV3:
             "bridge_detector", "outcome_calibration", "pattern_conflict",
             "temporal_sequence", "hypothesis_generator", "expectation_violation",
             "causal_direction", "pattern_compressor", "counterfactual_sim",
-            "meta_memory", "evolutionary_patterns",
+            "meta_memory",
         ]
         for key in mechanism_keys:
             assert key in services, f"Missing discovery mechanism: {key}"

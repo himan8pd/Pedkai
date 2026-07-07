@@ -42,7 +42,6 @@ from backend.app.services.abeyance.discovery.counterfactual_sim import Counterfa
 
 # Layer 5
 from backend.app.services.abeyance.discovery.meta_memory import MetaMemoryService
-from backend.app.services.abeyance.discovery.evolutionary_patterns import EvolutionaryPatternService
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +84,6 @@ class DiscoveryLoop:
         counterfactual_sim: Optional[CounterfactualSimulator] = None,
         # Layer 5
         meta_memory: Optional[MetaMemoryService] = None,
-        evolutionary_patterns: Optional[EvolutionaryPatternService] = None,
     ):
         # Layer 1
         self._enrichment = enrichment
@@ -115,7 +113,6 @@ class DiscoveryLoop:
 
         # Layer 5
         self._meta_memory = meta_memory or MetaMemoryService()
-        self._evolution = evolutionary_patterns or EvolutionaryPatternService()
 
         # Error tracking: counts of errors per mechanism for observability
         self._error_counts: dict[str, int] = {}
@@ -315,15 +312,6 @@ class DiscoveryLoop:
             results["counterfactual"] = await self._counterfactual.run_batch(session, tenant_id)
         except Exception as exc:
             results["counterfactual"] = self._record_mechanism_error("counterfactual_sim", exc)
-
-        # Evolutionary patterns
-        for profile in WEIGHT_PROFILES_V3:
-            try:
-                await self._evolution.evolve_generation(session, tenant_id, profile)
-            except Exception as exc:
-                results.setdefault("evolution_errors", []).append(
-                    self._record_mechanism_error(f"evolutionary_patterns:{profile}", exc)
-                )
 
         # Hypothesis expiration
         try:
