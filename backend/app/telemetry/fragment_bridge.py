@@ -31,6 +31,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from math import sqrt
 from typing import Any
+from uuid import UUID
 
 from backend.app.core.config import get_settings
 
@@ -39,6 +40,12 @@ settings = get_settings()
 
 # Log an ERROR every N dropped events (queue-full backpressure signal).
 DROP_LOG_EVERY = int(os.environ.get("FRAGMENT_BRIDGE_DROP_LOG_EVERY", "100"))
+
+# Feed RAISED/CLEARED entity state transitions to the temporal sequence
+# modeller (WIR-02). Without this, transition matrices stay empty.
+LOG_TRANSITIONS = (
+    os.environ.get("FRAGMENT_BRIDGE_LOG_TRANSITIONS", "true").lower() == "true"
+)
 
 # ---------------------------------------------------------------------------
 # Alarm → natural language template (Face 1: "What it says")
@@ -313,6 +320,7 @@ class TelemetryFragmentBridge:
         enrichment = self._services["enrichment_v3"]
         snap_engine = self._services["snap_engine_v3"]
         accumulation = self._services["accumulation_graph"]
+        temporal = self._services.get("temporal_sequence")
 
         for source_type, event in batch:
             try:
@@ -344,6 +352,12 @@ class TelemetryFragmentBridge:
                         metadata=event,
                     )
                     await session.flush()
+
+                    # Stage 1b: Log entity state transition (WIR-02)
+                    if LOG_TRANSITIONS and source_type == "ALARM" and temporal:
+                        await self._log_alarm_transition(
+                            session, temporal, tenant_id, event, fragment
+                        )
 
                     # Stage 2: Snap Engine evaluation (LLD §9)
                     try:
@@ -379,6 +393,53 @@ class TelemetryFragmentBridge:
             except Exception as e:
                 logger.error("Fragment bridge error (%s): %s", source_type, e)
                 self._errors += 1
+
+    # -- Stage 1b: Entity state transition logging (WIR-02) -----------------
+
+    @staticmethod
+    async def _log_alarm_transition(
+        session: Any,
+        temporal: Any,
+        tenant_id: str,
+        alarm: dict[str, Any],
+        fragment: Any,
+    ) -> None:
+        """
+        Log a RAISED/CLEARED entity state transition for an alarm event.
+
+        A cleared alarm (truthy ``cleared_at``) transitions the entity into
+        the CLEARED state (from RAISED); otherwise the alarm RAISES the entity
+        (from CLEARED). Best-effort: never fails the batch. Events whose
+        entity id is not a parseable UUID are skipped.
+        """
+        raw_entity_id = str(alarm.get("entity_id", ""))
+        try:
+            entity_uuid = UUID(raw_entity_id)
+        except (ValueError, AttributeError, TypeError):
+            logger.debug(
+                "Skipping transition log: non-UUID entity id %r", raw_entity_id
+            )
+            return
+
+        cleared = bool(alarm.get("cleared_at"))
+        to_state = "CLEARED" if cleared else "RAISED"
+        from_state = "RAISED" if cleared else "CLEARED"
+
+        event_ts = fragment.event_timestamp or datetime.now(timezone.utc)
+
+        try:
+            await temporal.log_transition(
+                session=session,
+                tenant_id=tenant_id,
+                entity_id=entity_uuid,
+                entity_domain=alarm.get("domain"),
+                from_state=from_state,
+                to_state=to_state,
+                fragment_id=fragment.id,
+                event_timestamp=event_ts,
+            )
+        except Exception as e:  # never fail the batch
+            logger.warning("Transition logging failed: %s", e)
 
     # -- Stage 4: Incident creation from snapped clusters -------------------
 
