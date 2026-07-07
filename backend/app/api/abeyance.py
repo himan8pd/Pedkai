@@ -14,12 +14,12 @@ LLD ref: §5 (Fragment Model), §9 (Snap Engine), §10 (Accumulation Graph),
 
 import asyncio
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import async_session_maker, get_db
@@ -29,6 +29,7 @@ from backend.app.models.abeyance_orm import (
     AbeyanceFragmentORM,
     AccumulationEdgeORM,
     FragmentEntityRefORM,
+    FragmentHistoryORM,
     SnapDecisionRecordORM,
 )
 from backend.app.models.reconciliation_result_orm import ReconciliationResultORM
@@ -1102,3 +1103,85 @@ async def investigate_entity(
         snaps=snaps,
         divergence=divergence,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /health-metrics — observability for the abeyance memory itself (PRF-03)
+# ---------------------------------------------------------------------------
+
+@router.get("/health-metrics")
+async def health_metrics(
+    tenant_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Security(get_current_user, scopes=[INCIDENT_READ]),
+):
+    """Memory health metrics for the abeyance subsystem.
+
+    Reports fragment counts by lifecycle status, age of the last decay pass,
+    snap / near-miss counts in the last 24h, and cumulative discovery-loop
+    error counters. Every query is tenant-scoped (INV-7).
+
+    Returns JSON:
+      {fragments_by_status, last_decay_pass_at, hours_since_decay,
+       snaps_24h, near_misses_24h, discovery_errors}
+    """
+    tid = _resolve_tenant(current_user, tenant_id)
+    now = datetime.now(timezone.utc)
+    cutoff_24h = now - timedelta(hours=24)
+
+    # Fragment counts by lifecycle status (tenant-scoped).
+    status_result = await db.execute(
+        select(AbeyanceFragmentORM.snap_status, func.count())
+        .where(AbeyanceFragmentORM.tenant_id == tid)
+        .group_by(AbeyanceFragmentORM.snap_status)
+    )
+    fragments_by_status = {
+        (row[0] or "UNKNOWN"): row[1] for row in status_result.all()
+    }
+
+    # Age of the last decay pass — max event_timestamp of DECAY_UPDATE history.
+    decay_result = await db.execute(
+        select(func.max(FragmentHistoryORM.event_timestamp))
+        .where(
+            FragmentHistoryORM.tenant_id == tid,
+            FragmentHistoryORM.event_type == "DECAY_UPDATE",
+        )
+    )
+    last_decay_pass_at = decay_result.scalar_one_or_none()
+    hours_since_decay: Optional[float] = None
+    if last_decay_pass_at is not None:
+        last_decay_dt = last_decay_pass_at
+        if last_decay_dt.tzinfo is None:
+            last_decay_dt = last_decay_dt.replace(tzinfo=timezone.utc)
+        hours_since_decay = (now - last_decay_dt).total_seconds() / 3600.0
+
+    # Snap / near-miss decision counts in the last 24h (tenant-scoped).
+    decision_result = await db.execute(
+        select(SnapDecisionRecordORM.decision, func.count())
+        .where(
+            SnapDecisionRecordORM.tenant_id == tid,
+            SnapDecisionRecordORM.evaluated_at >= cutoff_24h,
+        )
+        .group_by(SnapDecisionRecordORM.decision)
+    )
+    decision_counts = {row[0]: row[1] for row in decision_result.all()}
+    snaps_24h = decision_counts.get("SNAP", 0)
+    near_misses_24h = decision_counts.get("NEAR_MISS", 0)
+
+    # Discovery-loop error counters (cumulative, per mechanism).
+    discovery_errors: dict = {}
+    discovery_loop = _get_services().get("discovery_loop")
+    if discovery_loop is not None:
+        discovery_errors = discovery_loop.get_error_counts()
+
+    return {
+        "tenant_id": tid,
+        "fragments_by_status": fragments_by_status,
+        "last_decay_pass_at": (
+            last_decay_pass_at.isoformat() if last_decay_pass_at is not None else None
+        ),
+        "hours_since_decay": hours_since_decay,
+        "snaps_24h": snaps_24h,
+        "near_misses_24h": near_misses_24h,
+        "discovery_errors": discovery_errors,
+    }
