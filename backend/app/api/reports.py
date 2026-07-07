@@ -15,6 +15,7 @@ for completion. This avoids Cloudflare's 100s upstream timeout (HTTP 524).
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -413,7 +414,7 @@ async def get_divergence_aggregations(
             """
             SELECT rr.result_id, rr.divergence_type, rr.target_id, rr.target_type,
                    rr.domain, rr.description, rr.confidence,
-                   rr.attribute_name, rr.cmdb_value, rr.observed_value,
+                   rr.attribute_name, rr.cmdb_value, rr.observed_value, rr.extra,
                    ne.name AS entity_name, ne.external_id
             FROM reconciliation_results rr
             LEFT JOIN network_entities ne
@@ -425,7 +426,11 @@ async def get_divergence_aggregations(
         ),
         {"tid": tenant_id},
     )
-    key_divergences = [dict(r) for r in key_rows.mappings().fetchall()]
+    key_divergences = []
+    for r in key_rows.mappings().fetchall():
+        item = dict(r)
+        item["extra"] = json.loads(item["extra"]) if isinstance(item["extra"], str) else item["extra"]
+        key_divergences.append(item)
 
     return {
         "tenant_id": tenant_id,
@@ -503,7 +508,7 @@ async def get_divergence_records(
             SELECT rr.result_id, rr.divergence_type, rr.entity_or_relationship,
                    rr.target_id, rr.target_type, rr.domain, rr.description,
                    rr.attribute_name, rr.cmdb_value, rr.observed_value,
-                   rr.confidence, rr.created_at,
+                   rr.confidence, rr.created_at, rr.extra,
                    ne.name AS entity_name, ne.external_id AS entity_external_id
             FROM reconciliation_results rr
             LEFT JOIN network_entities ne
@@ -517,13 +522,19 @@ async def get_divergence_records(
     )
     rows = rows_result.mappings().fetchall()
 
+    records = []
+    for r in rows:
+        item = dict(r)
+        item["extra"] = json.loads(item["extra"]) if isinstance(item["extra"], str) else item["extra"]
+        records.append(item)
+
     return {
         "tenant_id": tenant_id,
         "page": page,
         "page_size": page_size,
         "total": total,
         "pages": (total + page_size - 1) // page_size,
-        "records": [dict(r) for r in rows],
+        "records": records,
     }
 
 
