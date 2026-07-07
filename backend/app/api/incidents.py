@@ -8,6 +8,7 @@ WS2 — Incident Lifecycle Management.
 """
 
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -43,6 +44,14 @@ from backend.app.services.rl_evaluator import get_rl_evaluator
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# WIR-05b: Assumed-hours policy v1 — fixed per-priority MTTR hours saved when an
+# AI-recommended incident (decision_trace_id set) passes the human close-gate.
+# Env-configurable via VALUE_HOURS_P1..P5.
+_VALUE_HOURS_BY_PRIORITY = {
+    p: float(os.environ.get(f"VALUE_HOURS_{p}", d))
+    for p, d in [("P1", "4.0"), ("P2", "2.0"), ("P3", "1.0"), ("P4", "0.5"), ("P5", "0.25")]
+}
 
 # Lifecycle ordering — cannot skip stages
 _LIFECYCLE_ORDER = [
@@ -517,6 +526,48 @@ async def close_incident(
         actor=payload.approved_by,
         details="Engineer confirmed resolution and closed incident (Human Gate 3)",
     )
+
+    # WIR-05b: Record an INCIDENT_RESOLUTION value event when an AI recommendation
+    # existed for this incident (qualified via decision_trace_id). Closure must NEVER
+    # fail because value recording failed — the whole block is best-effort.
+    if incident.decision_trace_id:
+        hours = _VALUE_HOURS_BY_PRIORITY.get(incident.priority, 0.5)
+        rationale = (
+            f"Assumed-hours policy v1: priority {incident.priority or 'unset'} -> "
+            f"{hours}h; qualified via decision_trace_id"
+        )
+        try:
+            from backend.app.services.abeyance import create_abeyance_services
+
+            value_service = create_abeyance_services()["value_attribution"]
+            await value_service.record_value_event(
+                db,
+                incident.tenant_id,
+                ledger_entry_id=None,
+                event_type="INCIDENT_RESOLUTION",
+                attributed_hours=hours,
+                attributed_currency=None,
+                rationale=rationale,
+                detail={
+                    "incident_id": incident.id,
+                    "decision_trace_id": incident.decision_trace_id,
+                    "priority": incident.priority,
+                    "policy": "fixed_table_v1",
+                },
+            )
+            await _log_audit_event(
+                db,
+                incident.id,
+                incident.tenant_id,
+                action="value_event_recorded",
+                action_type="SYSTEM",
+                actor="system",
+                details=rationale,
+            )
+        except Exception as e:
+            logger.error(
+                f"WIR-05b value event recording failed for incident {incident.id}: {e}"
+            )
 
     # P2.5: Trigger RL evaluation and feedback application for associated decision trace
     try:
