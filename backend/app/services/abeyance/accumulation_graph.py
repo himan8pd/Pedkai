@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, delete, func, and_
+from sqlalchemy import select, delete, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models.abeyance_orm import (
@@ -218,14 +219,24 @@ class AccumulationGraph:
         Uses Python-side union-find (not recursive CTE, fixing Audit §5.3).
         Evaluates with LME scoring (not Noisy-OR, fixing Audit §4.1).
         Persists evaluation to ClusterSnapshot (fixing Audit §7.3).
+
+        When ``trigger_fragment_id`` is provided, only the edges belonging to
+        the trigger fragment's connected component are loaded (bounded BFS,
+        PRF-01), which is byte-identical to the full-scan path for that
+        component.  When it is None, the full tenant edge set is loaded.
         """
-        # Load all edges for this tenant
-        edge_stmt = (
-            select(AccumulationEdgeORM)
-            .where(AccumulationEdgeORM.tenant_id == tenant_id)
-        )
-        result = await session.execute(edge_stmt)
-        edges = list(result.scalars().all())
+        if trigger_fragment_id is not None:
+            edges = await self._load_component_edges(
+                session, tenant_id, trigger_fragment_id,
+            )
+        else:
+            # Load all edges for this tenant (full-scan path)
+            edge_stmt = (
+                select(AccumulationEdgeORM)
+                .where(AccumulationEdgeORM.tenant_id == tenant_id)
+            )
+            result = await session.execute(edge_stmt)
+            edges = list(result.scalars().all())
 
         if not edges:
             return []
@@ -322,6 +333,72 @@ class AccumulationGraph:
 
         await session.flush()
         return snap_results
+
+    async def _load_component_edges(
+        self,
+        session: AsyncSession,
+        tenant_id: str,
+        trigger_fragment_id: UUID,
+        max_edges: int = int(os.environ.get("ACCUM_COMPONENT_MAX_EDGES", "5000")),
+    ) -> list[AccumulationEdgeORM]:
+        """Load only the edges in the trigger fragment's connected component.
+
+        Iterative frontier expansion (bounded BFS): fetch edges that touch any
+        fragment id in the current frontier, accumulate them, add any
+        newly-seen fragment ids to the next frontier, and repeat until the
+        component is closed or ``max_edges`` edges have been loaded.
+
+        This is a scoped substitute for the full tenant edge scan (PRF-01).
+        For the trigger's component, the returned edge set is identical to the
+        subset of the full scan that lies in that component, so downstream
+        union-find / scoring / snapshot behaviour is byte-identical.
+
+        Logs a WARNING and returns the partial edge set if the cap is hit.
+        """
+        seen_fragments: set[UUID] = {trigger_fragment_id}
+        frontier: set[UUID] = {trigger_fragment_id}
+        edges_by_id: dict[UUID, AccumulationEdgeORM] = {}
+        capped = False
+
+        while frontier:
+            frontier_ids = list(frontier)
+            edge_stmt = (
+                select(AccumulationEdgeORM)
+                .where(
+                    AccumulationEdgeORM.tenant_id == tenant_id,
+                    or_(
+                        AccumulationEdgeORM.fragment_a_id.in_(frontier_ids),
+                        AccumulationEdgeORM.fragment_b_id.in_(frontier_ids),
+                    ),
+                )
+            )
+            result = await session.execute(edge_stmt)
+            fetched = list(result.scalars().all())
+
+            next_frontier: set[UUID] = set()
+            for edge in fetched:
+                if edge.id not in edges_by_id:
+                    edges_by_id[edge.id] = edge
+                    if len(edges_by_id) >= max_edges:
+                        capped = True
+                for endpoint in (edge.fragment_a_id, edge.fragment_b_id):
+                    if endpoint not in seen_fragments:
+                        seen_fragments.add(endpoint)
+                        next_frontier.add(endpoint)
+                if capped:
+                    break
+
+            if capped:
+                logger.warning(
+                    "Accumulation component scan capped at max_edges=%s for "
+                    "tenant=%s trigger=%s — evaluating partial component.",
+                    max_edges, tenant_id, trigger_fragment_id,
+                )
+                break
+
+            frontier = next_frontier
+
+        return list(edges_by_id.values())
 
     async def _prune_cluster(
         self,
