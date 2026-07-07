@@ -10,6 +10,7 @@ Phase 5 implementation:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
@@ -25,6 +26,7 @@ from backend.app.models.abeyance_orm import (
 from backend.app.services.abeyance.decay_engine import DecayEngine
 from backend.app.services.abeyance.accumulation_graph import AccumulationGraph
 from backend.app.services.abeyance.events import ProvenanceLogger, FragmentStateChange
+from backend.app.services.abeyance.cold_storage import AbeyanceColdStorage
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +45,12 @@ class MaintenanceService:
         decay_engine: DecayEngine,
         accumulation_graph: AccumulationGraph,
         provenance: ProvenanceLogger,
+        cold_storage: AbeyanceColdStorage | None = None,
     ):
         self._decay = decay_engine
         self._accum = accumulation_graph
         self._provenance = provenance
+        self._cold_storage = cold_storage or AbeyanceColdStorage()
 
     async def run_decay_pass(
         self, session: AsyncSession, tenant_id: str
@@ -148,6 +152,60 @@ class MaintenanceService:
         logger.info("Expired %d stale fragments for tenant %s", expired, tenant_id)
         return expired
 
+    async def archive_expired_fragments(
+        self, session: AsyncSession, tenant_id: str
+    ) -> int:
+        """Archive EXPIRED fragments older than N days to cold storage.
+
+        Selects EXPIRED fragments whose ``updated_at`` is older than
+        ABEYANCE_COLD_AFTER_DAYS (default 30), archives each to cold storage,
+        transitions them EXPIRED -> COLD, and records provenance. Bounded by
+        MAX_ARCHIVE_BATCH.
+        """
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(
+            days=int(os.environ.get("ABEYANCE_COLD_AFTER_DAYS", "30"))
+        )
+
+        stmt = (
+            select(AbeyanceFragmentORM)
+            .where(
+                AbeyanceFragmentORM.tenant_id == tenant_id,
+                AbeyanceFragmentORM.snap_status == "EXPIRED",
+                AbeyanceFragmentORM.updated_at < cutoff,
+            )
+            .limit(MAX_ARCHIVE_BATCH)
+        )
+        result = await session.execute(stmt)
+        fragments = list(result.scalars().all())
+
+        archived = 0
+        for frag in fragments:
+            await self._cold_storage.archive_to_db(session, frag, tenant_id)
+
+            frag.snap_status = "COLD"
+            frag.updated_at = now
+
+            await self._provenance.log_state_change(
+                session,
+                FragmentStateChange(
+                    fragment_id=frag.id,
+                    tenant_id=tenant_id,
+                    event_type="ARCHIVED_COLD",
+                    old_state={"status": "EXPIRED"},
+                    new_state={"status": "COLD"},
+                ),
+            )
+            archived += 1
+
+        await session.flush()
+        logger.info(
+            "Archived %d expired fragments to cold storage for tenant %s",
+            archived,
+            tenant_id,
+        )
+        return archived
+
     async def cleanup_orphaned_entity_refs(
         self, session: AsyncSession, tenant_id: str
     ) -> int:
@@ -185,5 +243,6 @@ class MaintenanceService:
         results["decay"] = await self.run_decay_pass(session, tenant_id)
         results["stale_edges_pruned"] = await self.prune_stale_edges(session, tenant_id)
         results["fragments_expired"] = await self.expire_stale_fragments(session, tenant_id)
+        results["archived_cold"] = await self.archive_expired_fragments(session, tenant_id)
         results["orphans_cleaned"] = await self.cleanup_orphaned_entity_refs(session, tenant_id)
         return results
