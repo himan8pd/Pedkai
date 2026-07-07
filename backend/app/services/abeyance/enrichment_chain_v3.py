@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import logging
 import math
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -37,6 +38,9 @@ SEMANTIC_DIM = 1536
 TOPOLOGICAL_DIM = 1536
 TEMPORAL_DIM = 256
 OPERATIONAL_DIM = 1536
+
+# RET-02: bound on neighbourhood entity refs written per fragment (topological_distance > 0)
+MAX_NEIGHBOURHOOD_REFS = int(os.environ.get("ABEYANCE_MAX_NEIGHBOURHOOD_REFS", "64"))
 
 # Source-type defaults (LLD §5)
 SOURCE_TYPE_DEFAULTS: dict[str, dict[str, float]] = {
@@ -182,6 +186,7 @@ class EnrichmentChainV3:
         session.add(fragment)
 
         # Entity refs
+        written_identifiers: set[str] = set()
         for entity in entities:
             ref = FragmentEntityRefORM(
                 id=uuid4(),
@@ -192,6 +197,34 @@ class EnrichmentChainV3:
                 tenant_id=tenant_id,
             )
             session.add(ref)
+            written_identifiers.add(str(entity["identifier"]))
+
+        # RET-02: neighbourhood entity refs (topological_distance > 0).
+        # Enables retrieval to match via topology. Closest depths first, bounded.
+        # NOTE: pollutes evaluate() Jaccard unless RET-01's distance-0 filter is live.
+        depths = neighbourhood.get("depths") or {}
+        neighbour_ref_count = 0
+        for depth in sorted(depths, key=int):
+            if int(depth) == 0:
+                continue
+            if neighbour_ref_count >= MAX_NEIGHBOURHOOD_REFS:
+                break
+            for identifier in depths[depth]:
+                if neighbour_ref_count >= MAX_NEIGHBOURHOOD_REFS:
+                    break
+                ident_str = str(identifier)
+                if ident_str in written_identifiers:
+                    continue
+                session.add(FragmentEntityRefORM(
+                    id=uuid4(),
+                    fragment_id=fragment.id,
+                    entity_identifier=ident_str,
+                    entity_domain=None,
+                    topological_distance=int(depth),
+                    tenant_id=tenant_id,
+                ))
+                written_identifiers.add(ident_str)
+                neighbour_ref_count += 1
 
         # Provenance
         await self._provenance.log_state_change(
