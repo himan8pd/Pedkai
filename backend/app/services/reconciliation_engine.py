@@ -37,7 +37,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import text
@@ -114,6 +114,21 @@ PASSIVE_RELATIONSHIP_TYPES = frozenset({
 
 # Batch size for bulk inserts
 BATCH_SIZE = 2000
+
+# --- Dark-attribute detection controls -------------------------------------
+# _detect_dark_attributes scans the kpi_metrics hypertable (tens of millions of
+# rows) three times. These knobs make it operable at scale without hanging a run:
+#   * ENABLED: allow disabling the whole step for immediate relief.
+#   * WINDOW_DAYS: bound the scan to the most recent N days *of the tenant's data*
+#       (partition pruning). 0 = unbounded (original semantics). NOTE: the window
+#       is anchored to the data's own MAX(timestamp), not wall-clock now — the
+#       demo datasets are ~900 days old, so a now-relative window would match
+#       nothing. vendor/band/rat_type are static, so a recent slice is sufficient.
+#   * TIMEOUT_MS: per-query statement_timeout so a pathological scan fails fast
+#       instead of hanging forever (the run stays non-blank thanks to the swap).
+DARK_ATTRIBUTES_ENABLED = os.environ.get("RECONCILE_DARK_ATTRIBUTES_ENABLED", "true").lower() == "true"
+DARK_ATTRIBUTES_WINDOW_DAYS = int(os.environ.get("RECONCILE_DARK_ATTRIBUTES_WINDOW_DAYS", "0"))
+DARK_ATTRIBUTES_TIMEOUT_MS = int(os.environ.get("RECONCILE_DARK_ATTRIBUTES_TIMEOUT_MS", "120000"))
 
 
 def _make_result_id(*parts: str) -> str:
@@ -193,7 +208,10 @@ class ReconciliationEngine:
 
         try:
             await self._ensure_tables()
-            await self._clear_previous_run(tenant_id)
+            # Build the new run in a staging table; the live results are left
+            # untouched until the atomic swap at the end. A slow/failed run can
+            # therefore never blank the divergence dataset.
+            await self._prepare_staging(tenant_id)
 
             # --- Operational inventory ---
             cmdb_entity_count = await self._scalar(
@@ -243,7 +261,22 @@ class ReconciliationEngine:
             counts["dark_nodes"] = await self._detect_dark_nodes(all_observed_ids)
             counts["phantom_nodes"] = await self._detect_phantom_nodes(all_observed_ids)
             counts["identity_mutations"] = await self._detect_identity_mutations()
-            counts["dark_attributes"] = await self._detect_dark_attributes()
+            # dark_attributes scans the KPI hypertable and is the heaviest step;
+            # gate it and make it best-effort so a slow/timed-out scan degrades
+            # to "0 dark attributes" rather than blocking the whole run.
+            if DARK_ATTRIBUTES_ENABLED:
+                try:
+                    counts["dark_attributes"] = await self._detect_dark_attributes()
+                except Exception as exc:
+                    logger.error(
+                        "[Reconciliation] dark_attributes detection failed "
+                        "(continuing without it): %s", exc, exc_info=True,
+                    )
+                    await self.metrics_session.rollback()
+                    counts["dark_attributes"] = 0
+            else:
+                logger.info("[Reconciliation] dark_attributes detection disabled via env; skipping")
+                counts["dark_attributes"] = 0
             counts["dark_edges"] = await self._detect_dark_edges()
             counts["phantom_edges"] = await self._detect_phantom_edges()
 
@@ -253,6 +286,35 @@ class ReconciliationEngine:
 
             completed_at = datetime.now(timezone.utc)
             duration_s = (completed_at - started_at).total_seconds()
+
+            # --- Atomic swap: replace the live results with the freshly-built
+            # staging set, and write run metadata, in a SINGLE transaction.
+            # The live dataset is only cleared once the new data is ready, so a
+            # slow or failed run can never leave the divergence page blank.
+            await self.session.execute(
+                text("DELETE FROM reconciliation_results WHERE tenant_id = :tid"),
+                {"tid": tenant_id},
+            )
+            await self.session.execute(
+                text(
+                    """
+                    INSERT INTO reconciliation_results (
+                        result_id, tenant_id, run_id, divergence_type,
+                        entity_or_relationship, target_id, target_type, domain,
+                        description, attribute_name, cmdb_value, observed_value,
+                        confidence, extra, created_at
+                    )
+                    SELECT
+                        result_id, tenant_id, run_id, divergence_type,
+                        entity_or_relationship, target_id, target_type, domain,
+                        description, attribute_name, cmdb_value, observed_value,
+                        confidence, extra, created_at
+                    FROM reconciliation_results_staging
+                    WHERE tenant_id = :tid
+                    """
+                ),
+                {"tid": tenant_id},
+            )
 
             # --- Persist run metadata (main DB) ---
             await self.session.execute(
@@ -294,7 +356,27 @@ class ReconciliationEngine:
                     "completed_at": completed_at,
                 },
             )
+            # Drop older runs' metadata now that this run is the live one —
+            # part of the same atomic commit as the results swap above.
+            await self.session.execute(
+                text(
+                    "DELETE FROM reconciliation_runs "
+                    "WHERE tenant_id = :tid AND run_id != :run_id"
+                ),
+                {"tid": tenant_id, "run_id": self.run_id},
+            )
             await self.session.commit()
+
+            # Best-effort staging cleanup (outside the critical swap transaction;
+            # a failure here cannot affect the now-live results).
+            try:
+                await self.session.execute(
+                    text("DELETE FROM reconciliation_results_staging WHERE tenant_id = :tid"),
+                    {"tid": tenant_id},
+                )
+                await self.session.commit()
+            except Exception as exc:
+                logger.warning("[Reconciliation] staging cleanup failed (non-fatal): %s", exc)
 
             logger.info(
                 f"[Reconciliation] Run {self.run_id} complete: "
@@ -909,6 +991,31 @@ class ReconciliationEngine:
             if r["external_id"]:
                 cmdb_by_ext[r["external_id"]] = r
 
+        # Fail fast instead of hanging: bound each KPI scan with a per-statement
+        # timeout on the (per-run) metrics session. Left set for the rest of the
+        # run — harmless, as the other metrics queries are fast.
+        if DARK_ATTRIBUTES_TIMEOUT_MS > 0:
+            await self.metrics_session.execute(
+                text(f"SET statement_timeout = {int(DARK_ATTRIBUTES_TIMEOUT_MS)}")
+            )
+
+        # Optionally bound the scan to the most recent window of the tenant's own
+        # data (hypertable partition pruning). Anchored to MAX(timestamp), NOT
+        # now(), because datasets may be historical (demo data is ~900 days old).
+        # vendor/band/rat_type are static entity metadata, so a recent slice
+        # yields the same dominant value at a fraction of the scan cost.
+        params: dict = {"tid": self.tenant_id}
+        time_clause = ""
+        if DARK_ATTRIBUTES_WINDOW_DAYS > 0:
+            max_rows = await self._fetch_metrics(
+                "SELECT MAX(timestamp) AS mx FROM kpi_metrics WHERE tenant_id = :tid",
+                {"tid": self.tenant_id},
+            )
+            mx = max_rows[0]["mx"] if max_rows else None
+            if mx is not None:
+                params["since"] = mx - timedelta(days=DARK_ATTRIBUTES_WINDOW_DAYS)
+                time_clause = "AND timestamp >= :since"
+
         for attr in CROSSCHECK_ATTRIBUTES:
             # Get per-entity dominant attribute value from KPI (metrics DB)
             kpi_rows = await self._fetch_metrics(
@@ -921,6 +1028,7 @@ class ReconciliationEngine:
                     FROM kpi_metrics
                     WHERE tenant_id = :tid
                       AND metadata->>'{attr}' IS NOT NULL
+                      {time_clause}
                     GROUP BY entity_id, metadata->>'{attr}'
                 ),
                 ranked AS (
@@ -934,7 +1042,7 @@ class ReconciliationEngine:
                 FROM ranked
                 WHERE rn = 1
                 """,  # nosec — attr from hardcoded CROSSCHECK_ATTRIBUTES list
-                {"tid": self.tenant_id},
+                params,
             )
 
             # Correlate with CMDB in Python
@@ -1384,10 +1492,12 @@ class ReconciliationEngine:
             return
         for i in range(0, len(records), BATCH_SIZE):
             chunk = records[i : i + BATCH_SIZE]
+            # Detectors write into the STAGING table; the live results table is
+            # only replaced by the atomic swap at the end of run().
             await self.session.execute(
                 text(
                     """
-                    INSERT INTO reconciliation_results (
+                    INSERT INTO reconciliation_results_staging (
                         result_id, tenant_id, run_id, divergence_type,
                         entity_or_relationship, target_id, target_type, domain,
                         description, attribute_name, cmdb_value, observed_value,
@@ -1414,14 +1524,16 @@ class ReconciliationEngine:
             )
             await self.session.commit()
 
-    async def _clear_previous_run(self, tenant_id: str) -> None:
-        """Remove any previous reconciliation results for this tenant."""
+    async def _prepare_staging(self, tenant_id: str) -> None:
+        """Clear only the STAGING table for this tenant before a new run.
+
+        The live ``reconciliation_results`` / ``reconciliation_runs`` are left
+        untouched here — they are replaced atomically by the swap at the end of
+        ``run()`` once the new data is fully built. This guarantees a slow or
+        failed run never leaves the divergence dataset blank.
+        """
         await self.session.execute(
-            text("DELETE FROM reconciliation_results WHERE tenant_id = :tid"),
-            {"tid": tenant_id},
-        )
-        await self.session.execute(
-            text("DELETE FROM reconciliation_runs WHERE tenant_id = :tid"),
+            text("DELETE FROM reconciliation_results_staging WHERE tenant_id = :tid"),
             {"tid": tenant_id},
         )
         await self.session.commit()
@@ -1497,6 +1609,30 @@ class ReconciliationEngine:
             text(
                 "ALTER TABLE reconciliation_results "
                 "ADD COLUMN IF NOT EXISTS ai_analysis JSONB"
+            )
+        )
+        # `extra` (PRV-03 peer-coverage annotations, read by the divergence UI)
+        # is only in the CREATE above — add it explicitly so pre-existing
+        # deployments whose table predates the column also get it.
+        await self.session.execute(
+            text(
+                "ALTER TABLE reconciliation_results "
+                "ADD COLUMN IF NOT EXISTS extra JSONB"
+            )
+        )
+        # Staging table for the build-then-atomic-swap write path. Mirrors the
+        # live table (including the ALTER-added columns) so the swap INSERT..SELECT
+        # is column-compatible.
+        await self.session.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS reconciliation_results_staging "
+                "(LIKE reconciliation_results INCLUDING DEFAULTS)"
+            )
+        )
+        await self.session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_rr_staging_tenant "
+                "ON reconciliation_results_staging(tenant_id)"
             )
         )
         await self.session.execute(
