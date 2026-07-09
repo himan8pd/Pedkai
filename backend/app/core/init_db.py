@@ -82,6 +82,20 @@ async def init_database():
                 )
             )
 
+            # Covering index for the reconciliation "distinct observed entities"
+            # scan (SELECT DISTINCT entity_id WHERE tenant_id): lets it run as an
+            # index-only scan instead of a full hypertable heap scan. Cheap here
+            # (fresh/empty table). On an EXISTING large table, build it out of band
+            # instead:  CREATE INDEX CONCURRENTLY IF NOT EXISTS
+            #   ix_kpi_metrics_tenant_entity ON kpi_metrics (tenant_id, entity_id);
+            logger.info("Creating (tenant_id, entity_id) covering index on kpi_metrics...")
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_kpi_metrics_tenant_entity "
+                    "ON kpi_metrics (tenant_id, entity_id)"
+                )
+            )
+
             # 3. Apply Retention Policy (Strategic Review Fix #2)
             logger.info("⏳ Setting 30-day retention policy...")
             await conn.execute(

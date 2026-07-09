@@ -130,6 +130,12 @@ DARK_ATTRIBUTES_ENABLED = os.environ.get("RECONCILE_DARK_ATTRIBUTES_ENABLED", "t
 DARK_ATTRIBUTES_WINDOW_DAYS = int(os.environ.get("RECONCILE_DARK_ATTRIBUTES_WINDOW_DAYS", "0"))
 DARK_ATTRIBUTES_TIMEOUT_MS = int(os.environ.get("RECONCILE_DARK_ATTRIBUTES_TIMEOUT_MS", "120000"))
 
+# --- Identity-mutation detection controls (same rationale as dark_attributes:
+# it also runs unbounded JSONB GROUP-BY scans over the KPI hypertable). --------
+IDENTITY_MUTATIONS_ENABLED = os.environ.get("RECONCILE_IDENTITY_MUTATIONS_ENABLED", "true").lower() == "true"
+IDENTITY_MUTATIONS_WINDOW_DAYS = int(os.environ.get("RECONCILE_IDENTITY_MUTATIONS_WINDOW_DAYS", "0"))
+IDENTITY_MUTATIONS_TIMEOUT_MS = int(os.environ.get("RECONCILE_IDENTITY_MUTATIONS_TIMEOUT_MS", "120000"))
+
 
 def _make_result_id(*parts: str) -> str:
     """Deterministic ID from components — idempotent across runs."""
@@ -257,7 +263,21 @@ class ReconciliationEngine:
             counts: dict[str, int] = {}
             counts["dark_nodes"] = await self._detect_dark_nodes(all_observed_ids)
             counts["phantom_nodes"] = await self._detect_phantom_nodes(all_observed_ids)
-            counts["identity_mutations"] = await self._detect_identity_mutations()
+            # identity_mutations also runs heavy KPI hypertable scans — gate it
+            # and make it best-effort for the same reason as dark_attributes.
+            if IDENTITY_MUTATIONS_ENABLED:
+                try:
+                    counts["identity_mutations"] = await self._detect_identity_mutations()
+                except Exception as exc:
+                    logger.error(
+                        "[Reconciliation] identity_mutations detection failed "
+                        "(continuing without it): %s", exc, exc_info=True,
+                    )
+                    await self.metrics_session.rollback()
+                    counts["identity_mutations"] = 0
+            else:
+                logger.info("[Reconciliation] identity_mutations detection disabled via env; skipping")
+                counts["identity_mutations"] = 0
             # dark_attributes scans the KPI hypertable and is the heaviest step;
             # gate it and make it best-effort so a slow/timed-out scan degrades
             # to "0 dark attributes" rather than blocking the whole run.
@@ -736,10 +756,33 @@ class ReconciliationEngine:
             f"by_id={len(cmdb_by_id)}, by_ext={len(cmdb_by_ext)}, by_name={len(cmdb_by_name)}"
         )
 
+        # Fail fast instead of hanging: per-statement timeout on the (per-run)
+        # metrics session for the heavy KPI scans below.
+        if IDENTITY_MUTATIONS_TIMEOUT_MS > 0:
+            await self.metrics_session.execute(
+                text(f"SET statement_timeout = {int(IDENTITY_MUTATIONS_TIMEOUT_MS)}")
+            )
+
+        # Optionally bound the scans to the most recent window of the tenant's own
+        # data (partition pruning); anchored to MAX(timestamp), not now(), because
+        # datasets may be historical. vendor/rat_type/site_id are static metadata,
+        # so a recent slice yields the same dominant value far more cheaply.
+        params: dict = {"tid": self.tenant_id}
+        time_clause = ""
+        if IDENTITY_MUTATIONS_WINDOW_DAYS > 0:
+            max_rows = await self._fetch_metrics(
+                "SELECT MAX(timestamp) AS mx FROM kpi_metrics WHERE tenant_id = :tid",
+                {"tid": self.tenant_id},
+            )
+            mx = max_rows[0]["mx"] if max_rows else None
+            if mx is not None:
+                params["since"] = mx - timedelta(days=IDENTITY_MUTATIONS_WINDOW_DAYS)
+                time_clause = "AND timestamp >= :since"
+
         # --- Strategy 1: Hardware fingerprint swap ---
         # Get dominant (vendor, rat_type) per entity from metrics DB
         hw_rows = await self._fetch_metrics(
-            """
+            f"""
             WITH telemetry_fingerprint AS (
                 SELECT
                     entity_id,
@@ -750,6 +793,7 @@ class ReconciliationEngine:
                 WHERE tenant_id = :tid
                   AND metadata->>'vendor' IS NOT NULL
                   AND metadata->>'rat_type' IS NOT NULL
+                  {time_clause}
                 GROUP BY entity_id, metadata->>'vendor', metadata->>'rat_type'
             ),
             ranked AS (
@@ -763,7 +807,7 @@ class ReconciliationEngine:
             FROM ranked
             WHERE rn = 1
             """,
-            {"tid": self.tenant_id},
+            params,
         )
         # Correlate with CMDB in Python
         hw_resolved = 0
@@ -821,7 +865,7 @@ class ReconciliationEngine:
         # --- Strategy 2: Site-ID drift ---
         # Get dominant site_id per entity from metrics DB
         site_rows = await self._fetch_metrics(
-            """
+            f"""
             WITH tel_site AS (
                 SELECT
                     entity_id,
@@ -830,6 +874,7 @@ class ReconciliationEngine:
                 FROM kpi_metrics
                 WHERE tenant_id = :tid
                   AND metadata->>'site_id' IS NOT NULL
+                  {time_clause}
                 GROUP BY entity_id, metadata->>'site_id'
             ),
             ranked AS (
@@ -843,7 +888,7 @@ class ReconciliationEngine:
             FROM ranked
             WHERE rn = 1
             """,
-            {"tid": self.tenant_id},
+            params,
         )
         # Correlate with CMDB in Python
         site_resolved = 0
