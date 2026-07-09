@@ -194,6 +194,11 @@ class ReconciliationEngine:
         self.metrics_session = metrics_session  # metrics DB (pedkai_metrics, port 5433)
         self.run_id: str = ""
         self.tenant_id: str = ""
+        # Distinct entity_ids seen in operational signals, computed ONCE per run
+        # (the DISTINCT scans over the ~87M-row KPI hypertable dominate runtime)
+        # and reused by every detector. Populated at the start of run().
+        self._kpi_active: set[str] = set()
+        self._alarm_active: set[str] = set()
 
     async def run(self, tenant_id: str) -> dict[str, Any]:
         """Execute full signal-based divergence detection."""
@@ -223,18 +228,10 @@ class ReconciliationEngine:
                 {"tid": tenant_id},
             )
 
-            # Count distinct entities seen in operational signals (split-DB)
-            # Step 1: KPI entity_ids from metrics DB
-            kpi_entity_count = await self._scalar_metrics(
-                "SELECT COUNT(DISTINCT entity_id) FROM kpi_metrics WHERE tenant_id = :tid",
-                {"tid": tenant_id},
-            )
-            # Step 2: alarm entity_ids from main DB
-            alarm_entity_count = await self._scalar(
-                "SELECT COUNT(DISTINCT entity_id) FROM telco_events_alarms WHERE tenant_id = :tid",
-                {"tid": tenant_id},
-            )
-            # Step 3: For accurate union count, fetch both ID sets and merge in Python
+            # Distinct entities seen in operational signals (split-DB). Fetch the
+            # ID sets ONCE here and cache them on self; every detector reuses them
+            # instead of re-scanning the KPI hypertable. Counts are derived from
+            # the sets (no separate COUNT(DISTINCT) scans).
             kpi_ids_rows = await self._fetch_metrics(
                 "SELECT DISTINCT entity_id FROM kpi_metrics WHERE tenant_id = :tid",
                 {"tid": tenant_id},
@@ -243,11 +240,11 @@ class ReconciliationEngine:
                 "SELECT DISTINCT entity_id FROM telco_events_alarms WHERE tenant_id = :tid",
                 {"tid": tenant_id},
             )
-            all_observed_ids = set()
-            for r in kpi_ids_rows:
-                all_observed_ids.add(r["entity_id"])
-            for r in alarm_ids_rows:
-                all_observed_ids.add(r["entity_id"])
+            self._kpi_active = {r["entity_id"] for r in kpi_ids_rows}
+            self._alarm_active = {r["entity_id"] for r in alarm_ids_rows}
+            kpi_entity_count = len(self._kpi_active)
+            alarm_entity_count = len(self._alarm_active)
+            all_observed_ids = self._kpi_active | self._alarm_active
             observed_entity_count = len(all_observed_ids)
 
             # Count distinct neighbour-relation edges (main DB)
@@ -896,12 +893,9 @@ class ReconciliationEngine:
         )
 
         # --- Strategy 3: Multi-entity ID collision ---
-        # Get distinct KPI entity_ids from metrics DB
-        kpi_eids = await self._fetch_metrics(
-            "SELECT DISTINCT entity_id FROM kpi_metrics WHERE tenant_id = :tid",
-            {"tid": self.tenant_id},
-        )
-        kpi_eid_set = {r["entity_id"] for r in kpi_eids}
+        # Reuse the KPI entity_id set computed once in run() (avoids another
+        # DISTINCT scan of the KPI hypertable).
+        kpi_eid_set = self._kpi_active
 
         # Find CMDB entities whose external_id matches a KPI entity_id
         # Group by external_id to find collisions (multiple CMDB UUIDs -> same ext_id)
@@ -1192,21 +1186,10 @@ class ReconciliationEngine:
             logger.info("  -> 0 phantom edges")
             return 0
 
-        # Step 2: Active entity_ids from KPI (metrics DB)
-        kpi_ids_rows = await self._fetch_metrics(
-            "SELECT DISTINCT entity_id FROM kpi_metrics WHERE tenant_id = :tid",
-            {"tid": self.tenant_id},
-        )
-        kpi_active = {r["entity_id"] for r in kpi_ids_rows}
-
-        # Step 3: Active entity_ids from alarms (main DB)
-        alarm_ids_rows = await self._fetch(
-            "SELECT DISTINCT entity_id FROM telco_events_alarms WHERE tenant_id = :tid",
-            {"tid": self.tenant_id},
-        )
-        alarm_active = {r["entity_id"] for r in alarm_ids_rows}
-
-        # Combined active set
+        # Active entity_ids — reuse the sets computed once in run() rather than
+        # re-scanning the KPI hypertable and the alarm table.
+        kpi_active = self._kpi_active
+        alarm_active = self._alarm_active
         active_ids = kpi_active | alarm_active
 
         # Peer signal coverage per endpoint entity type.
