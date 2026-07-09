@@ -1629,6 +1629,16 @@ class ReconciliationEngine:
                 "(LIKE reconciliation_results INCLUDING DEFAULTS)"
             )
         )
+        # LIKE ... INCLUDING DEFAULTS copies columns but NOT the primary key, so
+        # _bulk_insert's `ON CONFLICT (result_id) DO NOTHING` needs an explicit
+        # unique index on result_id. Creating it IF NOT EXISTS also self-heals
+        # any staging table created by an earlier build that lacked it.
+        await self.session.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_rr_staging_result_id "
+                "ON reconciliation_results_staging(result_id)"
+            )
+        )
         await self.session.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS ix_rr_staging_tenant "

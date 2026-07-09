@@ -71,6 +71,16 @@ def _record(result_id: str, run_id: str, tenant: str = "t1") -> dict:
     }
 
 
+# Staging mirrors production DDL: `LIKE reconciliation_results INCLUDING DEFAULTS`
+# copies columns but NOT the primary key, so result_id is declared plain and a
+# separate UNIQUE INDEX provides the conflict target for `ON CONFLICT (result_id)`.
+# (This is exactly the shape the ix_rr_staging_result_id fix produces; without the
+# unique index, _bulk_insert's ON CONFLICT would fail here too.)
+_CREATE_STAGING_NOPK = _CREATE.format(name="reconciliation_results_staging").replace(
+    "result_id TEXT PRIMARY KEY", "result_id TEXT NOT NULL"
+)
+
+
 @pytest.fixture
 async def session() -> AsyncSession:
     engine = create_async_engine(
@@ -81,7 +91,13 @@ async def session() -> AsyncSession:
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with maker() as s:
         await s.execute(text(_CREATE.format(name="reconciliation_results")))
-        await s.execute(text(_CREATE.format(name="reconciliation_results_staging")))
+        await s.execute(text(_CREATE_STAGING_NOPK))
+        await s.execute(
+            text(
+                "CREATE UNIQUE INDEX ix_rr_staging_result_id "
+                "ON reconciliation_results_staging(result_id)"
+            )
+        )
         await s.commit()
         yield s
     await engine.dispose()
@@ -173,6 +189,17 @@ async def test_atomic_swap_replaces_live_with_staging(session):
 
     assert await _live_ids(session) == {"new-1", "new-2"}  # swapped in
     assert "old-1" not in await _live_ids(session)          # old gone
+
+
+@pytest.mark.asyncio
+async def test_bulk_insert_dedups_on_result_id(session):
+    """_bulk_insert relies on ON CONFLICT (result_id); staging must have a unique
+    index on result_id or this raises. Duplicate result_ids collapse to one row."""
+    eng = ReconciliationEngine(session, session)
+    eng.tenant_id, eng.run_id = "t1", "run-new"
+    await eng._prepare_staging("t1")
+    await eng._bulk_insert([_record("dup", "run-new"), _record("dup", "run-new")])
+    assert await _staging_ids(session) == {"dup"}
 
 
 @pytest.mark.asyncio
