@@ -319,14 +319,22 @@ body, nav, main, header, section, div, table, thead, tbody {
 
 /* ── Background with opacity ───────────────────────────────────── */
 [data-theme="light"] .bg-\[\#06203b\]\/95 { background-color: var(--nav-bg) !important; }
+/* Evidence-timeline card surface (investigation panel) — the /60 opacity
+   variant has no CSS-var mapping, so in light mode it rendered as muddy navy.
+   Map it to the white elevated surface so its muted (tertiary) text clears
+   WCAG AA (4.5:1); the card is delineated by its border instead of a fill. */
+[data-theme="light"] .bg-\[\#06203b\]\/60 { background-color: var(--surface-elevated) !important; }
 
 /* ── Text colors ───────────────────────────────────────────────── */
 [data-theme="light"] .text-white { color: var(--text-primary) !important; }
 [data-theme="light"] .text-white\/80 { color: var(--text-secondary) !important; }
+[data-theme="light"] .text-white\/75 { color: var(--text-secondary) !important; }
 [data-theme="light"] .text-white\/70 { color: var(--nav-text) !important; }
 [data-theme="light"] .text-white\/60 { color: var(--text-tertiary) !important; }
+[data-theme="light"] .text-white\/50 { color: var(--text-tertiary) !important; }
 [data-theme="light"] .text-white\/55 { color: var(--text-tertiary) !important; }
 [data-theme="light"] .text-white\/40 { color: var(--text-muted) !important; }
+[data-theme="light"] .text-white\/30 { color: var(--text-muted) !important; }
 [data-theme="light"] .text-slate-400 { color: #64748b !important; }
 [data-theme="light"] .text-slate-300 { color: #475569 !important; }
 [data-theme="light"] .text-slate-200 { color: #334155 !important; }
@@ -337,6 +345,8 @@ body, nav, main, header, section, div, table, thead, tbody {
 }
 
 /* ── Borders ───────────────────────────────────────────────────── */
+[data-theme="light"] .border-cyan-900\/20 { border-color: var(--border-default) !important; }
+[data-theme="light"] .border-cyan-900\/30 { border-color: var(--border-default) !important; }
 [data-theme="light"] .border-cyan-900\/40 { border-color: var(--border-default) !important; }
 [data-theme="light"] .border-cyan-900\/50 { border-color: var(--border-strong) !important; }
 [data-theme="light"] .border-\[rgba\(7\,242\,219\,0\.12\)\] { border-color: var(--border-subtle) !important; }
