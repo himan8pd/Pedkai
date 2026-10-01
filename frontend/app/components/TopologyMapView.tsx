@@ -3,7 +3,7 @@
 /**
  * TopologyMapView — Leaflet-based geographic overlay for topology nodes.
  *
- * Renders nodes with geo coordinates as device-icon markers on a CartoDB
+ * Renders nodes with geo coordinates as device-icon markers on an Esri Canvas
  * tile layer, with polyline edges between connected nodes.
  * Icons match the 11 categories used in the force-directed canvas view.
  *
@@ -201,13 +201,16 @@ function FitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   return null;
 }
 
-/* ── Map tile URLs (CartoDB — theme-aware) ────────────────────── */
+/* ── Map tile URLs (Esri Canvas — theme-aware, keyless) ───────── */
+// CARTO basemaps began requiring an API key (Sept 2026); Esri Canvas is keyless.
+// Note Esri's {z}/{y}/{x} order; native tiles stop at z16 (upscaled beyond).
 const TILE_URLS = {
-  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-  light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  dark: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+  light: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
 };
+const TILE_MAX_NATIVE_ZOOM = 16;
 const TILE_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
+  'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export default function TopologyMapView({
   entities,
@@ -339,7 +342,7 @@ export default function TopologyMapView({
         zoomControl={false}
         attributionControl={true}
       >
-        <TileLayer key={theme} url={isLight ? TILE_URLS.light : TILE_URLS.dark} attribution={TILE_ATTR} />
+        <TileLayer key={theme} url={isLight ? TILE_URLS.light : TILE_URLS.dark} attribution={TILE_ATTR} maxNativeZoom={TILE_MAX_NATIVE_ZOOM} maxZoom={19} />
         <FitBounds bounds={bounds} />
 
         {/* Shadow (inferred) edges — dashed purple */}
